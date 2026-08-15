@@ -10,6 +10,7 @@ import { createInitialGameState } from "./engine/factory";
 import { runAiTurn } from "./engine/ai";
 import { activateSlotCard, endTurn, playCardFromHand, startGame } from "./engine/game";
 import { DECK_SIZE, type GameState, type HeroClass, type PlayerId } from "./engine/types";
+import { AccountBar } from "./ui/components/AccountBar";
 import { CollectionView } from "./ui/components/CollectionView";
 import { DeckBuilder } from "./ui/components/DeckBuilder";
 import { GameLog } from "./ui/components/GameLog";
@@ -276,6 +277,7 @@ export default function App() {
   if (screen === "menu") {
     return (
       <div className="app" style={appStyle}>
+        <AccountBar />
         <MainMenu
           coins={collection.coins}
           onQuickPlay={() => setScreen("heroSelect")}

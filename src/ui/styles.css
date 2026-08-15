@@ -565,6 +565,32 @@ body {
   margin: 4px 0 16px;
 }
 
+/* Account bar */
+.account-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 8px 4px 0;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.account-bar__email {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.account-bar__admin-badge {
+  background: var(--gold);
+  color: #1a1a1a;
+  font-weight: bold;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 10px;
+}
+
 /* Main menu */
 .main-menu {
   text-align: center;
