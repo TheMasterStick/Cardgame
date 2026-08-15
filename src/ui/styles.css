@@ -1,0 +1,421 @@
+:root {
+  --bg: #14161c;
+  --panel: #1e222c;
+  --panel-light: #2a2f3d;
+  --border: #3a4054;
+  --text: #e8e9ee;
+  --text-dim: #9aa0b4;
+  --accent: #5da9ff;
+  --gold: #e0b84f;
+  --hp: #e05b5b;
+  --attack: #f0a63a;
+  --mana: #5da9ff;
+  --energy: #6fe0a0;
+  --resource: #e0b84f;
+  --danger: #e05b5b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 12px 16px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.app__header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.app__header h1 {
+  font-size: 1.3rem;
+  margin: 0;
+  color: var(--gold);
+}
+
+.app__turn-info {
+  color: var(--text-dim);
+}
+
+.app__message {
+  margin-left: auto;
+  background: var(--panel-light);
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+/* Resource bar */
+.resource-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+
+.resource-bar__label {
+  font-weight: bold;
+  color: var(--text-dim);
+  min-width: 70px;
+}
+
+.pip {
+  display: flex;
+  gap: 4px;
+  align-items: baseline;
+}
+
+.pip__label {
+  color: var(--text-dim);
+}
+
+.pip--resources .pip__value {
+  color: var(--resource);
+}
+.pip--mana .pip__value {
+  color: var(--mana);
+}
+.pip--energy .pip__value {
+  color: var(--energy);
+}
+
+.resource-bar__deck {
+  margin-left: auto;
+  color: var(--text-dim);
+  font-size: 0.8rem;
+}
+
+/* Board */
+.player-board {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 8px;
+}
+
+.player-board--own {
+  flex-direction: column-reverse;
+}
+
+.row {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+}
+
+.row--hero {
+  align-items: stretch;
+}
+
+.hero-column {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: center;
+}
+
+.slot {
+  width: 96px;
+  min-height: 110px;
+  border-radius: 8px;
+  display: flex;
+}
+
+.slot--empty {
+  border: 1px dashed var(--border);
+  opacity: 0.5;
+}
+
+.portrait {
+  width: 110px;
+  min-height: 90px;
+  background: var(--panel-light);
+  border: 2px solid var(--gold);
+  border-radius: 8px;
+  padding: 6px;
+  font-size: 0.72rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.portrait--clickable {
+  cursor: pointer;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.portrait__name {
+  font-weight: bold;
+  color: var(--gold);
+}
+
+.portrait__hp {
+  color: var(--hp);
+}
+
+.portrait__militia {
+  color: var(--text-dim);
+}
+
+.portrait__attack {
+  color: var(--attack);
+}
+
+/* Cards */
+.card {
+  width: 96px;
+  min-height: 110px;
+  background: var(--panel-light);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px;
+  font-size: 0.68rem;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  cursor: default;
+}
+
+.card--clickable {
+  cursor: pointer;
+}
+
+.card--highlight {
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.card--creature {
+  border-color: #6a7a4a;
+}
+.card--building {
+  border-color: #7a6a4a;
+}
+.card--spell {
+  border-color: var(--mana);
+}
+.card--ability {
+  border-color: var(--energy);
+}
+.card--equipment {
+  border-color: var(--gold);
+}
+
+.card__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.card__cost {
+  background: var(--resource);
+  color: #1a1a1a;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+.card__name {
+  font-weight: bold;
+  line-height: 1.1;
+}
+
+.card__text {
+  color: var(--text-dim);
+  font-size: 0.6rem;
+  flex: 1;
+}
+
+.card__bottom {
+  display: flex;
+  justify-content: space-between;
+}
+
+.stat--attack {
+  color: var(--attack);
+  font-weight: bold;
+}
+.stat--hp {
+  color: var(--hp);
+  font-weight: bold;
+}
+.stat--charges {
+  color: var(--text-dim);
+}
+
+.card__statuses {
+  display: flex;
+  gap: 3px;
+}
+
+.status--burn {
+  color: var(--attack);
+}
+.status--poison {
+  color: #9a6fe0;
+}
+
+/* Hand */
+.hand {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  flex: 1;
+}
+
+.hand__empty {
+  color: var(--text-dim);
+  align-self: center;
+}
+
+.app__controls {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+}
+
+.app__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.btn {
+  background: var(--panel-light);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+
+.btn:hover {
+  border-color: var(--accent);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.btn--end-turn {
+  background: var(--accent);
+  color: #10131a;
+  font-weight: bold;
+  border: none;
+}
+
+.btn--cancel {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+/* Log */
+.game-log {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.game-log__entry {
+  padding: 1px 0;
+}
+
+/* Hero select */
+.hero-select {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.hero-select__subtitle {
+  color: var(--text-dim);
+  max-width: 520px;
+  margin: 8px auto 24px;
+}
+
+.hero-select__options {
+  display: flex;
+  gap: 16px;
+  justify-content: center;
+}
+
+.hero-option {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 24px;
+  color: var(--text);
+  cursor: pointer;
+  min-width: 160px;
+}
+
+.hero-option:hover {
+  border-color: var(--accent);
+}
+
+.hero-option__name {
+  font-size: 1.1rem;
+  font-weight: bold;
+  color: var(--gold);
+  margin-bottom: 6px;
+}
+
+.hero-option__stats {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+/* Winner overlay */
+.winner-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 10, 14, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.winner-overlay__box {
+  background: var(--panel);
+  border: 2px solid var(--gold);
+  border-radius: 12px;
+  padding: 32px 48px;
+  text-align: center;
+}
