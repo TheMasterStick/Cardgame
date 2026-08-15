@@ -1,7 +1,9 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { CARD_DEFINITIONS } from "../../data/cards";
+import { HEROES } from "../../data/heroes";
 import { creatureCanAttack, heroCanAttack } from "../../engine/combat";
 import type { CardInstance, GameState, PlayerId } from "../../engine/types";
+import { BOARD_THEME, cssImage } from "../../data/theme";
 import { canBypassFrontRow, getPendingEffect, isEffectTargetable, type PendingAction } from "../targeting";
 import { CardView } from "./CardView";
 
@@ -44,8 +46,15 @@ export function PlayerBoard({
     portraitClickable = heroCanAttack(state, "player");
   }
 
+  const boardBgImage = cssImage(
+    isEnemy ? BOARD_THEME.opponentBoardBackground : BOARD_THEME.playerBoardBackground,
+  );
+
   return (
-    <div className={`player-board ${isEnemy ? "player-board--enemy" : "player-board--own"}`}>
+    <div
+      className={`player-board ${isEnemy ? "player-board--enemy" : "player-board--own"}`}
+      style={{ "--board-bg-image": boardBgImage } as CSSProperties}
+    >
       <div className="row row--back">
         {playerState.board.backRow.map((card, i) => {
           let clickable = false;
@@ -77,8 +86,13 @@ export function PlayerBoard({
 
         <div className="hero-column">
           <div
-            className={`portrait ${portraitClickable ? "portrait--clickable" : ""}`}
+            className={`portrait ${portraitClickable ? "portrait--clickable" : ""} ${HEROES[playerState.hero.class]?.art ? "portrait--has-art" : ""}`}
             onClick={portraitClickable ? () => onPortraitClick(owner) : undefined}
+            style={
+              HEROES[playerState.hero.class]?.art
+                ? { backgroundImage: `url("${HEROES[playerState.hero.class].art}")` }
+                : undefined
+            }
           >
             <div className="portrait__name">{playerState.hero.name}</div>
             <div className="portrait__hp">HP {playerState.hero.currentHp}/{playerState.hero.maxHp}</div>

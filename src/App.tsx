@@ -1,26 +1,41 @@
-import { useEffect, useReducer, useRef, useState } from "react";
+import { useEffect, useReducer, useRef, useState, type CSSProperties } from "react";
 import { CARD_DEFINITIONS } from "./data/cards";
 import { STARTER_DECKS } from "./data/decks";
+import { BOARD_THEME, cssImage } from "./data/theme";
 import { creatureCanAttack, declareCreatureAttack, declareHeroAttack, heroCanAttack, type AttackTarget } from "./engine/combat";
+import { awardMatchCoins, canAffordPack, loadCollection, openPack, saveCollection, type Collection } from "./engine/collection";
+import { deckSize, deckToIds, loadCustomDeck, saveCustomDeck, type DeckDraft } from "./engine/customDeck";
 import type { EffectTargetRef } from "./engine/effects";
 import { createInitialGameState } from "./engine/factory";
-import { activateSlotCard, endTurn, playCardFromHand, startGame } from "./engine/game";
 import { runAiTurn } from "./engine/ai";
-import type { GameState, HeroClass, PlayerId } from "./engine/types";
+import { activateSlotCard, endTurn, playCardFromHand, startGame } from "./engine/game";
+import { DECK_SIZE, type GameState, type HeroClass, type PlayerId } from "./engine/types";
+import { CollectionView } from "./ui/components/CollectionView";
+import { DeckBuilder } from "./ui/components/DeckBuilder";
 import { GameLog } from "./ui/components/GameLog";
 import { HandView } from "./ui/components/HandView";
 import { HeroSelect } from "./ui/components/HeroSelect";
+import { MainMenu } from "./ui/components/MainMenu";
+import { PackOpening } from "./ui/components/PackOpening";
 import { PlayerBoard } from "./ui/components/PlayerBoard";
 import { ResourceBar } from "./ui/components/ResourceBar";
 import { effectNeedsExplicitTarget, type PendingAction } from "./ui/targeting";
 
 const HERO_CLASSES: HeroClass[] = ["fighter", "mage", "rogue"];
 
+type Screen = "menu" | "heroSelect" | "collection" | "packs" | "deckBuilder" | "playing";
+
+const appStyle = { "--app-bg-image": cssImage(BOARD_THEME.appBackground) } as CSSProperties;
+
 export default function App() {
   const gameRef = useRef<GameState | null>(null);
+  const matchRewardGivenRef = useRef(false);
   const [, forceRender] = useReducer((x: number) => x + 1, 0);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [message, setMessage] = useState<string>("");
+  const [screen, setScreen] = useState<Screen>("menu");
+  const [collection, setCollection] = useState<Collection>(() => loadCollection());
+  const [customDeck, setCustomDeck] = useState<DeckDraft>(() => loadCustomDeck());
 
   useEffect(() => {
     if (!message) return;
@@ -29,6 +44,15 @@ export default function App() {
   }, [message]);
 
   function commit() {
+    const state = gameRef.current;
+    if (state?.winner && !matchRewardGivenRef.current) {
+      matchRewardGivenRef.current = true;
+      setCollection((c) => {
+        const updated = awardMatchCoins(c, state.winner === "player");
+        saveCollection(updated);
+        return updated;
+      });
+    }
     forceRender();
   }
 
@@ -36,12 +60,57 @@ export default function App() {
     setMessage(reason ?? "That's not allowed right now.");
   }
 
-  function handleSelectHero(heroClass: HeroClass) {
+  function beginMatch(heroClass: HeroClass, deckIds: string[]) {
     const aiClass = HERO_CLASSES[Math.floor(Math.random() * HERO_CLASSES.length)];
-    const state = createInitialGameState(heroClass, STARTER_DECKS[heroClass], aiClass, STARTER_DECKS[aiClass]);
+    const state = createInitialGameState(heroClass, deckIds, aiClass, STARTER_DECKS[aiClass]);
     startGame(state); // draws hands and begins turn 1 for "player"
     gameRef.current = state;
+    matchRewardGivenRef.current = false;
+    setPending(null);
+    setMessage("");
+    setScreen("playing");
     commit();
+  }
+
+  function handleSelectHero(heroClass: HeroClass) {
+    beginMatch(heroClass, STARTER_DECKS[heroClass]);
+  }
+
+  function handlePlayCustomDeck(heroClass: HeroClass) {
+    beginMatch(heroClass, deckToIds(customDeck));
+  }
+
+  function handleOpenPack(): string[] {
+    // openPack is pure and `collection` here is the freshly rendered state for
+    // this click, so compute the result directly rather than inside a setState
+    // updater — the updater's body isn't guaranteed to run synchronously, so a
+    // value captured from it isn't safe to return immediately.
+    const result = openPack(collection);
+    setCollection(result.collection);
+    saveCollection(result.collection);
+    return result.cardsWon;
+  }
+
+  function handleDeckAdd(defId: string) {
+    setCustomDeck((prev) => {
+      const owned = collection.owned[defId] ?? 0;
+      const current = prev[defId] ?? 0;
+      if (current >= owned || deckSize(prev) >= DECK_SIZE) return prev;
+      const next = { ...prev, [defId]: current + 1 };
+      saveCustomDeck(next);
+      return next;
+    });
+  }
+
+  function handleDeckRemove(defId: string) {
+    setCustomDeck((prev) => {
+      const current = prev[defId] ?? 0;
+      if (current <= 0) return prev;
+      const next = { ...prev, [defId]: current - 1 };
+      if (next[defId] === 0) delete next[defId];
+      saveCustomDeck(next);
+      return next;
+    });
   }
 
   function runAiIfNeeded() {
@@ -196,25 +265,84 @@ export default function App() {
     commit();
   }
 
-  function handleNewGame() {
+  function handleReturnToMenu() {
     gameRef.current = null;
     setPending(null);
     setMessage("");
+    setScreen("menu");
     commit();
   }
 
-  const state = gameRef.current;
-
-  if (!state) {
+  if (screen === "menu") {
     return (
-      <div className="app">
+      <div className="app" style={appStyle}>
+        <MainMenu
+          coins={collection.coins}
+          onQuickPlay={() => setScreen("heroSelect")}
+          onCollection={() => setScreen("collection")}
+          onPacks={() => setScreen("packs")}
+          onDeckBuilder={() => setScreen("deckBuilder")}
+        />
+      </div>
+    );
+  }
+
+  if (screen === "heroSelect") {
+    return (
+      <div className="app" style={appStyle}>
+        <button className="btn" onClick={() => setScreen("menu")}>
+          ← Back
+        </button>
         <HeroSelect onSelect={handleSelectHero} />
       </div>
     );
   }
 
+  if (screen === "collection") {
+    return (
+      <div className="app" style={appStyle}>
+        <CollectionView collection={collection} onBack={() => setScreen("menu")} />
+      </div>
+    );
+  }
+
+  if (screen === "packs") {
+    return (
+      <div className="app" style={appStyle}>
+        <PackOpening
+          coins={collection.coins}
+          canAfford={canAffordPack(collection)}
+          onOpenPack={handleOpenPack}
+          onBack={() => setScreen("menu")}
+        />
+      </div>
+    );
+  }
+
+  if (screen === "deckBuilder") {
+    return (
+      <div className="app" style={appStyle}>
+        <DeckBuilder
+          collection={collection}
+          deck={customDeck}
+          onAdd={handleDeckAdd}
+          onRemove={handleDeckRemove}
+          onPlay={handlePlayCustomDeck}
+          onBack={() => setScreen("menu")}
+        />
+      </div>
+    );
+  }
+
+  const state = gameRef.current;
+  if (!state) {
+    // Shouldn't happen, but fall back to the menu rather than rendering a blank page.
+    setScreen("menu");
+    return null;
+  }
+
   return (
-    <div className="app">
+    <div className="app" style={appStyle}>
       <header className="app__header">
         <h1>Cardgame</h1>
         <div className="app__turn-info">
@@ -275,8 +403,11 @@ export default function App() {
         <div className="winner-overlay">
           <div className="winner-overlay__box">
             <h2>{state.winner === "player" ? "Victory!" : "Defeat"}</h2>
-            <button className="btn" onClick={handleNewGame}>
-              New Game
+            <p className="winner-overlay__reward">
+              {state.winner === "player" ? "+60 coins" : "+25 coins"} — 🪙 {collection.coins} total
+            </p>
+            <button className="btn" onClick={handleReturnToMenu}>
+              Back to Menu
             </button>
           </div>
         </div>

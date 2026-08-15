@@ -19,7 +19,12 @@ export function HeroSelect({ onSelect }: HeroSelectProps) {
         {CLASS_ORDER.map((cls) => {
           const def = HEROES[cls];
           return (
-            <button key={cls} className="hero-option" onClick={() => onSelect(cls)}>
+            <button
+              key={cls}
+              className={`hero-option ${def.art ? "hero-option--has-art" : ""}`}
+              onClick={() => onSelect(cls)}
+              style={def.art ? { backgroundImage: `url("${def.art}")` } : undefined}
+            >
               <div className="hero-option__name">{def.name}</div>
               <div className="hero-option__stats">
                 HP {def.baseHp} · ATK {def.baseAttack} (with Equipment)

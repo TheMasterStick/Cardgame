@@ -108,6 +108,8 @@ export interface Trigger {
   effect: CardEffect;
 }
 
+export type Rarity = "common" | "rare" | "epic" | "legendary";
+
 interface CardDefinitionBase {
   id: string;
   name: string;
@@ -115,6 +117,13 @@ interface CardDefinitionBase {
   /** Resources cost to play the card from hand. */
   cost: number;
   text?: string;
+  rarity: Rarity;
+  /**
+   * Image URL or path shown on the card (e.g. "/cards/footman.png" for a
+   * file dropped in public/cards/, or any external https:// URL). Omit to
+   * fall back to the plain text card layout.
+   */
+  art?: string;
 }
 
 export interface CreatureDefinition extends CardDefinitionBase {
@@ -166,6 +175,8 @@ export interface HeroDefinition {
   class: HeroClass;
   baseHp: number;
   baseAttack: number;
+  /** Portrait image URL or path, e.g. "/heroes/fighter.png". Omit for the plain text portrait. */
+  art?: string;
 }
 
 /** Runtime instance of a card, wrapping its static definition with live state. */

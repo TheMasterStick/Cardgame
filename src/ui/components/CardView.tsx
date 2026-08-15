@@ -10,12 +10,17 @@ interface CardViewProps {
 export function CardView({ instance, onClick, highlighted }: CardViewProps) {
   const def = CARD_DEFINITIONS[instance.defId];
 
-  const classes = ["card", `card--${def.archetype}`];
+  const classes = ["card", `card--${def.archetype}`, `card--rarity-${def.rarity}`];
   if (highlighted) classes.push("card--highlight");
   if (onClick) classes.push("card--clickable");
+  if (def.art) classes.push("card--has-art");
 
   return (
     <div className={classes.join(" ")} onClick={onClick} title={def.text ?? def.name}>
+      {def.art && (
+        <div className="card__art" style={{ backgroundImage: `url("${def.art}")` }} aria-hidden="true" />
+      )}
+      <span className="card__rarity-dot" aria-hidden="true" />
       <div className="card__top">
         {"cost" in def && <div className="card__cost">{def.cost}</div>}
         <div className="card__name">{def.name}</div>

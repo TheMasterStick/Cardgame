@@ -27,12 +27,17 @@ body {
 }
 
 .app {
+  --app-bg-image: none;
   max-width: 1200px;
   margin: 0 auto;
   padding: 12px 16px 32px;
   display: flex;
   flex-direction: column;
   gap: 10px;
+  background-image: var(--app-bg-image);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
 }
 
 .app__header {
@@ -107,6 +112,8 @@ body {
 
 /* Board */
 .player-board {
+  --board-bg-image: none;
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -114,6 +121,24 @@ body {
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 8px;
+  overflow: hidden;
+}
+
+.player-board::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--board-bg-image);
+  background-size: cover;
+  background-position: center;
+  opacity: 0.35;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.player-board > * {
+  position: relative;
+  z-index: 1;
 }
 
 .player-board--own {
@@ -150,6 +175,7 @@ body {
 }
 
 .portrait {
+  position: relative;
   width: 110px;
   min-height: 90px;
   background: var(--panel-light);
@@ -160,11 +186,31 @@ body {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  overflow: hidden;
 }
 
 .portrait--clickable {
   cursor: pointer;
   box-shadow: 0 0 0 2px var(--accent);
+}
+
+.portrait--has-art {
+  background-size: cover;
+  background-position: center;
+  color: #f2f2f2;
+}
+
+.portrait--has-art::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(10, 10, 14, 0.1) 0%, rgba(10, 10, 14, 0.85) 100%);
+  z-index: 0;
+}
+
+.portrait--has-art > * {
+  position: relative;
+  z-index: 1;
 }
 
 .portrait__name {
@@ -186,6 +232,8 @@ body {
 
 /* Cards */
 .card {
+  position: relative;
+  overflow: hidden;
   width: 96px;
   min-height: 110px;
   background: var(--panel-light);
@@ -221,6 +269,67 @@ body {
 }
 .card--equipment {
   border-color: var(--gold);
+}
+
+/* Rarity: a corner pip always shows it; epic/legendary also get a soft glow. */
+.card__rarity-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  z-index: 2;
+  background: #8a8f9e;
+}
+.card--rarity-rare .card__rarity-dot {
+  background: var(--mana);
+}
+.card--rarity-epic .card__rarity-dot {
+  background: #c07dfa;
+}
+.card--rarity-legendary .card__rarity-dot {
+  background: var(--gold);
+}
+.card--rarity-epic {
+  box-shadow: 0 0 4px rgba(192, 125, 250, 0.45);
+}
+.card--rarity-legendary {
+  box-shadow: 0 0 6px rgba(224, 184, 79, 0.55);
+}
+
+/* Card art: a background image behind the text, with a scrim so labels stay readable. */
+.card__art {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  z-index: 0;
+}
+
+.card--has-art {
+  color: #f2f2f2;
+}
+
+.card--has-art::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(10, 10, 14, 0.15) 0%, rgba(10, 10, 14, 0.05) 45%, rgba(10, 10, 14, 0.9) 100%);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.card--has-art .card__top,
+.card--has-art .card__text,
+.card--has-art .card__bottom,
+.card--has-art .card__statuses {
+  position: relative;
+  z-index: 1;
+}
+
+.card--has-art .card__text {
+  color: #e8e9ee;
 }
 
 .card__top {
@@ -342,6 +451,18 @@ body {
   border-color: var(--danger);
 }
 
+.btn--primary {
+  background: var(--accent);
+  color: #10131a;
+  font-weight: bold;
+  border: none;
+}
+
+.btn--small {
+  padding: 3px 9px;
+  font-size: 0.75rem;
+}
+
 /* Log */
 .game-log {
   background: var(--panel);
@@ -377,6 +498,7 @@ body {
 }
 
 .hero-option {
+  position: relative;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -384,10 +506,28 @@ body {
   color: var(--text);
   cursor: pointer;
   min-width: 160px;
+  overflow: hidden;
 }
 
 .hero-option:hover {
   border-color: var(--accent);
+}
+
+.hero-option--has-art {
+  background-size: cover;
+  background-position: center;
+  min-height: 140px;
+}
+
+.hero-option--has-art::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to bottom, rgba(10, 10, 14, 0.1) 0%, rgba(10, 10, 14, 0.85) 100%);
+}
+
+.hero-option--has-art > * {
+  position: relative;
 }
 
 .hero-option__name {
@@ -418,4 +558,218 @@ body {
   border-radius: 12px;
   padding: 32px 48px;
   text-align: center;
+}
+
+.winner-overlay__reward {
+  color: var(--resource);
+  margin: 4px 0 16px;
+}
+
+/* Main menu */
+.main-menu {
+  text-align: center;
+  padding: 48px 20px;
+}
+
+.main-menu h1 {
+  color: var(--gold);
+  font-size: 2rem;
+  margin: 0 0 8px;
+}
+
+.main-menu__coins {
+  color: var(--resource);
+  font-size: 1.1rem;
+  margin-bottom: 32px;
+}
+
+.main-menu__options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 420px;
+  margin: 0 auto;
+}
+
+.menu-option {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 20px;
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.menu-option:hover {
+  border-color: var(--accent);
+}
+
+.menu-option__title {
+  font-weight: bold;
+  color: var(--gold);
+  margin-bottom: 4px;
+}
+
+.menu-option__desc {
+  color: var(--text-dim);
+  font-size: 0.85rem;
+}
+
+/* Shared screen chrome (Collection / Packs / Deck Builder) */
+.screen {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 8px 4px;
+}
+
+.screen__header {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+
+.screen__header h2 {
+  margin: 0;
+  color: var(--gold);
+}
+
+.screen__subtitle {
+  color: var(--text-dim);
+  margin-left: auto;
+}
+
+.screen__subtitle--ready {
+  color: var(--energy);
+  font-weight: bold;
+}
+
+.screen__blurb {
+  color: var(--text-dim);
+  max-width: 640px;
+}
+
+/* Collection */
+.collection-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.collection-entry {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.collection-entry--locked {
+  opacity: 0.35;
+  filter: grayscale(1);
+}
+
+.collection-entry__count {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+}
+
+/* Pack opening */
+.pack-reveal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+/* Deck builder */
+.deck-builder {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.deck-builder__pane {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.deck-builder__pane h3 {
+  margin: 0;
+  color: var(--gold);
+  font-size: 0.95rem;
+}
+
+.deck-builder__list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 520px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.deck-builder__row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 6px;
+}
+
+.deck-builder__row--compact {
+  padding: 2px 0;
+  border-bottom: none;
+}
+
+.deck-builder__row-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.deck-builder__owned {
+  color: var(--text-dim);
+  font-size: 0.78rem;
+}
+
+.deck-builder__play {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.deck-builder__hero-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8rem;
+  color: var(--text-dim);
+}
+
+.deck-builder__hero-label select {
+  background: var(--panel-light);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 8px;
+}
+
+@media (max-width: 760px) {
+  .deck-builder {
+    grid-template-columns: 1fr;
+  }
 }

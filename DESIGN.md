@@ -11,6 +11,9 @@ Everything under "Open defaults" was not explicitly specified and was
 chosen to keep the prototype coherent and playable; treat those as easy
 to revisit.
 
+For how to add, generate, or reskin cards (including images), see
+`CARDS.md`.
+
 ---
 
 ## 1. Card archetypes
@@ -23,6 +26,7 @@ Every card belongs to exactly one archetype:
 | **Building** | Back Row (5 slots) | No HP-in-combat by default; boosts production (Resources / Mana / Energy caps, or Militia) each turn, or grants a one-time/ongoing effect. Stays on the field until destroyed. |
 | **Spell** | One of 4 Spell/Ability slots (2 left + 2 right of the Hero) | Placed on the field like an item, then *activated* on demand by spending Mana. Deals damage / effects to creatures, buildings, or players. |
 | **Ability** | One of 4 Spell/Ability slots | Same slot pool as Spells, activated by spending Energy instead of Mana. |
+| **Equipment** | The single Equipment slot behind the Hero | Not one of the "roughly 4" archetypes named in the original brief, but earned its own slot from the Hero/Equipment mechanic in §3/§5: unlocks the Hero's own Attack for melee combat, and may add `attackBonus`/`damageReduction`. Only one can be equipped at a time — equipping a new one discards the old. |
 
 Spells and Abilities share the same 4 slots (any mix of the two, e.g. 3
 spells + 1 ability, or 4 abilities). They are **not** one-shot hand
@@ -223,8 +227,42 @@ before passing to the other:
   favorable target exists, attacks when it doesn't lose the trade (or
   when it can push face damage safely), then ends turn. Not
   minimax/lookahead — good enough to playtest against.
-- **Card set:** a starter pool covering all 4 archetypes, the 3 Hero
+- **Card set:** a starter pool covering all 5 archetypes, the 3 Hero
   classes, the named economy/pool/militia buildings, a handful of
   creatures with innate abilities, standalone Spell/Ability cards
-  (including limited-charge and unlimited examples), an Equipment card,
-  and Burn/Poison sources — enough to build two 30-card starter decks.
+  (including limited-charge and unlimited examples), Equipment cards,
+  and Burn/Poison sources — enough to build three 30-card starter decks
+  (one per Hero class).
+
+---
+
+## 10. Card collection, packs, and custom decks
+
+On top of Quick Play (a Hero's fixed starter deck), there's a second,
+persistent progression loop:
+
+- **Collection:** which cards you own and how many copies, stored in
+  the browser's `localStorage`. Starts empty.
+- **Coins:** a currency also stored in `localStorage`. Starts at 300;
+  a match award +60 coins for a win, +25 for a loss (paid out once,
+  right when a match ends).
+- **Packs:** 100 coins buys a 5-card pack. Each card slot rolls
+  independently by rarity weight (common 60 / rare 25 / epic 12 /
+  legendary 3, out of 100 — see `src/data/packs.ts`) and is added to
+  the collection; duplicates just stack (no dust/disenchant system).
+- **Deck Builder:** compose any 30-card deck from owned copies (no
+  archetype/class restrictions, consistent with §8), pick a Hero class
+  to pair it with, and play a match with it. The AI opponent still
+  plays a random class's fixed starter deck — collection/deckbuilding
+  only applies to the player's own deck in this pass.
+
+**Rarity** is a property of the card definition itself (`rarity` field,
+common/rare/epic/legendary) — it drives pack odds and a colored corner
+pip on the card, and has no gameplay effect by itself.
+
+**Card art and board theming:** any card can carry an `art` field
+(image URL or a `public/`-relative path) rendered behind its text, with
+a graceful fallback to the plain layout when unset. Board backgrounds
+are a separate, code-level theme config. Adding new cards (by hand, via
+a JSON file with runtime validation, or by generating them with an LLM)
+and adding images are both covered in detail in `CARDS.md`.
