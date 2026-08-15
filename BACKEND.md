@@ -45,6 +45,8 @@ happen from your side, once:
 
 1. Open your project's [SQL Editor](https://supabase.com/dashboard/project/_/sql/new).
 2. Paste the contents of `supabase/migrations/0001_init.sql` and run it.
+3. Then paste and run `supabase/migrations/0002_wallet_initialized.sql` too
+   (adds one column the collection-sync logic needs — see §5).
 
 That creates the `profiles`, `cards`, `collection_entries`, `wallets`,
 and `decks` tables (all with Row Level Security policies — see the file
@@ -110,11 +112,36 @@ Replace the email with whichever Google account you signed in with.
 Refresh the app — the account bar should show an "Admin" badge next to
 your email.
 
+## 5. Cards and coins now follow your account
+
+Signed out, cards/coins are a per-browser `localStorage` "guest" save —
+same as before any of this backend work existed. Signed in, they live
+in Supabase's `wallets`/`collection_entries` tables instead, keyed to
+your account, so they follow you between devices and browsers.
+
+The switch happens automatically: the first time an account is ever
+seen (its wallet row has never been synced from a client before),
+whatever's in that browser's localStorage at that moment gets imported
+into the account once. Every sign-in after that, the account's saved
+data is what loads — local browser data is only ever consulted on that
+one first import, never again. Signing out reverts the app to showing
+the local guest save.
+
+The account bar shows a small "☁ Synced" indicator once you're signed
+in, next to your email, as a signal that cards/coins are now
+account-backed rather than browser-local.
+
+**Decks built in the Deck Builder are not part of this yet** — they
+still live in localStorage regardless of sign-in state. Say if you want
+that moved over too.
+
 ## What's not built yet
 
-The admin card-creation panel itself (form + image upload to
-`card-art` + insert into the `cards` table) isn't wired up yet — this
-pass only gets accounts and admin-flagging working end to end, since I
-can't verify any of it myself and wanted a working checkpoint before
-building more on top of it. Once you've confirmed sign-in and the admin
-badge work, say so and I'll build the actual panel next.
+- The admin card-creation panel itself (form + image upload to
+  `card-art` + insert into the `cards` table).
+- Deck sync to the account (see §5).
+
+I can't verify any of the Supabase-backed behavior myself (same network
+block as always), so if collection/coin sync doesn't behave as
+described — e.g. a fresh sign-in doesn't pick up the local pack you
+just opened — let me know what you actually saw and I'll dig in.

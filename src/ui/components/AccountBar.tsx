@@ -24,6 +24,9 @@ export function AccountBar() {
       <span className="account-bar__email">
         {user.email}
         {profile?.is_admin && <span className="account-bar__admin-badge">Admin</span>}
+        <span className="account-bar__synced" title="Cards and coins are saved to this account">
+          ☁ Synced
+        </span>
       </span>
       <button className="btn btn--small" onClick={() => void signOut()}>
         Sign out

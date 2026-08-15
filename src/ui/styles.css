@@ -591,6 +591,11 @@ body {
   border-radius: 10px;
 }
 
+.account-bar__synced {
+  color: var(--energy);
+  font-size: 0.75rem;
+}
+
 /* Main menu */
 .main-menu {
   text-align: center;

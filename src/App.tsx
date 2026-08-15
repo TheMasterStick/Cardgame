@@ -10,6 +10,8 @@ import { createInitialGameState } from "./engine/factory";
 import { runAiTurn } from "./engine/ai";
 import { activateSlotCard, endTurn, playCardFromHand, startGame } from "./engine/game";
 import { DECK_SIZE, type GameState, type HeroClass, type PlayerId } from "./engine/types";
+import { useAuth } from "./lib/AuthProvider";
+import { loadOrInitializeRemoteCollection, saveRemoteCollection } from "./lib/remoteCollection";
 import { AccountBar } from "./ui/components/AccountBar";
 import { CollectionView } from "./ui/components/CollectionView";
 import { DeckBuilder } from "./ui/components/DeckBuilder";
@@ -37,6 +39,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>("menu");
   const [collection, setCollection] = useState<Collection>(() => loadCollection());
   const [customDeck, setCustomDeck] = useState<DeckDraft>(() => loadCustomDeck());
+  const { user } = useAuth();
 
   useEffect(() => {
     if (!message) return;
@@ -44,13 +47,40 @@ export default function App() {
     return () => clearTimeout(t);
   }, [message]);
 
+  // Cards and coins live in localStorage while signed out (a per-browser
+  // "guest" save). Signing in switches to the account's own saved copy in
+  // Supabase — imported once from whatever's local the first time this
+  // account is ever seen, authoritative from then on. Signing out reverts
+  // to the local guest save.
+  useEffect(() => {
+    if (!user) {
+      setCollection(loadCollection());
+      return;
+    }
+    let cancelled = false;
+    loadOrInitializeRemoteCollection(user.id, loadCollection()).then((remoteCollection) => {
+      if (!cancelled) setCollection(remoteCollection);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  function persistCollection(next: Collection) {
+    if (user) {
+      void saveRemoteCollection(user.id, next);
+    } else {
+      saveCollection(next);
+    }
+  }
+
   function commit() {
     const state = gameRef.current;
     if (state?.winner && !matchRewardGivenRef.current) {
       matchRewardGivenRef.current = true;
       setCollection((c) => {
         const updated = awardMatchCoins(c, state.winner === "player");
-        saveCollection(updated);
+        persistCollection(updated);
         return updated;
       });
     }
@@ -88,7 +118,7 @@ export default function App() {
     // value captured from it isn't safe to return immediately.
     const result = openPack(collection);
     setCollection(result.collection);
-    saveCollection(result.collection);
+    persistCollection(result.collection);
     return result.cardsWon;
   }
 
