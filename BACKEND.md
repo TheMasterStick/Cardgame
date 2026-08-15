@@ -12,20 +12,26 @@ If you can't run `npm run dev` from wherever you're working (e.g. a
 work machine), deploy the app to a free static host first — then
 everything below works from any browser, no terminal needed.
 
-**Cloudflare Pages**, all in-browser:
-1. **dash.cloudflare.com** → sign up free → **Workers & Pages** →
-   **Create** → **Pages** → **Connect to Git** → authorize the
-   Cloudflare GitHub App → pick the `themasterstick/cardgame` repo.
-2. **Production branch: `claude/card-game-framework-kmz2ol`** — nothing's
-   merged to `main` yet, so this is where the actual app lives.
-3. Framework preset **Vite** (should auto-detect). Build command
-   `npm run build`. Build output directory `dist`.
-4. Before deploying, add these under **Environment variables**:
+**Vercel** (Cloudflare Pages' newer dashboard tends to route new
+projects through a "deploy a template into a new repo" flow that's easy
+to hit by accident instead of connecting your existing repo — Vercel's
+"Import Git Repository" flow avoids that trap), all in-browser:
+1. **vercel.com** → **Sign Up** → "Continue with GitHub" → authorize.
+2. Dashboard → **Add New...** → **Project**.
+3. Under "Import Git Repository," find `themasterstick/cardgame` →
+   **Import**. (Not listed? Click "Adjust GitHub App Permissions" and
+   grant Vercel access to it.)
+4. It should auto-fill Framework Preset **Vite**, Build Command
+   `npm run build`, Output Directory `dist`. Nothing to change about
+   branch — `claude/card-game-framework-kmz2ol` is currently the *only*
+   branch on the remote, so it's already the repo's default and that's
+   what gets deployed.
+5. Expand **Environment Variables**, add both:
    - `VITE_SUPABASE_URL` = `https://lxrarvyqzhhmpimnxyml.supabase.co`
    - `VITE_SUPABASE_ANON_KEY` = (the anon key — see `.env.local`, or ask
      for it again; it's meant to be public, safe to paste here)
-5. **Save and Deploy** → you get a URL like
-   `https://cardgame-xyz.pages.dev`, live in a minute or two.
+6. **Deploy** → you get a URL like `https://cardgame-xyz.vercel.app`,
+   live in a minute or two.
 
 Use that URL in place of `localhost:5173` everywhere below — you'll
 register it in Google's and Supabase's dashboards alongside (not
@@ -62,7 +68,7 @@ any browser including a work machine:
 3. APIs & Services → Credentials → Create Credentials → OAuth client ID
    → Application type **Web application**.
 4. **Authorized JavaScript origins:** add `http://localhost:5173`, and
-   your `.pages.dev` URL if you deployed one (§0).
+   your deployed URL if you set one up (§0).
 5. **Authorized redirect URIs:** add exactly
    `https://lxrarvyqzhhmpimnxyml.supabase.co/auth/v1/callback` — this is
    Supabase's fixed callback URL for your project, not something you
@@ -73,7 +79,7 @@ any browser including a work machine:
 1. Authentication → Providers → Google → enable it, paste in the Client
    ID and Client Secret from above, save.
 2. Authentication → URL Configuration → Redirect URLs: add
-   `http://localhost:5173` and your `.pages.dev` URL if you have one.
+   `http://localhost:5173` and your deployed URL if you have one.
 
 ## 3. Try it
 
