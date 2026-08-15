@@ -4,9 +4,10 @@ interface MainMenuProps {
   onCollection: () => void;
   onPacks: () => void;
   onDeckBuilder: () => void;
+  onAdmin?: () => void;
 }
 
-export function MainMenu({ coins, onQuickPlay, onCollection, onPacks, onDeckBuilder }: MainMenuProps) {
+export function MainMenu({ coins, onQuickPlay, onCollection, onPacks, onDeckBuilder, onAdmin }: MainMenuProps) {
   return (
     <div className="main-menu">
       <h1>Cardgame</h1>
@@ -28,6 +29,12 @@ export function MainMenu({ coins, onQuickPlay, onCollection, onPacks, onDeckBuil
           <div className="menu-option__title">My Collection</div>
           <div className="menu-option__desc">Browse every card you own.</div>
         </button>
+        {onAdmin && (
+          <button className="menu-option menu-option--admin" onClick={onAdmin}>
+            <div className="menu-option__title">Admin Panel</div>
+            <div className="menu-option__desc">Edit your gold, create and edit cards.</div>
+          </button>
+        )}
       </div>
     </div>
   );

@@ -7,16 +7,71 @@ export function otherPlayer(id: PlayerId): PlayerId {
   return id === "player" ? "opponent" : "player";
 }
 
-export type HeroClass = "fighter" | "mage" | "rogue";
-
 export type CardArchetype =
+  | "hero"
   | "creature"
   | "building"
   | "spell"
   | "ability"
   | "equipment";
 
-export type Keyword = "ranged" | "charge";
+export type Keyword =
+  | "ranged"
+  | "charge"
+  | "battlecry"
+  | "counter"
+  | "revenge"
+  | "frenzy"
+  | "immune"
+  | "poison"
+  | "taunt";
+
+export type Element =
+  | "frost"
+  | "fire"
+  | "nature"
+  | "light"
+  | "darkness"
+  | "arcane"
+  | "martial"
+  | "blood"
+  | "infernal"
+  | "chaos";
+
+export type Faction =
+  | "infernal-court"
+  | "roseguard-kingdom"
+  | "moonveil-coven"
+  | "velvet-syndicate"
+  | "wildheart-tribes"
+  | "celestial-academy"
+  | "necropolitan"
+  | "arcane-industries";
+
+export type Race =
+  | "beast"
+  | "demon"
+  | "dragon"
+  | "elemental"
+  | "mech"
+  | "human"
+  | "undead"
+  | "goblin"
+  | "dwarf"
+  | "elf"
+  | "pixie"
+  | "ogre"
+  | "giant"
+  | "dark-elf"
+  | "angel"
+  | "orc"
+  | "gnome"
+  | "troll"
+  | "dryad"
+  | "fairy"
+  | "harpy"
+  | "fiend"
+  | "vampire";
 
 export type StatusType = "burn" | "poison";
 
@@ -101,20 +156,22 @@ export type TriggerName =
   | "onAttack"
   | "onDeath"
   | "startOfTurn"
-  | "endOfTurn";
+  | "endOfTurn"
+  /** Fires on a creature when it's targeted by an attack (Counter keyword). */
+  | "onDefend";
 
 export interface Trigger {
   on: TriggerName;
   effect: CardEffect;
 }
 
-export type Rarity = "common" | "rare" | "epic" | "legendary";
+export type Rarity = "common" | "uncommon" | "rare" | "epic" | "legendary";
 
 interface CardDefinitionBase {
   id: string;
   name: string;
   archetype: CardArchetype;
-  /** Resources cost to play the card from hand. */
+  /** Resources cost to play the card from hand. Unused (0) for Hero cards. */
   cost: number;
   text?: string;
   rarity: Rarity;
@@ -124,6 +181,18 @@ interface CardDefinitionBase {
    * fall back to the plain text card layout.
    */
   art?: string;
+  /** Magic school/affinity. Optional — not every card needs one. */
+  element?: Element;
+  /** Faction allegiance. Optional. */
+  faction?: Faction;
+  /** Character race/type. Only meaningful for Creature and Hero cards. */
+  race?: Race;
+}
+
+export interface HeroCardDefinition extends CardDefinitionBase {
+  archetype: "hero";
+  attack: number;
+  hp: number;
 }
 
 export interface CreatureDefinition extends CardDefinitionBase {
@@ -163,21 +232,12 @@ export interface EquipmentDefinition extends CardDefinitionBase {
 }
 
 export type CardDefinition =
+  | HeroCardDefinition
   | CreatureDefinition
   | BuildingDefinition
   | SpellDefinition
   | AbilityDefinition
   | EquipmentDefinition;
-
-export interface HeroDefinition {
-  id: string;
-  name: string;
-  class: HeroClass;
-  baseHp: number;
-  baseAttack: number;
-  /** Portrait image URL or path, e.g. "/heroes/fighter.png". Omit for the plain text portrait. */
-  art?: string;
-}
 
 /** Runtime instance of a card, wrapping its static definition with live state. */
 export interface CardInstance {
@@ -202,9 +262,9 @@ export interface ResourcePool {
 }
 
 export interface HeroInstance {
+  /** References a CardDefinition with archetype "hero" in CARD_DEFINITIONS. */
   defId: string;
   name: string;
-  class: HeroClass;
   maxHp: number;
   currentHp: number;
   baseAttack: number;

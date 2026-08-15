@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { declareCreatureAttack } from "./combat";
 import { drawCard } from "./deck";
-import { damagePlayer, gainCap } from "./effects";
+import { damageCard, damagePlayer, gainCap } from "./effects";
 import { createCardInstance, createInitialGameState } from "./factory";
 import { activateSlotCard, startTurn } from "./game";
 import { MAX_POOL, STARTING_MILITIA, type GameState } from "./types";
@@ -169,5 +169,111 @@ describe("turn flow", () => {
     state.players.player.deck.push(createCardInstance("footman", "player"));
     startTurn(state);
     expect(state.players.player.hand.length).toBe(0);
+  });
+});
+
+describe("Taunt", () => {
+  it("blocks attacking a non-Taunt creature while a Taunt creature is present", () => {
+    const state = makeState();
+    const attacker = createCardInstance("footman", "player");
+    attacker.summonedTurn = 0;
+    state.players.player.board.frontRow[0] = attacker;
+    const taunt = createCardInstance("stonewall-guardian", "opponent");
+    const other = createCardInstance("footman", "opponent");
+    state.players.opponent.board.frontRow[0] = taunt;
+    state.players.opponent.board.frontRow[1] = other;
+
+    const result = declareCreatureAttack(state, "player", attacker.instanceId, {
+      type: "creature",
+      instanceId: other.instanceId,
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("allows attacking the Taunt creature itself", () => {
+    const state = makeState();
+    const attacker = createCardInstance("footman", "player");
+    attacker.summonedTurn = 0;
+    state.players.player.board.frontRow[0] = attacker;
+    const taunt = createCardInstance("stonewall-guardian", "opponent");
+    state.players.opponent.board.frontRow[0] = taunt;
+
+    const result = declareCreatureAttack(state, "player", attacker.instanceId, {
+      type: "creature",
+      instanceId: taunt.instanceId,
+    });
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe("Frenzy", () => {
+  it("gains Attack equal to damage taken while it survives", () => {
+    const state = makeState();
+    const ogre = createCardInstance("berserking-ogre", "player");
+    state.players.player.board.frontRow[0] = ogre;
+
+    damageCard(state, "player", ogre.instanceId, 2);
+    expect(ogre.attackDelta).toBe(2);
+    expect(ogre.currentHp).toBe(3);
+  });
+
+  it("does not buff attack on the killing blow", () => {
+    const state = makeState();
+    const ogre = createCardInstance("berserking-ogre", "player");
+    state.players.player.board.frontRow[0] = ogre;
+
+    damageCard(state, "player", ogre.instanceId, 5);
+    expect(ogre.attackDelta).toBe(0);
+  });
+});
+
+describe("Immune", () => {
+  it("blocks a spell's damage", () => {
+    const state = makeState();
+    const golem = createCardInstance("arcane-golem", "opponent");
+    state.players.opponent.board.frontRow[0] = golem;
+    const spell = createCardInstance("lightning-bolt", "player");
+    state.players.player.board.spellAbilitySlots[0] = spell;
+
+    activateSlotCard(state, "player", 0, { kind: "card", owner: "opponent", instanceId: golem.instanceId });
+    expect(golem.currentHp).toBe(4);
+  });
+
+  it("does not block an ability's damage", () => {
+    const state = makeState();
+    const golem = createCardInstance("arcane-golem", "opponent");
+    state.players.opponent.board.frontRow[0] = golem;
+    const ability = createCardInstance("executioners-strike", "player");
+    state.players.player.board.spellAbilitySlots[0] = ability;
+
+    activateSlotCard(state, "player", 0, { kind: "card", owner: "opponent", instanceId: golem.instanceId });
+    expect(golem.currentHp).toBeLessThan(4);
+  });
+
+  it("does not block a direct creature attack", () => {
+    const state = makeState();
+    const golem = createCardInstance("arcane-golem", "opponent");
+    state.players.opponent.board.frontRow[0] = golem;
+    const attacker = createCardInstance("berserking-ogre", "player");
+    attacker.summonedTurn = 0;
+    state.players.player.board.frontRow[0] = attacker;
+
+    declareCreatureAttack(state, "player", attacker.instanceId, { type: "creature", instanceId: golem.instanceId });
+    expect(golem.currentHp).toBeLessThan(4);
+  });
+});
+
+describe("Counter", () => {
+  it("deals damage back to the attacker when the Counter creature is attacked", () => {
+    const state = makeState();
+    const turtle = createCardInstance("spiked-turtle", "opponent");
+    state.players.opponent.board.frontRow[0] = turtle;
+    const attacker = createCardInstance("footman", "player");
+    attacker.summonedTurn = 0;
+    state.players.player.board.frontRow[0] = attacker;
+
+    declareCreatureAttack(state, "player", attacker.instanceId, { type: "creature", instanceId: turtle.instanceId });
+    // Footman has 3 HP; takes 2 from Counter plus 1 from the Turtle's own Attack.
+    expect(attacker.currentHp).toBe(0);
   });
 });

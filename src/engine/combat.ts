@@ -1,5 +1,5 @@
 import { CARD_DEFINITIONS } from "../data/cards";
-import { damageCard, damagePlayer, resolveEffect, type EffectTargetRef } from "./effects";
+import { damageCard, damagePlayer, hasKeyword, resolveEffect, type EffectTargetRef } from "./effects";
 import {
   otherPlayer,
   type CardInstance,
@@ -57,6 +57,12 @@ function validateTarget(
   if (target.type === "creature") {
     const onFront = defenderBoard.frontRow.some((c) => c?.instanceId === target.instanceId);
     if (!onFront) return { ok: false, reason: "Can only attack enemy Front Row creatures directly." };
+    const taunts = defenderBoard.frontRow.filter(
+      (c): c is CardInstance => c !== null && hasKeyword(c, "taunt"),
+    );
+    if (taunts.length > 0 && !taunts.some((c) => c.instanceId === target.instanceId)) {
+      return { ok: false, reason: "An enemy Taunt creature must be attacked first." };
+    }
     return { ok: true };
   }
   if (!frontRowEmpty && !isRanged) {
@@ -66,6 +72,21 @@ function validateTarget(
     };
   }
   return { ok: true };
+}
+
+/** Fires a creature's onDefend trigger (Counter keyword) when it's targeted by an attack. */
+function fireOnDefendTrigger(
+  state: GameState,
+  defenderOwner: PlayerId,
+  defender: CardInstance,
+  attackerTarget: EffectTargetRef,
+): void {
+  const def = CARD_DEFINITIONS[defender.defId] as CreatureDefinition;
+  for (const trigger of def.triggers) {
+    if (trigger.on === "onDefend") {
+      resolveEffect(state, defenderOwner, trigger.effect, attackerTarget);
+    }
+  }
 }
 
 /** Attacker deals damage to a creature target; the defending creature trades damage back. */
@@ -81,6 +102,12 @@ function resolveCreatureTrade(
   const defender = defenderBoard.frontRow.find((c) => c?.instanceId === defenderInstanceId) ?? null;
   if (!defender) return;
   const defenderAttack = getCreatureAttack(defender);
+
+  const attackerTarget: EffectTargetRef =
+    attackerInstanceId === "hero"
+      ? { kind: "player", owner: attackerOwner }
+      : { kind: "card", owner: attackerOwner, instanceId: attackerInstanceId };
+  fireOnDefendTrigger(state, defenderOwner, defender, attackerTarget);
 
   damageCard(state, defenderOwner, defenderInstanceId, attackerAttack);
 

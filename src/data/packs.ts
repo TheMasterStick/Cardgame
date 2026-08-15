@@ -8,8 +8,9 @@ export const COINS_PER_LOSS = 25;
 
 /** Relative odds per rarity tier for a single card slot in a pack. Must sum to any positive total — they're normalized at draw time. */
 export const RARITY_WEIGHTS: Record<Rarity, number> = {
-  common: 60,
-  rare: 25,
-  epic: 12,
-  legendary: 3,
+  common: 45,
+  uncommon: 28,
+  rare: 18,
+  epic: 7,
+  legendary: 2,
 };

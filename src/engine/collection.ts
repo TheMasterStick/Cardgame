@@ -45,8 +45,10 @@ export function canAffordPack(collection: Collection): boolean {
 }
 
 function cardPoolByRarity(): Record<Rarity, string[]> {
-  const pool: Record<Rarity, string[]> = { common: [], rare: [], epic: [], legendary: [] };
+  const pool: Record<Rarity, string[]> = { common: [], uncommon: [], rare: [], epic: [], legendary: [] };
   for (const def of Object.values(CARD_DEFINITIONS)) {
+    // Heroes are chosen before a match, not drawn from packs into a deck.
+    if (def.archetype === "hero") continue;
     pool[def.rarity].push(def.id);
   }
   return pool;
@@ -68,7 +70,7 @@ function pickCardId(pool: Record<Rarity, string[]>): string {
   let options = pool[rarity];
 
   if (options.length === 0) {
-    const fallbackOrder: Rarity[] = ["common", "rare", "epic", "legendary"];
+    const fallbackOrder: Rarity[] = ["common", "uncommon", "rare", "epic", "legendary"];
     options = fallbackOrder.map((r) => pool[r]).find((cards) => cards.length > 0) ?? [];
   }
   if (options.length === 0) {

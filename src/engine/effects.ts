@@ -5,12 +5,24 @@ import {
   MAX_POOL,
   otherPlayer,
   type BuildingDefinition,
+  type CardArchetype,
   type CardEffect,
   type CardInstance,
   type CreatureDefinition,
   type GameState,
+  type Keyword,
   type PlayerId,
 } from "./types";
+
+export function hasKeyword(card: CardInstance, keyword: Keyword): boolean {
+  const def = CARD_DEFINITIONS[card.defId];
+  return def.archetype === "creature" && def.keywords.includes(keyword);
+}
+
+/** Immune blocks any spell effect from landing on the creature — not abilities or creature-native triggers. */
+function isImmuneToSpell(card: CardInstance, sourceArchetype: CardArchetype | undefined): boolean {
+  return sourceArchetype === "spell" && hasKeyword(card, "immune");
+}
 
 /** A target chosen by the caller (UI click or AI decision) for an effect that needs one. */
 export type EffectTargetRef =
@@ -59,6 +71,10 @@ export function damageCard(state: GameState, owner: PlayerId, instanceId: string
   const found = findCard(state, owner, instanceId);
   if (!found || found.card.currentHp === undefined) return;
   found.card.currentHp -= amount;
+  if (found.card.currentHp > 0 && hasKeyword(found.card, "frenzy")) {
+    found.card.attackDelta += amount;
+    state.log.push(`${found.card.defId} (${owner}) Frenzies, gaining +${amount} Attack.`);
+  }
   state.log.push(`${found.card.defId} (${owner}) took ${amount} damage.`);
   killCardIfDead(state, owner, instanceId);
 }
@@ -142,20 +158,24 @@ export function checkWinner(state: GameState): void {
 /**
  * Resolves any CardEffect against a chosen target (or no target, for
  * effects that don't need one). `actingPlayer` is the controller of the
- * card that produced the effect.
+ * card that produced the effect. `sourceArchetype` — pass "spell" for a
+ * Spell card's own activation so Immune creatures correctly block it;
+ * omit it for abilities and creature/building triggers, which Immune
+ * doesn't affect.
  */
 export function resolveEffect(
   state: GameState,
   actingPlayer: PlayerId,
   effect: CardEffect,
   target: EffectTargetRef,
+  sourceArchetype?: CardArchetype,
 ): void {
   switch (effect.kind) {
     case "damage": {
       if (effect.target === "allEnemyCreatures" || effect.target === "allFriendlyCreatures") {
         const owner = effect.target === "allEnemyCreatures" ? otherPlayer(actingPlayer) : actingPlayer;
         for (const c of [...state.players[owner].board.frontRow]) {
-          if (c) damageCard(state, owner, c.instanceId, effect.amount);
+          if (c && !isImmuneToSpell(c, sourceArchetype)) damageCard(state, owner, c.instanceId, effect.amount);
         }
         return;
       }
@@ -167,6 +187,8 @@ export function resolveEffect(
       if (target.kind === "player") {
         damagePlayer(state, target.owner, effect.amount);
       } else {
+        const found = findCard(state, target.owner, target.instanceId);
+        if (found && isImmuneToSpell(found.card, sourceArchetype)) return;
         damageCard(state, target.owner, target.instanceId, effect.amount);
       }
       return;
@@ -180,6 +202,8 @@ export function resolveEffect(
       if (target.kind === "player") {
         healHero(state, target.owner, effect.amount);
       } else {
+        const found = findCard(state, target.owner, target.instanceId);
+        if (found && isImmuneToSpell(found.card, sourceArchetype)) return;
         healCard(state, target.owner, target.instanceId, effect.amount);
       }
       return;
@@ -195,7 +219,8 @@ export function resolveEffect(
         return;
       }
       const found = findCard(state, target.owner, target.instanceId);
-      if (found) applyStatus(found.card, effect.status, effect.amount, effect.duration);
+      if (!found || isImmuneToSpell(found.card, sourceArchetype)) return;
+      applyStatus(found.card, effect.status, effect.amount, effect.duration);
       return;
     }
     case "buff": {
@@ -209,13 +234,14 @@ export function resolveEffect(
       if (effect.target === "allFriendlyCreatures" || effect.target === "allEnemyCreatures") {
         const owner = effect.target === "allFriendlyCreatures" ? actingPlayer : otherPlayer(actingPlayer);
         for (const c of state.players[owner].board.frontRow) {
-          if (c) applyBuff(c);
+          if (c && !isImmuneToSpell(c, sourceArchetype)) applyBuff(c);
         }
         return;
       }
       if (!target || target.kind !== "card") return;
       const found = findCard(state, target.owner, target.instanceId);
-      if (found) applyBuff(found.card);
+      if (!found || isImmuneToSpell(found.card, sourceArchetype)) return;
+      applyBuff(found.card);
       return;
     }
     case "drawCard": {

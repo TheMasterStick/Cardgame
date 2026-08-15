@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { CARD_DEFINITIONS } from "../../data/cards";
-import { HEROES } from "../../data/heroes";
 import type { Collection } from "../../engine/collection";
 import { ownedCount } from "../../engine/collection";
 import type { DeckDraft } from "../../engine/customDeck";
 import { deckSize } from "../../engine/customDeck";
 import { createCardInstance } from "../../engine/factory";
-import { DECK_SIZE, type HeroClass } from "../../engine/types";
+import { DECK_SIZE, type HeroCardDefinition } from "../../engine/types";
 import { CardView } from "./CardView";
 
 interface DeckBuilderProps {
@@ -14,16 +13,19 @@ interface DeckBuilderProps {
   deck: DeckDraft;
   onAdd: (defId: string) => void;
   onRemove: (defId: string) => void;
-  onPlay: (heroClass: HeroClass) => void;
+  onPlay: (heroDefId: string) => void;
   onBack: () => void;
 }
 
-const HERO_CLASSES: HeroClass[] = ["fighter", "mage", "rogue"];
-
 export function DeckBuilder({ collection, deck, onAdd, onRemove, onPlay, onBack }: DeckBuilderProps) {
-  const [heroClass, setHeroClass] = useState<HeroClass>("fighter");
+  const heroCards = Object.values(CARD_DEFINITIONS).filter(
+    (def): def is HeroCardDefinition => def.archetype === "hero",
+  );
+  const [heroDefId, setHeroDefId] = useState<string>(heroCards[0]?.id ?? "");
   const total = deckSize(deck);
-  const allDefs = Object.values(CARD_DEFINITIONS).sort((a, b) => a.cost - b.cost || a.name.localeCompare(b.name));
+  const allDefs = Object.values(CARD_DEFINITIONS)
+    .filter((def) => def.archetype !== "hero")
+    .sort((a, b) => a.cost - b.cost || a.name.localeCompare(b.name));
   const deckEntries = Object.entries(deck)
     .filter(([, count]) => count > 0)
     .sort(([a], [b]) => CARD_DEFINITIONS[a].name.localeCompare(CARD_DEFINITIONS[b].name));
@@ -86,15 +88,19 @@ export function DeckBuilder({ collection, deck, onAdd, onRemove, onPlay, onBack 
           <div className="deck-builder__play">
             <label className="deck-builder__hero-label">
               Hero
-              <select value={heroClass} onChange={(e) => setHeroClass(e.target.value as HeroClass)}>
-                {HERO_CLASSES.map((cls) => (
-                  <option key={cls} value={cls}>
-                    {HEROES[cls].name} (HP {HEROES[cls].baseHp} / ATK {HEROES[cls].baseAttack})
+              <select value={heroDefId} onChange={(e) => setHeroDefId(e.target.value)}>
+                {heroCards.map((hero) => (
+                  <option key={hero.id} value={hero.id}>
+                    {hero.name} (HP {hero.hp} / ATK {hero.attack})
                   </option>
                 ))}
               </select>
             </label>
-            <button className="btn btn--primary" disabled={total !== DECK_SIZE} onClick={() => onPlay(heroClass)}>
+            <button
+              className="btn btn--primary"
+              disabled={total !== DECK_SIZE || !heroDefId}
+              onClick={() => onPlay(heroDefId)}
+            >
               Play This Deck
             </button>
           </div>

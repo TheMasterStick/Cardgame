@@ -1,33 +1,34 @@
-import { HEROES } from "../../data/heroes";
-import type { HeroClass } from "../../engine/types";
+import { CARD_DEFINITIONS } from "../../data/cards";
+import { STARTER_DECKS } from "../../data/decks";
+import type { HeroCardDefinition } from "../../engine/types";
 
 interface HeroSelectProps {
-  onSelect: (heroClass: HeroClass) => void;
+  onSelect: (heroDefId: string) => void;
 }
 
-const CLASS_ORDER: HeroClass[] = ["fighter", "mage", "rogue"];
-
 export function HeroSelect({ onSelect }: HeroSelectProps) {
+  const heroIds = Object.keys(STARTER_DECKS);
+
   return (
     <div className="hero-select">
       <h1>Choose Your Hero</h1>
       <p className="hero-select__subtitle">
-        Each class starts with a themed 30-card deck. Base Hero HP/Attack varies by class — a
-        squishy Mage hits hard with spells, a tanky Fighter grinds it out in melee.
+        Each Hero starts with a themed 30-card deck. Base HP/Attack varies by Hero — a squishy
+        Mage hits hard with spells, a tanky Fighter grinds it out in melee.
       </p>
       <div className="hero-select__options">
-        {CLASS_ORDER.map((cls) => {
-          const def = HEROES[cls];
+        {heroIds.map((heroId) => {
+          const def = CARD_DEFINITIONS[heroId] as HeroCardDefinition;
           return (
             <button
-              key={cls}
+              key={heroId}
               className={`hero-option ${def.art ? "hero-option--has-art" : ""}`}
-              onClick={() => onSelect(cls)}
+              onClick={() => onSelect(heroId)}
               style={def.art ? { backgroundImage: `url("${def.art}")` } : undefined}
             >
               <div className="hero-option__name">{def.name}</div>
               <div className="hero-option__stats">
-                HP {def.baseHp} · ATK {def.baseAttack} (with Equipment)
+                HP {def.hp} · ATK {def.attack} (with Equipment)
               </div>
             </button>
           );

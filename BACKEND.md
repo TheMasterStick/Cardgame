@@ -47,10 +47,16 @@ happen from your side, once:
 2. Paste the contents of `supabase/migrations/0001_init.sql` and run it.
 3. Then paste and run `supabase/migrations/0002_wallet_initialized.sql` too
    (adds one column the collection-sync logic needs — see §5).
+4. Then paste and run `supabase/migrations/0003_card_taxonomy.sql` too
+   (adds the `element`/`faction`/`race` columns and the `hero` archetype
+   / `uncommon` rarity to the `cards` table's check constraints — needed
+   before the Admin Panel in §6 can save a card).
 
 That creates the `profiles`, `cards`, `collection_entries`, `wallets`,
 and `decks` tables (all with Row Level Security policies — see the file
-for the exact rules) and a public `card-art` Storage bucket.
+for the exact rules) and a public `card-art` Storage bucket. Run all
+three migrations in order — each one only adds to what the last one
+built.
 
 Alternative, if you'd rather use the CLI from a machine with normal
 network access: `supabase login`, then
@@ -127,6 +133,23 @@ data is what loads — local browser data is only ever consulted on that
 one first import, never again. Signing out reverts the app to showing
 the local guest save.
 
+**Important:** once an account has completed that first import
+(`wallets.initialized = true`), clearing your browser's local storage
+and signing back in does **not** reset anything — the account's data in
+Supabase is what loads every time from then on, local storage or not.
+To actually reset a synced account's cards/coins, do it server-side
+instead, in the SQL Editor:
+
+```sql
+update public.wallets set coins = 300 where user_id =
+  (select id from auth.users where email = 'your-email@gmail.com');
+delete from public.collection_entries where user_id =
+  (select id from auth.users where email = 'your-email@gmail.com');
+```
+
+Adjust the `coins` value or drop that line if you just want to wipe the
+collection and keep the gold.
+
 The account bar shows a small "☁ Synced" indicator once you're signed
 in, next to your email, as a signal that cards/coins are now
 account-backed rather than browser-local.
@@ -135,13 +158,48 @@ account-backed rather than browser-local.
 still live in localStorage regardless of sign-in state. Say if you want
 that moved over too.
 
+## 6. Using the Admin Panel
+
+Once your account has `is_admin = true` (§4) and you refresh, a new
+"Admin Panel" option appears on the main menu.
+
+Everything the panel does reads/writes the shared `cards` table (RLS
+restricts writes to admins; anyone can read, since the card catalog has
+to be visible to every player) and the `wallets` table for your own
+coin balance.
+
+- **Edit your gold:** a number field at the top of the panel, saves via
+  the same wallet-sync path as pack-opening does.
+- **Browse/edit existing cards:** a searchable grid of every card
+  currently in `CARD_DEFINITIONS` (built-in + anything already saved to
+  the `cards` table). Clicking one opens it in the same form used to
+  create new cards, pre-filled.
+- **Create a new card:** pick an archetype (Hero/Creature/Building/
+  Spell/Ability/Equipment), fill in the fields for that archetype
+  (mirrors CARDS.md exactly), optionally set Element/Faction/Race,
+  toggle keywords, and optionally add one trigger+effect (creatures/
+  buildings) or one activated effect (spells/abilities). A live card
+  preview updates as you type.
+- **Upload art:** pick any image file — it's resized in-browser to
+  512×776 (cover-fit crop, so it's never stretched) before upload, so
+  source images of any size or aspect ratio work. See CARDS.md "Adding
+  images" for the exact behavior.
+- **Save:** upserts the card into the `cards` table by `id`. Existing
+  built-in cards can be overwritten this way (editing "Fighter" from
+  the panel replaces the built-in Fighter for every player) — that's
+  intentional, it's how you'd rebalance a shipped card.
+
+New/edited cards apply everywhere immediately for everyone: the app
+fetches the full `cards` table once on load and merges it into the
+shared card registry, so no rebuild or redeploy is needed to see admin
+changes go live — just a page refresh for players who already had the
+app open.
+
 ## What's not built yet
 
-- The admin card-creation panel itself (form + image upload to
-  `card-art` + insert into the `cards` table).
 - Deck sync to the account (see §5).
 
 I can't verify any of the Supabase-backed behavior myself (same network
-block as always), so if collection/coin sync doesn't behave as
-described — e.g. a fresh sign-in doesn't pick up the local pack you
-just opened — let me know what you actually saw and I'll dig in.
+block as always), so if collection/coin sync — or the Admin Panel
+itself — doesn't behave as described, let me know what you actually saw
+and I'll dig in.

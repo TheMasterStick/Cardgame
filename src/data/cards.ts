@@ -4,9 +4,23 @@ import type {
   CardDefinition,
   CreatureDefinition,
   EquipmentDefinition,
+  HeroCardDefinition,
   SpellDefinition,
 } from "../engine/types";
 import { loadCustomCards } from "./loadCustomCards";
+
+// ---------------------------------------------------------------------------
+// Heroes — chosen before a match starts, not played from hand (cost is
+// unused). Attack only matters once an Equipment card is in the Equipment
+// slot. Fighter/Mage/Rogue are just the starting roster; more Hero cards
+// with different stats can be added the same way anyone else adds a card.
+// ---------------------------------------------------------------------------
+
+const heroes: HeroCardDefinition[] = [
+  { id: "fighter", name: "Fighter", archetype: "hero", cost: 0, rarity: "common", hp: 20, attack: 10 },
+  { id: "mage", name: "Mage", archetype: "hero", cost: 0, rarity: "common", hp: 10, attack: 20 },
+  { id: "rogue", name: "Rogue", archetype: "hero", cost: 0, rarity: "common", hp: 15, attack: 15 },
+];
 
 // ---------------------------------------------------------------------------
 // Buildings — Back Row. Economy/pool buildings raise a resource cap on play;
@@ -285,6 +299,57 @@ const creatures: CreatureDefinition[] = [
     text: "On Play: deal 2 damage to an enemy creature.",
     triggers: [{ on: "onPlay", effect: { kind: "damage", amount: 2, target: "targetCreature" } }],
   },
+  {
+    id: "stonewall-guardian",
+    name: "Stonewall Guardian",
+    archetype: "creature",
+    cost: 3,
+    rarity: "uncommon",
+    attack: 2,
+    hp: 6,
+    keywords: ["taunt"],
+    text: "Taunt.",
+    triggers: [],
+  },
+  {
+    id: "berserking-ogre",
+    name: "Berserking Ogre",
+    archetype: "creature",
+    cost: 3,
+    rarity: "rare",
+    attack: 3,
+    hp: 5,
+    race: "ogre",
+    keywords: ["frenzy"],
+    text: "Frenzy: gains Attack equal to any damage it takes (while it survives).",
+    triggers: [],
+  },
+  {
+    id: "arcane-golem",
+    name: "Arcane Golem",
+    archetype: "creature",
+    cost: 4,
+    rarity: "rare",
+    attack: 4,
+    hp: 4,
+    element: "arcane",
+    faction: "arcane-industries",
+    keywords: ["immune"],
+    text: "Immune to spells.",
+    triggers: [],
+  },
+  {
+    id: "spiked-turtle",
+    name: "Spiked Turtle",
+    archetype: "creature",
+    cost: 2,
+    rarity: "uncommon",
+    attack: 1,
+    hp: 5,
+    keywords: ["counter"],
+    text: "Counter: when attacked, deal 2 damage to the attacker.",
+    triggers: [{ on: "onDefend", effect: { kind: "damage", amount: 2, target: "targetCreature" } }],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -461,7 +526,7 @@ const equipment: EquipmentDefinition[] = [
 ];
 
 const builtInDefinitions: Record<string, CardDefinition> = Object.fromEntries(
-  [...buildings, ...creatures, ...spells, ...abilities, ...equipment].map((c) => [c.id, c]),
+  [...heroes, ...buildings, ...creatures, ...spells, ...abilities, ...equipment].map((c) => [c.id, c]),
 );
 
 // Cards from src/data/customCards.json are merged in on top of the built-ins,
@@ -478,6 +543,20 @@ for (const card of loadCustomCards()) {
 
 export const CARD_DEFINITIONS: Record<string, CardDefinition> = builtInDefinitions;
 
+/**
+ * Merges admin-authored cards from Supabase into the live catalog, in
+ * place — unlike the customCards.json merge, this deliberately overwrites
+ * a built-in with the same id, since editing an existing card through the
+ * admin panel is expected to replace it. Callers must trigger a re-render
+ * themselves; this only mutates the shared CARD_DEFINITIONS object.
+ */
+export function mergeRemoteCards(cards: CardDefinition[]): void {
+  for (const card of cards) {
+    CARD_DEFINITIONS[card.id] = card;
+  }
+}
+
+export const HEROES = heroes;
 export const BUILDINGS = buildings;
 export const CREATURES = creatures;
 export const SPELLS = spells;

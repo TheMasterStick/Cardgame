@@ -1,5 +1,5 @@
 import { useEffect, useReducer, useRef, useState, type CSSProperties } from "react";
-import { CARD_DEFINITIONS } from "./data/cards";
+import { CARD_DEFINITIONS, mergeRemoteCards } from "./data/cards";
 import { STARTER_DECKS } from "./data/decks";
 import { BOARD_THEME, cssImage } from "./data/theme";
 import { creatureCanAttack, declareCreatureAttack, declareHeroAttack, heroCanAttack, type AttackTarget } from "./engine/combat";
@@ -9,10 +9,12 @@ import type { EffectTargetRef } from "./engine/effects";
 import { createInitialGameState } from "./engine/factory";
 import { runAiTurn } from "./engine/ai";
 import { activateSlotCard, endTurn, playCardFromHand, startGame } from "./engine/game";
-import { DECK_SIZE, type GameState, type HeroClass, type PlayerId } from "./engine/types";
+import { DECK_SIZE, type GameState, type PlayerId } from "./engine/types";
+import { fetchRemoteCards } from "./lib/adminCards";
 import { useAuth } from "./lib/AuthProvider";
 import { loadOrInitializeRemoteCollection, saveRemoteCollection } from "./lib/remoteCollection";
 import { AccountBar } from "./ui/components/AccountBar";
+import { AdminPanel } from "./ui/components/AdminPanel";
 import { CollectionView } from "./ui/components/CollectionView";
 import { DeckBuilder } from "./ui/components/DeckBuilder";
 import { GameLog } from "./ui/components/GameLog";
@@ -24,9 +26,7 @@ import { PlayerBoard } from "./ui/components/PlayerBoard";
 import { ResourceBar } from "./ui/components/ResourceBar";
 import { effectNeedsExplicitTarget, type PendingAction } from "./ui/targeting";
 
-const HERO_CLASSES: HeroClass[] = ["fighter", "mage", "rogue"];
-
-type Screen = "menu" | "heroSelect" | "collection" | "packs" | "deckBuilder" | "playing";
+type Screen = "menu" | "heroSelect" | "collection" | "packs" | "deckBuilder" | "admin" | "playing";
 
 const appStyle = { "--app-bg-image": cssImage(BOARD_THEME.appBackground) } as CSSProperties;
 
@@ -39,13 +39,24 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>("menu");
   const [collection, setCollection] = useState<Collection>(() => loadCollection());
   const [customDeck, setCustomDeck] = useState<DeckDraft>(() => loadCustomDeck());
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
 
   useEffect(() => {
     if (!message) return;
     const t = setTimeout(() => setMessage(""), 3000);
     return () => clearTimeout(t);
   }, [message]);
+
+  // Admin-authored cards are public-readable, so this runs once regardless
+  // of sign-in state — everyone should see them in packs/collection.
+  async function refreshRemoteCards() {
+    const cards = await fetchRemoteCards();
+    if (cards.length > 0) mergeRemoteCards(cards);
+    forceRender();
+  }
+  useEffect(() => {
+    void refreshRemoteCards();
+  }, []);
 
   // Cards and coins live in localStorage while signed out (a per-browser
   // "guest" save). Signing in switches to the account's own saved copy in
@@ -91,9 +102,10 @@ export default function App() {
     setMessage(reason ?? "That's not allowed right now.");
   }
 
-  function beginMatch(heroClass: HeroClass, deckIds: string[]) {
-    const aiClass = HERO_CLASSES[Math.floor(Math.random() * HERO_CLASSES.length)];
-    const state = createInitialGameState(heroClass, deckIds, aiClass, STARTER_DECKS[aiClass]);
+  function beginMatch(heroDefId: string, deckIds: string[]) {
+    const aiHeroIds = Object.keys(STARTER_DECKS);
+    const aiHeroId = aiHeroIds[Math.floor(Math.random() * aiHeroIds.length)];
+    const state = createInitialGameState(heroDefId, deckIds, aiHeroId, STARTER_DECKS[aiHeroId]);
     startGame(state); // draws hands and begins turn 1 for "player"
     gameRef.current = state;
     matchRewardGivenRef.current = false;
@@ -103,12 +115,12 @@ export default function App() {
     commit();
   }
 
-  function handleSelectHero(heroClass: HeroClass) {
-    beginMatch(heroClass, STARTER_DECKS[heroClass]);
+  function handleSelectHero(heroDefId: string) {
+    beginMatch(heroDefId, STARTER_DECKS[heroDefId]);
   }
 
-  function handlePlayCustomDeck(heroClass: HeroClass) {
-    beginMatch(heroClass, deckToIds(customDeck));
+  function handlePlayCustomDeck(heroDefId: string) {
+    beginMatch(heroDefId, deckToIds(customDeck));
   }
 
   function handleOpenPack(): string[] {
@@ -120,6 +132,14 @@ export default function App() {
     setCollection(result.collection);
     persistCollection(result.collection);
     return result.cardsWon;
+  }
+
+  function handleSetCoins(coins: number) {
+    setCollection((c) => {
+      const updated = { ...c, coins };
+      persistCollection(updated);
+      return updated;
+    });
   }
 
   function handleDeckAdd(defId: string) {
@@ -314,6 +334,7 @@ export default function App() {
           onCollection={() => setScreen("collection")}
           onPacks={() => setScreen("packs")}
           onDeckBuilder={() => setScreen("deckBuilder")}
+          onAdmin={profile?.is_admin ? () => setScreen("admin") : undefined}
         />
       </div>
     );
@@ -360,6 +381,24 @@ export default function App() {
           onAdd={handleDeckAdd}
           onRemove={handleDeckRemove}
           onPlay={handlePlayCustomDeck}
+          onBack={() => setScreen("menu")}
+        />
+      </div>
+    );
+  }
+
+  if (screen === "admin") {
+    if (!profile?.is_admin || !user) {
+      setScreen("menu");
+      return null;
+    }
+    return (
+      <div className="app" style={appStyle}>
+        <AdminPanel
+          collection={collection}
+          userId={user.id}
+          onSetCoins={handleSetCoins}
+          onCardsChanged={refreshRemoteCards}
           onBack={() => setScreen("menu")}
         />
       </div>

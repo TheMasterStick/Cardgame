@@ -178,7 +178,7 @@ export function activateSlotCard(
   }
 
   pool.current -= def.activateCost;
-  resolveEffect(state, owner, def.effect, target);
+  resolveEffect(state, owner, def.effect, target, def.archetype);
 
   if (typeof card.chargesRemaining === "number") {
     card.chargesRemaining -= 1;

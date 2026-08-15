@@ -10,7 +10,9 @@ interface CollectionViewProps {
 }
 
 export function CollectionView({ collection, onBack }: CollectionViewProps) {
-  const allDefs = Object.values(CARD_DEFINITIONS).sort((a, b) => a.cost - b.cost || a.name.localeCompare(b.name));
+  const allDefs = Object.values(CARD_DEFINITIONS)
+    .filter((def) => def.archetype !== "hero")
+    .sort((a, b) => a.cost - b.cost || a.name.localeCompare(b.name));
   const uniqueOwned = allDefs.filter((def) => ownedCount(collection, def.id) > 0).length;
   const totalOwned = Object.values(collection.owned).reduce((a, b) => a + b, 0);
 

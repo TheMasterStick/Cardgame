@@ -1,5 +1,3 @@
-import type { HeroClass } from "../engine/types";
-
 export type DeckList = [defId: string, count: number][];
 
 function expand(list: DeckList): string[] {
@@ -78,7 +76,10 @@ const ROGUE_DECK: DeckList = [
   ["iron-sword", 1],
 ];
 
-export const STARTER_DECKS: Record<HeroClass, string[]> = {
+// Keyed by Hero card id (see data/cards.ts's `heroes` array). Quick Play
+// only offers heroes that have an entry here — a Hero card without a
+// starter deck is only playable via the Deck Builder.
+export const STARTER_DECKS: Record<string, string[]> = {
   fighter: expand(FIGHTER_DECK),
   mage: expand(MAGE_DECK),
   rogue: expand(ROGUE_DECK),

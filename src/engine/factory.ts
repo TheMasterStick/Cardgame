@@ -1,5 +1,4 @@
 import { CARD_DEFINITIONS } from "../data/cards";
-import { HEROES } from "../data/heroes";
 import {
   BACK_ROW_SIZE,
   FRONT_ROW_SIZE,
@@ -9,7 +8,7 @@ import {
   type BoardState,
   type CardInstance,
   type GameState,
-  type HeroClass,
+  type HeroCardDefinition,
   type HeroInstance,
   type PlayerId,
   type PlayerState,
@@ -40,15 +39,19 @@ export function createCardInstance(defId: string, owner: PlayerId): CardInstance
   return instance;
 }
 
-export function createHeroInstance(heroClass: HeroClass): HeroInstance {
-  const def = HEROES[heroClass];
+/** `heroDefId` must reference a CardDefinition with archetype "hero". */
+export function createHeroInstance(heroDefId: string): HeroInstance {
+  const def = CARD_DEFINITIONS[heroDefId];
+  if (!def || def.archetype !== "hero") {
+    throw new Error(`Unknown Hero card: ${heroDefId}`);
+  }
+  const heroDef = def as HeroCardDefinition;
   return {
-    defId: def.id,
-    name: def.name,
-    class: def.class,
-    maxHp: def.baseHp,
-    currentHp: def.baseHp,
-    baseAttack: def.baseAttack,
+    defId: heroDef.id,
+    name: heroDef.name,
+    maxHp: heroDef.hp,
+    currentHp: heroDef.hp,
+    baseAttack: heroDef.attack,
     statuses: [],
     hasAttackedThisTurn: false,
   };
@@ -65,13 +68,13 @@ function emptyBoard(): BoardState {
 
 export function createInitialPlayerState(
   id: PlayerId,
-  heroClass: HeroClass,
+  heroDefId: string,
   deckDefIds: string[],
 ): PlayerState {
   const deck = shuffle(deckDefIds.map((defId) => createCardInstance(defId, id)));
   return {
     id,
-    hero: createHeroInstance(heroClass),
+    hero: createHeroInstance(heroDefId),
     militia: { current: STARTING_MILITIA, max: STARTING_MILITIA },
     resources: { current: STARTING_POOL, cap: STARTING_POOL },
     mana: { current: STARTING_POOL, cap: STARTING_POOL },
@@ -85,16 +88,16 @@ export function createInitialPlayerState(
 }
 
 export function createInitialGameState(
-  playerHeroClass: HeroClass,
+  playerHeroDefId: string,
   playerDeck: string[],
-  opponentHeroClass: HeroClass,
+  opponentHeroDefId: string,
   opponentDeck: string[],
   firstPlayer: PlayerId = "player",
 ): GameState {
   return {
     players: {
-      player: createInitialPlayerState("player", playerHeroClass, playerDeck),
-      opponent: createInitialPlayerState("opponent", opponentHeroClass, opponentDeck),
+      player: createInitialPlayerState("player", playerHeroDefId, playerDeck),
+      opponent: createInitialPlayerState("opponent", opponentHeroDefId, opponentDeck),
     },
     activePlayer: firstPlayer,
     turnNumber: 1,

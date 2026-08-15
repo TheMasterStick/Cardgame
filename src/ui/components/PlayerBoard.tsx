@@ -1,8 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 import { CARD_DEFINITIONS } from "../../data/cards";
-import { HEROES } from "../../data/heroes";
 import { creatureCanAttack, heroCanAttack } from "../../engine/combat";
-import type { CardInstance, GameState, PlayerId } from "../../engine/types";
+import type { CardInstance, GameState, HeroCardDefinition, PlayerId } from "../../engine/types";
 import { BOARD_THEME, cssImage } from "../../data/theme";
 import { canBypassFrontRow, getPendingEffect, isEffectTargetable, type PendingAction } from "../targeting";
 import { CardView } from "./CardView";
@@ -34,6 +33,7 @@ export function PlayerBoard({
 }: PlayerBoardProps) {
   const playerState = state.players[owner];
   const pendingEffect = getPendingEffect(state, pending);
+  const heroDef = CARD_DEFINITIONS[playerState.hero.defId] as HeroCardDefinition | undefined;
 
   const canInitiate = !pending && owner === "player" && state.activePlayer === "player" && !state.winner;
 
@@ -86,13 +86,9 @@ export function PlayerBoard({
 
         <div className="hero-column">
           <div
-            className={`portrait ${portraitClickable ? "portrait--clickable" : ""} ${HEROES[playerState.hero.class]?.art ? "portrait--has-art" : ""}`}
+            className={`portrait ${portraitClickable ? "portrait--clickable" : ""} ${heroDef?.art ? "portrait--has-art" : ""}`}
             onClick={portraitClickable ? () => onPortraitClick(owner) : undefined}
-            style={
-              HEROES[playerState.hero.class]?.art
-                ? { backgroundImage: `url("${HEROES[playerState.hero.class].art}")` }
-                : undefined
-            }
+            style={heroDef?.art ? { backgroundImage: `url("${heroDef.art}")` } : undefined}
           >
             <div className="portrait__name">{playerState.hero.name}</div>
             <div className="portrait__hp">HP {playerState.hero.currentHp}/{playerState.hero.maxHp}</div>
