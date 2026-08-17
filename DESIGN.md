@@ -1,328 +1,462 @@
-# Card Game Design Document
+# Card Game Design Document (v2)
 
-A browser-based card game blending **Hearthstone** (mana curve, board of
-creatures, hero-focused combat), **Gwent** (row-based board, on-field
-persistent spell/ability "items", building-driven economy) and the
-**Pokemon TCG** (simple status conditions instead of a full elemental
-chart). This document is the single source of truth for the ruleset
-implemented by the engine in `src/engine`.
+A browser-based card game blending **Hearthstone** (mana curve,
+hero-focused combat), **Gwent** (row-based board, on-field persistent
+spell/ability "items", building-driven economy), and the **Pokemon
+TCG** (simple status conditions instead of a full elemental chart).
+This document is the single source of truth for the target ruleset.
 
-Everything under "Open defaults" was not explicitly specified and was
-chosen to keep the prototype coherent and playable; treat those as easy
-to revisit.
+**Implementation status:** this is a v2 architecture. The live engine
+in `src/engine` still implements v1 (a single 5-slot creature row, one
+Hero-only Equipment slot, a shared Resources pool that pays for
+everything from hand). Nothing below is built yet — it's the locked
+spec the rebuild works from, in phases (see §17). Until a phase lands,
+treat the corresponding part of the *running app* as still v1, and
+CARDS.md/BACKEND.md as describing what's live today, not this doc.
 
-For how to add, generate, or reskin cards (including images), see
-`CARDS.md`. For the account/admin backend, see `BACKEND.md`.
+Sections marked **Open default** are judgment calls made to keep the
+spec internally consistent and buildable; flag any of them if they
+don't match what you had in mind — they're easy to revisit before
+Phase A starts.
+
+For how to add/generate/reskin cards, see `CARDS.md`. For the
+account/admin backend, see `BACKEND.md`.
 
 ---
 
 ## 1. Card archetypes
 
-Every card belongs to exactly one archetype:
-
 | Archetype | Zone when played | Summary |
 |---|---|---|
-| **Hero** | The Hero slot | Chosen before a match starts, not played from hand (its `cost` is unused). Has HP + Attack, like a Creature — see §6. Fighter/Mage/Rogue are just the starting roster; any Hero card works the same way, including ones created later with different stats. |
-| **Creature** | Front Row (5 slots) | Has HP + Attack. Fights on the front line. May carry an **innate trigger** (a passive/reactive effect baked into the card, not a separate Spell/Ability card) and any of the Keywords in §5. |
-| **Building** | Back Row (5 slots) | No HP-in-combat by default; boosts production (Resources / Mana / Energy caps, or Militia) each turn, or grants a one-time/ongoing effect. Stays on the field until destroyed. |
-| **Spell** | One of 4 Spell/Ability slots (2 left + 2 right of the Hero) | Placed on the field like an item, then *activated* on demand by spending Mana. Deals damage / effects to creatures, buildings, or players. |
-| **Ability** | One of 4 Spell/Ability slots | Same slot pool as Spells, activated by spending Energy instead of Mana. |
-| **Equipment** | The single Equipment slot behind the Hero | Unlocks the Hero's own Attack for melee combat, and may add `attackBonus`/`damageReduction`. Only one can be equipped at a time — equipping a new one discards the old. |
+| **Hero** | The Hero slot | Chosen before a match, not played from hand. Faction + Class (Fighter/Mage/Rogue) + Health + Attack + a Passive + a Hero Power, optionally a Signature Ability. See §9. |
+| **Creature** | Vanguard (5) or Support (5) | Has HP + Attack. May carry an innate trigger and any Keywords from §7. Normally occupies 1 space; **Massive** creatures occupy more (§5). |
+| **Building** | Buildings row (5, one per column) | Has Durability (HP). Passive and/or activated ability, plus an optional On Construction trigger (fires like Warcry). See §11. |
+| **Spell** | Instant: none. Ritual/Charged: one of 4 Spell/Ability slots | Three forms — Instant, Ritual, Charged — see §1a. Always costs **Mana**, at every stage. |
+| **Ability** | One of the same 4 Spell/Ability slots | Occupies a slot like a Ritual/Charged Spell (unlimited or numbered charges). Always costs **Energy**, at every stage. |
+| **Equipment** | One of 4 Equipment slots (a player-owned zone, not Hero-only) | Gear that can be assigned to any eligible creature or the Hero — see §12. Always costs **Resources**. |
 
-Every card (any archetype) can also optionally carry an **Element**, a
-**Faction**, and — for Hero/Creature cards — a **Race**. These are pure
-tags with no built-in gameplay rule of their own (no elemental
-type-effectiveness chart, no faction synergy bonuses); they exist for
-flavor, filtering, and as hooks a card's own trigger/effect text can
-reference. Full option lists are in §5.
+Every card can optionally carry an **Element**, a **Faction**, and —
+for Hero/Creature cards — a **Race**. Faction additionally *does*
+gate deck-building now, via Allegiance (§10); Element/Race remain pure
+tags with no built-in rule of their own, available for a card's own
+effect text to reference. Full option lists are in §8.
 
-Spells and Abilities share the same 4 slots (any mix of the two, e.g. 3
-spells + 1 ability, or 4 abilities). They are **not** one-shot hand
-cards — playing one from hand into an empty slot costs **Resources**
-(like any other card), and it then sits on the field as a
-repeatable, activatable effect:
+### 1a. Spell forms
 
-- **Limited-charge** cards have a fixed number of activations (e.g. 3
-  casts) printed on the card; the card is discarded after the last charge
-  is used.
-- **Unlimited-use** cards stay in their slot indefinitely and can be
-  activated every turn (subject to Mana/Energy cost and any per-turn
-  activation limit on the card) until the player chooses to discard/replace
-  them.
+- **Instant** — doesn't occupy a slot. Cast straight from hand for its
+  Mana `cost`; effect resolves immediately; goes straight to the
+  Graveyard. (Fireball, Healing Light, Counterspell, Assassinate.)
+- **Ritual** — occupies one of the 4 Spell/Ability slots. Mana `cost`
+  to play it into the slot; then has an activated effect with its own
+  Mana `activateCost` and **unlimited** charges. Stays until destroyed
+  or voluntarily **Dismissed** (a free action, straight to Graveyard).
+  (Blizzard, Demonic Pact, Sacred Ground.)
+- **Charged** — occupies a slot exactly like Ritual, but is printed
+  with a fixed charge count. Each activation spends `activateCost`
+  Mana **and** 1 charge; at 0 charges it **Fizzles** into the
+  Graveyard. (A 3-charge Chain Lightning.)
 
-Because Spells/Abilities sit face-up on the field, the opponent can see
-them coming and play around them (e.g. holding a removal spell, avoiding
-lethal range) — this is the intended counterplay hook.
+Abilities only come in the Ritual/Charged shape (no Instant form) —
+same slot pool, same charge rules, Energy instead of Mana throughout.
 
 ---
 
-## 2. Resources: three independent pools
+## 2. Resources: three pools, one job each
 
-All three pools follow the same shape: **start at 5, cap at 10**, and the
-cap (not just the current value) is what building/spell cards raise.
+The three pools are scoped by **which archetype they pay for**, at
+every stage of that archetype's life (playing it from hand *and*
+activating it), rather than one universal "play anything" pool plus a
+second activation-specific pool:
 
-| Pool | Spent on | Raised by |
+| Pool | Pays for | Refill behavior |
 |---|---|---|
-| **Resources** | Playing *any* card from hand (Creature, Building, or placing a Spell/Ability into a slot) | Economy buildings: Gold Mine, Lumbermill, Farm |
-| **Mana** | Activating a Spell already on the field | Arcane buildings/spells: Arcane Sanctum, Mana Pool |
-| **Energy** | Activating an Ability already on the field | Training buildings/spells: Training Field, Exercise |
+| **Energy** | Playing Creatures from hand. Activating Abilities. Hero Power. Tactical actions (Advance — see §5). | Refills fully to its current cap at the start of your turn. Does not carry over. |
+| **Mana** | Playing/casting all Spells (Instant, Ritual, Charged) and activating them. | Refills fully to its current cap at the start of your turn. **Open default:** same refill model as Energy for now — a slower/accumulating Mana feels good thematically but adds real complexity; revisit once the rest of v2 is live. |
+| **Resources** | Playing Buildings and Equipment from hand. Repairing/assigning Equipment (§12). Building activated abilities (unless a specific card's text overrides this, e.g. a Demon Gate spending Mana instead — card text can always deviate). | **Persists between turns** — it accumulates rather than resetting, since it represents a standing stockpile, not tempo. |
 
-This is the "caster vs. melee" fork: investing in Mana-cap cards builds
-toward a spell-slinging game plan, investing in Energy-cap cards builds
-toward an ability/martial game plan. Nothing stops mixing both.
-
-**Open default:** all three pools fully refill to their current cap at
-the start of each player's turn (Hearthstone-style refill, not
-accumulation). Cap increases are permanent for the rest of the game.
-Playing a second copy of a cap-up card while already at the pool's
-hard max (10) has no further effect.
+All three still **start at 5, cap at 10**, and the cap is raised by
+Building/Spell/Ability cards exactly as before. This split is meant to
+resolve the "three pools that all just mean points" risk directly:
+Energy is the Creature/tempo pool, Mana is the magic pool, Resources
+is the construction/gear pool. A deck's identity comes from which pool
+it leans on.
 
 ---
 
-## 3. The board
+## 3. Ready & Exhausted
 
-Each player's field, front-to-back from the opponent's perspective:
+Every creature (and the Hero) has a Ready/Exhausted state:
 
-```
-              [ Back Row: 5 Building slots ]
-[Spell/Ability][Spell/Ability]  HERO  [Spell/Ability][Spell/Ability]
-                              [Equipment]
-              [ Front Row: 5 Creature slots ]
-```
-
-- **Front Row** (5 slots): Creatures only.
-- **Back Row** (5 slots): Buildings only.
-- **Hero slot**: the player's Hero card (see §6). Not directly placed by
-  the player — it's the deck's chosen Hero and starts the game there.
-- **Equipment slot** (directly behind the Hero): holds one Equipment
-  card. Equipping lets the Hero participate directly in combat —
-  granting the Hero an Attack stat so it can make melee attacks, and/or
-  changing how much damage the Hero takes. An empty Equipment slot means
-  the Hero cannot attack.
-- **Spell/Ability slots** (2 left + 2 right of the Hero, 4 total): holds
-  Spell and/or Ability cards, in any combination, as described in §1.
-
-Both players have their own full copy of this layout; a match is one
-player's field facing the other's.
+- Enters play **Exhausted**, unless it has **Charge** (enters Ready).
+- **Readies** automatically at the start of its controller's turn.
+- **Attacking Exhausts** it. So does **Advancing** (§5). A creature can
+  do at most one of {attack, Advance} per turn.
+- Attacks are **not** paid for out of Energy — a full board of
+  attackers costs nothing beyond having played them. Energy is spent
+  earlier (deploying, activating, Hero Power), not on the attack
+  itself.
 
 ---
 
-## 4. Targeting & the damage chain
-
-1. **Front Row vs Front Row:** an attacking Front Row creature may
-   target *any* enemy Front Row creature — free targeting within the
-   row, not lane-locked to the mirrored slot — **unless the enemy has a
-   Taunt creature**, in which case a Taunt creature must be targeted
-   first (see §5).
-2. **Reaching the Back Row:** an attacker may target an enemy Back Row
-   building only if the enemy Front Row is empty, **or** the attacker has
-   the **Ranged** keyword (Ranged units can hit the Back Row even through
-   a full enemy Front Row).
-3. **Reaching Militia/Hero:** once the enemy Front Row is empty (or
-   bypassed via Ranged), attacks/spells/abilities may target the enemy
-   Militia/Hero directly. **Back Row buildings do not block this path** —
-   they're optional side targets you can snipe for value (removing their
-   production bonus), not a mandatory gate.
-4. **Militia then Hero HP:** all damage aimed at the player hits
-   **Militia** first. Once Militia is at 0, further damage overflows into
-   the Hero's own **Hero HP**. Hero HP reaching 0 ends the game.
+## 4. The board
 
 ```
-Front Row creatures  --(clear row, or attacker has Ranged)-->  Back Row buildings (optional target)
-        |
-        v (row empty / bypassed)
-   Militia (100 default, shield)  -->  Hero HP (per-Hero) --> 0 HP = loss
+                         [   Buildings: 5 slots, one per column   ]
+   [Spell/Ability] [Spell/Ability]      HERO      [Spell/Ability] [Spell/Ability]
+                         [   Support: 5 slots (col 1-5)   ]
+                         [   Vanguard: 5 slots (col 1-5)  ]
 ```
+(Vanguard is drawn closest to the opponent — the front line the
+opponent's attacks hit first.)
 
-**Open defaults:**
-- Creatures have **summoning sickness**: they cannot attack the turn
-  they're played, unless they have the **Charge** keyword.
-- Each creature may attack **once per turn** unless a card effect grants
-  extra attacks.
-- Buildings have their own small HP pool when they *are* targeted (see
-  card data); destroying one permanently removes its production bonus.
+- **Vanguard** (5 slots, columns 1-5): melee-forward. Any Creature can
+  go here.
+- **Support** (5 slots, columns 1-5): backline. Any Creature can go
+  here, but see §5 — only **Ranged** creatures can actually attack
+  while positioned in Support.
+- **Buildings** (5 slots): one per column, behind Vanguard+Support in
+  that column. See §11 for column protection.
+- **Equipment zone** (4 slots): a player-owned inventory of Equipment,
+  assigned or unassigned — not tied to a board column. See §12.
+- **Spell/Ability slots** (4, split 2-left/2-right of the Hero): shared
+  pool for Ritual/Charged Spells and Abilities, in any mix.
+- **Hero slot**: centered behind everything. Not directly placed by
+  the player — the deck's chosen Hero starts the game there.
+
+**Columns** are the vertical alignment of Vanguard slot *N* + Support
+slot *N* + Building slot *N*, numbered 1-5. Columns 1 and 5 are the
+**Flank** columns (§7). "Adjacent" means neighboring column, same row,
+unless a card says otherwise.
+
+A creature normally occupies exactly 1 space. **Massive** creatures
+occupy more — see §5.
+
+Spell/Ability cards and Equipment are **not attackable** by ordinary
+creature attacks — only a Spell/Ability effect that explicitly targets
+them (e.g. a Dispel/Sabotage-style card) can remove one early.
 
 ---
 
-## 5. Keywords, Elements, Factions, Races
+## 5. Positioning & targeting
 
-**Keywords** (Creature cards only — the `keywords` list on a card):
+**Who can attack:**
+- A Vanguard creature can always attack (once Ready).
+- A Support creature can only attack if it has **Ranged**.
+- The Hero can attack once per turn if it has Equipment assigned
+  (unchanged from v1).
+
+**Reach tiers** — what an eligible attacker may target, from weakest
+to strongest:
+
+| Tier | Can target | Notes |
+|---|---|---|
+| Base (no reach keyword) | Enemy Vanguard only | Free choice among Vanguard creatures, subject to Taunt (below). Enemy Buildings/Guard/Hero become legal once the enemy Vanguard **and** Support are both empty. |
+| **Reach** | + enemy Support directly | Even while the enemy Vanguard is populated. Subject to Taunt if a Support creature has it. Still needs both enemy rows empty to reach Buildings/Guard/Hero. |
+| **Ranged** | Same reach as Reach | Plus: usable **from your own Support row** (this is what actually lets a Support creature attack at all). Still needs both enemy rows empty to reach Buildings/Guard/Hero. |
+| **Infiltrate** | + enemy Buildings/Guard/Hero directly | Regardless of enemy Vanguard/Support state. Doesn't grant Support-row targeting by itself — pair with Reach/Ranged on the same card if that's the intent. |
+
+**Taunt:** while alive, forces enemy attackers to target it first among
+the creatures in *whichever row is actually being attacked* (Vanguard
+Taunt gates Vanguard-tier attacks; a Support Taunt — rare, usually
+granted by an effect — gates Support-tier attacks the same way).
+Doesn't affect Buildings/Guard/Hero targeting, and doesn't affect
+Spell/Ability targeting.
+
+**Protector** (replaces the naming collision with the Guard pool —
+see §7): when an enemy attack is declared against an allied creature,
+if you control a Protector creature in the same row, you may redirect
+the attack onto the Protector instead, before damage resolves. Reactive
+and optional (defender's choice), unlike Taunt's mandatory
+attacker-side restriction.
+
+**Positional keywords:**
+- **Flank** — this card's printed bonus is active only while it
+  occupies column 1 or column 5 (either row). Continuously
+  re-evaluated as the board changes, not a one-shot trigger.
+- **Formation** — this card's printed bonus is active only while at
+  least one allied creature occupies an adjacent column, same row.
+  Also continuously re-evaluated.
+- **Advance** — a Support creature may spend 1 Energy to move into an
+  empty Vanguard slot **in the same column**, instead of attacking
+  this turn. Exhausts it, same as attacking.
+- **Push** — when this creature's attack damages an enemy Vanguard
+  creature and it survives, if that column's Support slot is empty,
+  move the survivor there instead of leaving it in Vanguard.
+- **Massive** — occupies more than 1 space (2 by default, printed
+  higher for truly enormous cards) in the **same row**, adjacent
+  columns. Can't be played/can't complete a transformation into a
+  Massive form without enough contiguous empty space. Occupies all of
+  its columns for Building-protection purposes (§11).
+
+---
+
+## 6. Guard & player health
+
+Renamed from "Militia" to the mechanically generic **Guard** — same
+mechanic (a damage shield in front of the Hero's real HP), reskinned
+per faction so it still reads as Militia for a Human Kingdom deck,
+Legion for Demons, Heavenly Host for Angels, etc. Purely a display-name
+lookup by faction (same pattern as the existing Element/Faction/Race
+label maps in `src/data/taxonomy.ts`) — one mechanic underneath.
+
+- Both players start at **100 Guard** (unchanged number from v1).
+  Buildings/effects can raise current/max Guard.
+- All damage aimed at the player hits Guard first; once Guard is 0,
+  damage overflows into **Hero HP**. Hero HP reaching 0 ends the game.
+- **Bypass Guard** (a rare Spell/Ability effect property, not a common
+  keyword): damage skips Guard entirely and hits Hero HP directly
+  regardless of current Guard. Reserved for a handful of powerful,
+  expensive effects — not part of the base keyword pool in §7.
+
+---
+
+## 7. Keywords
+
+Kept deliberately small — a universal pool, with factions layering
+their own on top (§9/§10 give Heroes the hook; a full faction keyword
+list is future faction-design work, not required for the v2 engine
+rebuild itself).
 
 | Keyword | Effect |
 |---|---|
-| **Ranged** | Can attack the Back Row (or Militia/Hero) through a full enemy Front Row — see §4. |
-| **Charge** | Can attack the turn it's played, skipping summoning sickness. |
-| **Battlecry** | Cosmetic label for a card with an `onPlay` trigger — "does something when played." No separate mechanism from an ordinary onPlay trigger. |
-| **Revenge** | Cosmetic label for a card with an `onDeath` trigger — "does something when it dies." No separate mechanism from an ordinary onDeath trigger. |
-| **Counter** | Fires the card's `onDefend` trigger when it's targeted by an attack, resolving before the attack's damage — e.g. "deal 2 damage to the attacker." Scoped to being physically attacked, not to being targeted by spells/abilities. |
-| **Frenzy** | Whenever this creature takes damage and survives, its Attack permanently increases by that same amount. |
-| **Immune** | Blocks any Spell's damage/heal/status/buff from landing on this creature. Does **not** block Abilities, creature attacks, or other creatures'/buildings' triggers — "immune to spells" specifically. |
-| **Taunt** | While this creature is alive on its controller's Front Row, enemy creature attacks must target a Taunt creature first (see §4). Doesn't affect Spell/Ability targeting. |
-| **Poison** | No automatic engine behavior by itself — cards that poison on attack (e.g. Plague Rat) do it via an explicit `onAttack` trigger with an `applyStatus` poison effect; the keyword is there to tag/search for that pattern. See §7 for the Poison status effect itself. |
+| **Taunt** | See §5. |
+| **Warcry** | *(renamed from Battlecry.)* Label for a card with an `onPlay` trigger. |
+| **Revenge** | Label for a card with an `onDeath` trigger. |
+| **Charge** | Enters play Ready instead of Exhausted (§3). |
+| **Ranged** | See §5. |
+| **Reach** | See §5. |
+| **Infiltrate** | See §5. |
+| **Protector** | See §5. *(Deliberately not called "Guard" — that name is reserved for the player's damage-shield pool in §6, and reusing it for a creature keyword was the single most confusing overlap in the original proposal.)* |
+| **Stealth** | Cannot be chosen as the target of an enemy attack or a targeted enemy Spell/Ability. **Open default:** still hit by AOE effects (`allEnemyCreatures`) unless a card says otherwise — matches how Immune is scoped. Attacking, or being hit by a "Reveal" effect, removes Stealth permanently for that creature. |
+| **Ward** | Negates the next hostile Spell or Ability that *directly targets* this creature (one-time, then consumed). **Open default:** doesn't stop AOE effects or plain combat damage, same scoping logic as Stealth/Immune. |
+| **Cleave** | On attack, also deals the same damage to enemy creatures in adjacent columns, same row as the primary target. |
+| **Drain** | When this creature deals combat damage, its controller's Hero regains that much Guard (capped at Guard's max — no overflow into Hero HP). |
+| **Frenzy** | Unchanged from v1: taking damage and surviving permanently increases this creature's Attack by the amount taken. |
+| **Immune** | Unchanged from v1: blocks hostile Spell effects from landing on this creature. Abilities and triggers are unaffected. |
+| **Poison** | Unchanged from v1: a tag conventionally paired with an `onAttack` trigger that applies the Poison status (§13) to whatever was hit. |
+| **Summon** | Label for a trigger whose effect creates another specified creature (new `summonCreature` effect kind — needs adding to the effects system; see §17 Phase D). |
+| **Bloodied** | Label for a card whose printed effect only applies below 50% Health. **Open default:** exact trigger mechanism (continuous check vs. a dedicated `onBloodied`-style hook) gets decided when the first Bloodied card is actually authored — not needed to lock the whole engine now. |
 
-**Elements** (any archetype, optional, purely a tag): Frost, Fire,
-Nature, Light, Darkness, Arcane, Martial, Blood, Infernal, Chaos.
-
-**Factions** (any archetype, optional, purely a tag): The Infernal
-Court, The Roseguard Kingdom, The Moonveil Coven, The Velvet Syndicate,
-The Wildheart Tribes, The Celestial Academy, The Necropolitan, Arcane
-Industries Consortium.
-
-**Races** (Hero/Creature only, optional, purely a tag): Beast, Demon,
-Dragon, Elemental, Mech, Human, Undead, Goblin, Dwarf, Elf, Pixie, Ogre,
-Giant, Dark Elf, Angel, Orc, Gnome, Troll, Dryad, Fairy, Harpy, Fiend,
-Vampire.
-
-None of Element/Faction/Race gate deck-building or grant automatic
-synergy bonuses in this pass — they're metadata a card's own effect
-text can reference (e.g. "deal +1 damage to Undead"), and hooks for
-future mechanics, not a rule layer that exists yet.
+`spaceCost` (Massive) is a numeric field, not a boolean keyword, since
+it needs a magnitude — see §5.
 
 ---
 
-## 6. Hero, Militia, and player health
+## 8. Elements, Factions, Races
 
-- **Militia**: both players start at **100**. Functions like Hearthstone
-  Armor — a damage shield in front of the Hero's real health pool, not a
-  win condition by itself. Buildings (Recruitment Station, Call to Arms,
-  Bulletin Board) add to current/max Militia.
-- **Hero HP**: the real loss condition. Base value depends on the chosen
-  Hero card. The three starting Heroes:
-
-  | Hero | Base HP | Base Attack (with Equipment) |
-  |---|---|---|
-  | Fighter | 20 | 10 |
-  | Mage | 10 | 20 |
-  | Rogue | 15 | 15 |
-
-  More Hero cards with different stats can be added the same way any
-  other card is (see `CARDS.md`) — Heroes aren't a fixed enum, they're
-  cards with `archetype: "hero"`.
-
-  A Hero's Attack stat only matters if it has Equipment in its Equipment
-  slot; an unequipped Hero cannot attack (but can still be attacked once
-  Militia is down).
-- **Loss condition:** a player loses immediately when their Hero HP
-  reaches 0.
+Unchanged from v1 — full lists live in `src/data/taxonomy.ts` and
+`CARDS.md`. The one behavior change: **Faction now gates deck-building**
+via Allegiance (§10). Element and Race remain pure tags.
 
 ---
 
-## 7. Status effects
+## 9. Hero cards
 
-Kept intentionally simple — a nod to the Pokemon TCG rather than a full
-elemental type chart. No type-effectiveness system exists otherwise.
+A Hero card carries:
 
-- **Burn**: deals a fixed amount of damage at the end of each of the
-  affected unit's controller's turns, for a fixed number of turns, then
-  expires.
-- **Poison**: deals a fixed amount of damage at the end of each of the
-  affected unit's controller's turns, persisting until cured or the unit
-  dies (no automatic expiry).
+| Field | Notes |
+|---|---|
+| Faction | Drives Allegiance (§10). A Faction-less Hero has no Allegiance restriction at all. |
+| Class | Fighter / Mage / Rogue — a deckbuilding *identity*, not a strict profession. Fighter = direct confrontation (knights, barbarians, paladins, monstrous bruisers). Mage = supernatural manipulation (wizards, priests, necromancers, witches). Rogue = indirect warfare (archers, assassins, scouts, spies, duelists) — archers live here, not under Fighter. |
+| Health, Attack | Same as v1 — Attack only matters once Equipment is assigned. |
+| Passive | An always-on effect. **Open default:** built from a small curated set of templates (aura buff to a matching Faction/Race/Class, a first-spell-cheaper-per-turn discount, an on-reveal-enemy-card effect, etc.) rather than a free-form scripting language — matches how `CardEffect` is already a fixed set of `kind`s, not arbitrary code. The template set grows as new Heroes need new patterns. |
+| Hero Power | An activated effect using the same `CardEffect` shape as a Spell/Ability, Energy-costed, usable **once per turn** (not charge-based). |
+| Signature Ability *(optional)* | Same shape as Hero Power, but a stronger effect gated to a small number of uses **per match** (e.g. 1) instead of per turn. |
+| Rule-Breaks *(optional, Legendary-tier)* | A curated menu of numeric deltas a Hero can carry: extra Spell slots, extra Building slots, Vanguard/Support slot count changes, starting Guard delta, max Energy/Mana/Resources cap delta. **Open default:** only numeric-delta modifiers are supported at first; a fully bespoke rule-break (e.g. "Harpies may overfill Support by forming Flocks") is one-off card-specific code, done when that specific card is actually built, not a general system. |
 
-Both can affect creatures, buildings, or a player's Militia/Hero HP
-depending on the source card. Multiple applications refresh/stack per the
-source card's own text (kept card-by-card rather than a global stacking
-rule for this prototype).
-
----
-
-## 8. Turn structure
-
-Alternating turns (Hearthstone-style), one player fully resolves a turn
-before passing to the other:
-
-1. **Draw phase:** draw 1 card (see §9 for empty-deck behavior). Refill
-   Resources/Mana/Energy to their current caps.
-2. **Main phase:** play any number of cards you can afford (Creatures,
-   Buildings, or Spells/Abilities into open slots), activate any
-   already-slotted Spells/Abilities you can afford, in any order.
-3. **Combat phase:** declare attacks with eligible creatures (and the
-   Hero, if equipped) following the targeting chain in §4.
-4. **End phase:** status effects (Burn/Poison) tick down and deal their
-   damage; "end of turn" triggered effects resolve; turn passes.
+Pulling a new Hero should feel like unlocking a new deck archetype, not
+just a different HP number — that's the point of Passive/Power/
+Signature existing at all.
 
 ---
 
-## 9. Deck, hand, and card flow
+## 10. Allegiance & faction deckbuilding
 
-- **Deck size:** exactly 30 cards. No copy-count or archetype-mix
-  restrictions beyond that (per design direction — kept deliberately
-  open for the prototype).
-- **Piles:** Deck (draw pile) → Hand → **Discard pile** (spent one-shot
-  effects, and Spells/Abilities you voluntarily replace while they still
-  had charges left) or **Graveyard** (creatures/buildings destroyed in
-  combat, and Spells/Abilities that ran out of charges — permanently
-  gone).
-- **Empty deck:** when the deck runs out, shuffle the **Discard pile**
-  back into a new deck. The **Graveyard never returns**. There is no
-  Hearthstone-style fatigue damage.
+- A deck's **primary Faction** is set by its Hero.
+- A deck may contain: any card whose Faction matches the Hero's
+  Faction, plus any **Neutral** card (Faction field simply omitted —
+  no separate "neutral" enum value needed, matches the existing
+  optional `faction` field). Neutral cards never break Allegiance for
+  any Hero, by construction.
+- A Faction-less Hero (no Faction set) has **no restriction** —
+  functions like today's fully-open deckbuilding.
+- Some Heroes explicitly bend this, via an optional `allegiance` grant
+  on the Hero card:
+  - `extraFactions`: additional Factions allowed alongside the Hero's
+    own (a Diplomat/Cultist-style Hero).
+  - `neutralRaces`: creatures of a listed Race count as in-Faction
+    regardless of their own Faction tag (a Beastmaster + Beast, a
+    Packmaster + Wolves).
+  - `unrestricted`: no Faction restriction at all despite having a
+    Faction (a Mercenary Captain).
+- A Hero's own Passive can *also* react to how pure the deck's
+  Allegiance is (e.g. "+1 Health to Faction creatures if ≥80% of your
+  non-Neutral deck matches your Faction") or invert it entirely (a
+  Temptress: "-1 Attack to your own Faction, +2 Attack to everyone
+  else's Faction while under your control") — these are just Passive
+  templates (§9), not a separate system.
 
-**Open defaults:**
-- Starting hand: 4 cards, with a one-time mulligan (redraw any subset)
-  before turn 1.
-- Max hand size: 10; a draw that would exceed it burns the drawn card
-  instead (goes straight to the discard pile).
-- The player who goes first does not draw on turn 1 (second player draws
-  an extra card turn 1) — standard alternating-turn balancing.
-
----
-
-## 10. Prototype scope
-
-- **Platform:** client-side browser app (TypeScript + React + Vite) with
-  an optional Supabase backend (accounts, a shared card catalog, an
-  admin panel) — see `BACKEND.md`. Fully playable with no backend
-  configured at all, in which case cards/coins/decks just live in
-  `localStorage`. Local hot-seat or vs. a basic heuristic AI opponent;
-  no live networked multiplayer yet.
-- **AI opponent:** greedy heuristic — spends available Resources on the
-  best affordable play each turn, activates Spells/Abilities when a
-  favorable target exists, attacks when it doesn't lose the trade (or
-  when it can push face damage safely), then ends turn. Not
-  minimax/lookahead — good enough to playtest against.
-- **Card set:** a starter pool covering all 6 archetypes, the 3 starting
-  Heroes, the named economy/pool/militia buildings, creatures
-  demonstrating each keyword, standalone Spell/Ability cards (including
-  limited-charge and unlimited examples), Equipment cards, and
-  Burn/Poison sources — enough to build three 30-card starter decks (one
-  per starting Hero).
+The Deck Builder enforces Allegiance at save/validate time; an invalid
+deck can't be taken into a match.
 
 ---
 
-## 11. Card collection, packs, and custom decks
+## 11. Buildings as battlefield objects
 
-On top of Quick Play (a Hero's fixed starter deck), there's a second,
-persistent progression loop:
+Every Building has:
+- **Resource cost** (to play, like any card).
+- **Durability** (an HP pool — Buildings are attackable, not passive
+  scenery).
+- A **passive** and/or an **activated** ability (Resources-costed by
+  default; a specific card's text can spend a different pool, e.g. a
+  Demon Gate spending Mana).
+- An optional **On Construction** trigger (fires like Warcry, the
+  moment it's played).
 
-- **Collection:** which cards you own and how many copies. Lives in
-  `localStorage` while signed out (a per-browser "guest" save) or in the
-  account's own Supabase-backed save once signed in — see `BACKEND.md`
-  §5 for exactly how that switch works. Starts empty.
-- **Coins:** a currency, same storage rule as the collection. Starts at
-  300; a match awards +60 coins for a win, +25 for a loss (paid out
-  once, right when a match ends).
-- **Packs:** 100 coins buys a 5-card pack. Each card slot rolls
-  independently by rarity weight (common 45 / uncommon 28 / rare 18 /
-  epic 7 / legendary 2, out of 100 — see `src/data/packs.ts`) and is
-  added to the collection; duplicates just stack (no dust/disenchant
-  system). Hero cards are never pack contents — they're chosen
-  separately, not deck material.
-- **Deck Builder:** compose any 30-card deck from owned copies (no
-  archetype/element/faction/race restrictions, consistent with §9), pick
-  any Hero card to pair it with, and play a match with it. The AI
-  opponent still plays a random starter Hero's fixed deck —
-  collection/deckbuilding only applies to the player's own deck in this
-  pass.
+**Column protection:** a Building can only be attacked once **both**
+the Vanguard and Support slots in its own column are empty — matches
+the "protected while allied characters occupy its column" idea. A
+specific effect (Siege-tagged damage, a Sabotage/Fire spell, an
+Infiltrate attacker) can say it ignores this, same as any other
+card-text override elsewhere in this doc.
 
-**Rarity** is a property of the card definition itself (`rarity` field:
-common/uncommon/rare/epic/legendary) — it drives pack odds and a colored
-corner pip on the card, and has no gameplay effect by itself.
+A destroyed Building goes to the Graveyard, like a destroyed creature,
+and its bonus is gone for good.
 
-**Card art and board theming:** any card can carry an `art` field
-(image URL, a `public/`-relative path, or a `data:` URI) rendered behind
-its text, with a graceful fallback to the plain layout when unset.
-Admin-uploaded art is automatically normalized to 512×776 regardless of
-the source image's size/aspect ratio. Board backgrounds are a separate,
-code-level theme config. Adding new cards (by hand, via a JSON file with
-runtime validation, by generating them with an LLM, or through the admin
-panel) and adding images are covered in detail in `CARDS.md`.
+---
+
+## 12. Equipment
+
+A rework from v1's single Hero-only slot:
+
+- **4 Equipment slots** — a player-owned inventory zone, not a board
+  column. Each slot holds one Equipment card, either **assigned** to a
+  creature/Hero or sitting **Unassigned**.
+- Playing an Equipment card from hand costs Resources and either
+  assigns it immediately to a chosen eligible target, or leaves it
+  Unassigned in the zone for later.
+- **Categories**: Weapon, Armor, Accessory, Mount — tags on the
+  Equipment card. A creature/Hero can optionally restrict which
+  categories it can hold (e.g. a Warhound: Accessory only; a Knight:
+  Weapon/Armor/Mount).
+- **Open default:** each creature/Hero can hold **at most 1** equipped
+  item at a time in this pass (not one-per-category simultaneously) —
+  keeps the first build tractable. Multiple simultaneous equipped
+  items per unit is a reasonable future refinement, not required now.
+- **Assigning or reassigning** an Equipment card to a (new) bearer
+  costs 1 Energy, as an action.
+- **Survives death**: when a bearer dies, its Equipment doesn't vanish
+  — it returns to Unassigned in the zone, ready to be reassigned
+  later. Equipment is only actually destroyed by an effect that
+  targets it directly, or if the zone is full and a new piece can't
+  fit (edge case — **Open default:** playing a 5th Equipment card while
+  the zone is full is simply illegal, same as any other full-zone
+  case, until one is unequipped/discarded).
+- The Hero specifically still **requires an assigned weapon-eligible
+  Equipment to attack at all** (preserves the v1 hook) — Equipment on
+  an ordinary creature is a bonus, not a gate.
+
+---
+
+## 13. Status effects
+
+Unchanged from v1 — intentionally simple, a nod to the Pokemon TCG
+rather than a full elemental chart:
+
+- **Burn**: fixed damage at end of each of the affected unit's
+  controller's turns, for a fixed number of turns, then expires.
+- **Poison**: same, but persists until cured or the unit dies (no
+  automatic expiry).
+
+Both can affect creatures, Buildings, or a player's Guard/Hero HP
+depending on the source card.
+
+---
+
+## 14. Turn structure
+
+1. **Draw phase:** draw 1 card. Refill Energy and Mana to their
+   current caps (Resources does **not** refill — it persists, §2).
+2. **Main phase:** play any cards you can afford, activate any
+   already-slotted Spells/Abilities, use your Hero Power (once), in
+   any order.
+3. **Combat phase:** declare attacks with any Ready, eligible attacker
+   (Vanguard creatures, Ranged Support creatures, an equipped Hero),
+   following §5's reach tiers.
+4. **End phase:** Burn/Poison tick down and deal damage; "end of turn"
+   triggers resolve; all your creatures/Hero **Ready**; turn passes.
+
+---
+
+## 15. Deck, hand, and card flow
+
+Unchanged from v1, plus Allegiance validation (§10):
+
+- **Deck size:** exactly 30 cards, no copy-count restriction.
+- **Piles:** Deck → Hand → Discard (voluntary/one-shot spends) or
+  Graveyard (destroyed creatures/Buildings, Fizzled Charged Spells —
+  permanently gone).
+- **Empty deck:** shuffle Discard back into a new deck. Graveyard never
+  returns. No fatigue damage.
+- Starting hand 4, one-time mulligan, max hand size 10, second player
+  draws an extra card turn 1 — unchanged Open defaults from v1.
+
+---
+
+## 16. Board-space-as-resource (later-phase content layer)
+
+Documented now so future card design has a target, but **not required
+for the v2 engine rebuild** (§17 Phase E+) — these are card-effect
+patterns layered on top of a working positional board, not core rules:
+
+- **Swarm**: effects that create several small units at once, filling
+  the board fast.
+- **Consume**: destroy an allied creature to free its slot and empower
+  another (an explicit new effect kind).
+- **Garrison**: place a creature *inside* a Building instead of
+  occupying a battlefield space (needs a Building-side "housed
+  creature" slot concept).
+- **Mount**: two creatures merge into one board position (needs a
+  composite-creature-instance concept).
+- **Transformation**: a card becomes a different, larger card in place
+  — e.g. a Massive upgrade that requires contiguous empty space to
+  complete, per §5.
+
+---
+
+## 17. Prototype scope & implementation phases
+
+- **Platform:** unchanged — TypeScript + React + Vite, optional
+  Supabase backend, local hot-seat or vs. a heuristic AI. No live
+  networked multiplayer yet.
+- **AI opponent:** the existing greedy heuristic needs to grow
+  position-awareness (Vanguard vs. Support placement, when to Advance,
+  when a Building is worth protecting) — scoped into whichever phase
+  introduces the mechanic it needs to evaluate.
+
+Suggested build order, each phase individually shippable/testable:
+
+| Phase | Scope |
+|---|---|
+| **A — Foundation** | Board reshape (Vanguard+Support+columns), the 3-pool resource-by-archetype split, Ready/Exhausted, Guard rename (+ faction display labels), base reach-tier targeting (no Reach/Ranged/Infiltrate yet — just Vanguard-first, matches v1's existing chain shape). |
+| **B — Reach & position** | Reach, Ranged, Infiltrate, Protector, Flank, Formation, Advance, Push, Massive. Column-based Building protection. |
+| **C — Spell forms & Hero rework** | Instant/Ritual/Charged split for Spells. Hero Passive/Power/Signature. Allegiance deckbuilding validation. |
+| **D — Keyword expansion** | Stealth, Ward, Cleave, Drain, Bloodied, Summon (+ the `summonCreature` effect kind), Warcry rename. |
+| **E — Buildings as objects** | Durability/attackability, activated abilities, On Construction triggers, enemy interaction (Siege/Sabotage). |
+| **F — Equipment rework** | 4-slot zone, categories, assign/reassign for Energy, survives-death/Unassigned flow. |
+| **G — Board-as-resource (§16)** | Swarm/Consume/Garrison/Mount/Transformation, plus Hero Rule-Breaks (§9) once there's enough of the rest in place to make rule-breaking meaningful. |
+
+Each phase gets the same verification pass as prior work: `tsc
+--noEmit`, `eslint`, `vitest`, `vite build`, plus a Playwright smoke
+pass against the dev server before it's called done.
+
+---
+
+## 18. Card collection, packs, and custom decks
+
+Unchanged from v1 in spirit — Collection/Coins/Packs/Deck Builder — with
+one addition: the Deck Builder now validates Allegiance (§10) against
+the chosen Hero before a deck can be saved/played. Rarity, pack odds,
+card art normalization (512×776), and the admin panel are all
+otherwise unaffected by this rework and stay as documented in
+`CARDS.md`/`BACKEND.md`.
