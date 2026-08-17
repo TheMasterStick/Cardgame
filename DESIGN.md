@@ -269,9 +269,10 @@ A Hero card carries:
 Mage Hero): reveal the top 3 creatures in your Graveyard; play one of
 them for free into an empty Vanguard/Support slot, then either shuffle
 the remaining two into your Deck or return them to the Graveyard
-(your choice). This is the templated exception behind §15's "Graveyard
-never returns" rule — by default nothing recalls from it; a Hero has
-to explicitly grant that.
+(your choice). This is a targeted recall effect triggered by the Hero,
+usable any time during the match — it has nothing to do with the
+empty-deck reshuffle in §15, which never touches the Graveyard for
+any Hero.
 
 Pulling a new Hero should feel like unlocking a new deck archetype, not
 just a different HP number — that's the point of Passive/Power/
@@ -412,11 +413,14 @@ Unchanged from v1, plus Allegiance validation (§10):
 - **Piles:** Deck → Hand → Discard (voluntary/one-shot spends) or
   Graveyard (destroyed creatures/Buildings, Fizzled Charged Spells —
   permanently gone).
-- **Empty deck:** shuffle Discard back into a new deck. Graveyard
-  never returns **by default** — the one exception is a Hero whose
-  Passive/Signature Ability explicitly recalls from it (a Necromancer-
-  archetype Hero; see §9's Signature Ability example). No fatigue
-  damage.
+- **Empty deck:** shuffle Discard back into a new deck. **Graveyard is
+  never part of this reshuffle, full stop, for every Hero** — that
+  part of the rule has no exceptions. No fatigue damage.
+- Separately (and unrelated to the reshuffle above), a Hero or Spell
+  can have its own effect that reaches into the Graveyard and pulls
+  specific cards back into play mid-match — that's a targeted recall
+  effect, not a change to how empty-deck reshuffling works. See §9's
+  Raise Dead example for a Necromancer-archetype Hero.
 - Starting hand 4, one-time mulligan, max hand size 10, second player
   draws an extra card turn 1 — unchanged Open defaults from v1.
 
