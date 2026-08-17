@@ -227,6 +227,7 @@ rebuild itself).
 | **Reach** | See §5. |
 | **Infiltrate** | See §5. |
 | **Protector** | See §5. *(Deliberately not called "Guard" — that name is reserved for the player's damage-shield pool in §6, and reusing it for a creature keyword was the single most confusing overlap in the original proposal.)* |
+| **Armiger** | May be assigned one piece of Equipment from the zone, same as the Hero — see §12. Without this keyword, a creature can't hold gear at all. |
 | **Stealth** | Cannot be chosen as the target of an enemy attack or a targeted enemy Spell/Ability. **Open default:** still hit by AOE effects (`allEnemyCreatures`) unless a card says otherwise — matches how Immune is scoped. Attacking, or being hit by a "Reveal" effect, removes Stealth permanently for that creature. |
 | **Ward** | Negates the next hostile Spell or Ability that *directly targets* this creature (one-time, then consumed). **Open default:** doesn't stop AOE effects or plain combat damage, same scoping logic as Stealth/Immune. |
 | **Cleave** | On attack, also deals the same damage to enemy creatures in adjacent columns, same row as the primary target. |
@@ -263,6 +264,14 @@ A Hero card carries:
 | Hero Power | An activated effect using the same `CardEffect` shape as a Spell/Ability, Energy-costed, usable **once per turn** (not charge-based). |
 | Signature Ability *(optional)* | Same shape as Hero Power, but a stronger effect gated to a small number of uses **per match** (e.g. 1) instead of per turn. |
 | Rule-Breaks *(optional, Legendary-tier)* | A curated menu of numeric deltas a Hero can carry: extra Spell slots, extra Building slots, Vanguard/Support slot count changes, starting Guard delta, max Energy/Mana/Resources cap delta. **Open default:** only numeric-delta modifiers are supported at first; a fully bespoke rule-break (e.g. "Harpies may overfill Support by forming Flocks") is one-off card-specific code, done when that specific card is actually built, not a general system. |
+
+**Example Signature Ability — Raise Dead** (a Necromancer-archetype
+Mage Hero): reveal the top 3 creatures in your Graveyard; play one of
+them for free into an empty Vanguard/Support slot, then either shuffle
+the remaining two into your Deck or return them to the Graveyard
+(your choice). This is the templated exception behind §15's "Graveyard
+never returns" rule — by default nothing recalls from it; a Hero has
+to explicitly grant that.
 
 Pulling a new Hero should feel like unlocking a new deck archetype, not
 just a different HP number — that's the point of Passive/Power/
@@ -327,34 +336,41 @@ and its bonus is gone for good.
 
 ## 12. Equipment
 
-A rework from v1's single Hero-only slot:
+Hero-exclusive by default. Ordinary creatures can't hold gear unless a
+card specifically grants that — diluting Equipment down to "any
+creature can hold anything" made it feel less special, not more:
 
 - **4 Equipment slots** — a player-owned inventory zone, not a board
-  column. Each slot holds one Equipment card, either **assigned** to a
-  creature/Hero or sitting **Unassigned**.
+  column. Each slot holds one Equipment card, either **assigned** to
+  an eligible bearer or sitting **Unassigned**.
+- **Eligible bearers**: the Hero, always. A Creature is only eligible
+  if it has the **Armiger** keyword (§7) — a plain Footman can't equip
+  anything, but a "Footman, Armiger" printing could be handed a
+  Legendary Battle Axe and become a real threat. Armiger is a keyword
+  like any other — most creatures don't have it.
 - Playing an Equipment card from hand costs Resources and either
-  assigns it immediately to a chosen eligible target, or leaves it
+  assigns it immediately to a chosen eligible bearer, or leaves it
   Unassigned in the zone for later.
 - **Categories**: Weapon, Armor, Accessory, Mount — tags on the
-  Equipment card. A creature/Hero can optionally restrict which
-  categories it can hold (e.g. a Warhound: Accessory only; a Knight:
+  Equipment card. A bearer can optionally restrict which categories it
+  can hold (e.g. a Warhound Armiger: Accessory only; a Knight:
   Weapon/Armor/Mount).
-- **Open default:** each creature/Hero can hold **at most 1** equipped
-  item at a time in this pass (not one-per-category simultaneously) —
-  keeps the first build tractable. Multiple simultaneous equipped
-  items per unit is a reasonable future refinement, not required now.
+- **Open default:** each eligible bearer can hold **at most 1**
+  equipped item at a time in this pass (not one-per-category
+  simultaneously) — keeps the first build tractable. Multiple
+  simultaneous equipped items per unit is a reasonable future
+  refinement, not required now.
 - **Assigning or reassigning** an Equipment card to a (new) bearer
   costs 1 Energy, as an action.
 - **Survives death**: when a bearer dies, its Equipment doesn't vanish
-  — it returns to Unassigned in the zone, ready to be reassigned
-  later. Equipment is only actually destroyed by an effect that
-  targets it directly, or if the zone is full and a new piece can't
-  fit (edge case — **Open default:** playing a 5th Equipment card while
-  the zone is full is simply illegal, same as any other full-zone
-  case, until one is unequipped/discarded).
+  — it returns to Unassigned in the zone, ready to be reassigned to
+  any other eligible bearer later. Equipment is only actually
+  destroyed by an effect that targets it directly, or discarded
+  outright if the zone is full and nothing can be freed.
 - The Hero specifically still **requires an assigned weapon-eligible
   Equipment to attack at all** (preserves the v1 hook) — Equipment on
-  an ordinary creature is a bonus, not a gate.
+  an Armiger creature is a bonus, not a gate; that creature can already
+  attack normally without it.
 
 ---
 
@@ -396,8 +412,11 @@ Unchanged from v1, plus Allegiance validation (§10):
 - **Piles:** Deck → Hand → Discard (voluntary/one-shot spends) or
   Graveyard (destroyed creatures/Buildings, Fizzled Charged Spells —
   permanently gone).
-- **Empty deck:** shuffle Discard back into a new deck. Graveyard never
-  returns. No fatigue damage.
+- **Empty deck:** shuffle Discard back into a new deck. Graveyard
+  never returns **by default** — the one exception is a Hero whose
+  Passive/Signature Ability explicitly recalls from it (a Necromancer-
+  archetype Hero; see §9's Signature Ability example). No fatigue
+  damage.
 - Starting hand 4, one-time mulligan, max hand size 10, second player
   draws an extra card turn 1 — unchanged Open defaults from v1.
 
