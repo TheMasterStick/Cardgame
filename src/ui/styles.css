@@ -52,7 +52,7 @@ body {
 }
 
 .app__header h1 {
-  font-size: 1.05rem;
+  font-size: 1.2rem;
   margin: 0;
   color: var(--gold);
 }
@@ -121,11 +121,11 @@ body {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 6px;
+  padding: 7px;
   overflow: hidden;
 }
 
@@ -153,7 +153,7 @@ body {
 .row {
   display: flex;
   justify-content: center;
-  gap: 4px;
+  gap: 5px;
 }
 
 .row--hero {
@@ -173,8 +173,8 @@ body {
 }
 
 .slot {
-  width: 64px;
-  min-height: 82px;
+  width: 88px;
+  min-height: 100px;
   border-radius: 8px;
   display: flex;
 }
@@ -186,23 +186,23 @@ body {
  * needs to render at (DESIGN.md §17 Phase A follow-up: fit-without-scroll).
  */
 .slot--empty {
-  min-height: 22px;
+  min-height: 24px;
   border: 1px dashed var(--border);
   opacity: 0.5;
 }
 
 .portrait {
   position: relative;
-  width: 82px;
-  min-height: 52px;
+  width: 100px;
+  min-height: 76px;
   background: var(--panel-light);
   border: 2px solid var(--gold);
   border-radius: 8px;
-  padding: 4px;
-  font-size: 0.6rem;
+  padding: 5px;
+  font-size: 0.66rem;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   overflow: hidden;
 }
 
@@ -251,13 +251,13 @@ body {
 .card {
   position: relative;
   overflow: hidden;
-  width: 64px;
-  min-height: 82px;
+  width: 88px;
+  min-height: 100px;
   background: var(--panel-light);
   border: 1px solid var(--border);
-  border-radius: 7px;
-  padding: 3px;
-  font-size: 0.56rem;
+  border-radius: 8px;
+  padding: 4px;
+  font-size: 0.64rem;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -351,10 +351,10 @@ body {
 /* Rarity: a corner pip always shows it; epic/legendary also get a soft glow. */
 .card__rarity-dot {
   position: absolute;
-  top: 3px;
-  right: 3px;
-  width: 6px;
-  height: 6px;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
   z-index: 2;
   background: #8a8f9e;
@@ -422,8 +422,8 @@ body {
   background: var(--resource);
   color: #1a1a1a;
   border-radius: 50%;
-  width: 13px;
-  height: 13px;
+  width: 16px;
+  height: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -477,8 +477,8 @@ body {
 .card__keyword-icons {
   display: flex;
   flex-wrap: wrap;
-  gap: 1px;
-  font-size: 0.58rem;
+  gap: 2px;
+  font-size: 0.66rem;
   line-height: 1;
   position: relative;
   z-index: 1;
@@ -503,10 +503,10 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 13px;
-  height: 13px;
-  padding: 0 2px;
-  border-radius: 7px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 8px;
   background: rgba(10, 10, 14, 0.65);
 }
 
@@ -613,10 +613,10 @@ body {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 5px 10px;
-  font-size: 0.7rem;
+  padding: 6px 10px;
+  font-size: 0.72rem;
   color: var(--text-dim);
-  max-height: 70px;
+  max-height: 90px;
   overflow-y: auto;
 }
 
