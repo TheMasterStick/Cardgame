@@ -20,11 +20,9 @@ written against:**
   a bonus stacked on a large base. (The three original starter Heroes
   predate this and haven't been retconned — see DESIGN.md §9.)
 
-**Status markers used below:**
-- `[TODO: rename]` — no new name was given for this card; it's kept
-  under its original working name until one is supplied.
-- `[TODO: stats]` — the card exists (a name/concept was given) but has
-  no mechanics yet.
+Every card below now carries a final name and full mechanics — nothing
+pending (Orc Might Tribe runs one card over the usual ~10, at 11, now
+that Pit-Bred Stud has stats).
 
 ---
 
@@ -89,7 +87,7 @@ Buildings: 2–3R for 5–7 Durability.
 **Spells**
 4. **Raise the Lion Banner** — Common · Instant · 2M
    Friendly characters gain +1 Attack this turn.
-5. **Reinforcements** `[TODO: rename]` — Rare · Instant · 3M
+5. **Reinforcements** — Rare · Instant · 3M
    Summon two 1/2 Kingdom Militia.
 
 **Faction Cards**
@@ -126,7 +124,7 @@ Buildings: 2–3R for 5–7 Durability.
 **Spells**
 4. **Arcane Bolt** — Common · Instant · 2M
    Deal 3 damage.
-5. **Spell Echo** `[TODO: rename]` — Rare · Instant · 3M
+5. **Spell Echo** — Rare · Instant · 3M
    The next Instant Spell you cast this turn resolves twice.
 
 **Faction Cards**
@@ -171,7 +169,7 @@ Buildings: 2–3R for 5–7 Durability.
    Taunt. Revenge: Restore 4 Guard and give another friendly character +1/+1.
 7. **Chapel of Sacred Flesh** — Rare · Building · 3R · 6 Durability
    Whenever one of your Revenge effects activates, gain 1 Mana.
-8. **Living Saint** `[TODO: rename]` — Epic · Fighter · 6E · 5/6
+8. **Living Saint** — Epic · Fighter · 6E · 5/6
    Ward. The first time this would die, it remains at 1 Health instead.
 
 **Equipment**
@@ -200,7 +198,7 @@ Buildings: 2–3R for 5–7 Durability.
 **Spells**
 4. **Veil of Black Silk** — Common · Instant · 1M
    Give a friendly character Stealth until it attacks or uses an offensive ability.
-5. **Mark for Death** `[TODO: rename]` — Rare · Charged Spell · 2M · 2 Charges
+5. **Mark for Death** — Rare · Charged Spell · 2M · 2 Charges
    Mark an enemy. The next attack against it deals +2 damage. Remove a Charge.
 
 **Faction Cards**
@@ -242,7 +240,8 @@ Buildings: 2–3R for 5–7 Durability.
 **Faction Cards**
 6. **Pit Champion** — Rare · Fighter · 4E · 4/5 *(female)*
    Frenzy: Whenever this survives damage, permanently gain +1 Attack.
-7. **Pit-Bred Stud** `[TODO: stats]` — male counterpart concept to Pit Champion; no cost/stats/ability given yet.
+7. **Pit-Bred Stud** — Rare · Fighter · 4E · 5/4 *(male counterpart to Pit Champion)*
+   After surviving damage, gain +1 Attack. After dealing damage, gain +1 Health.
 8. **Dominion Pit** — Uncommon · Building · 2R · 5 Durability
    The first friendly character to kill an enemy each turn gains +1 Attack permanently.
 9. **Ironhide War-Matron** — Epic · Fighter · 7E · 8/7
@@ -322,7 +321,7 @@ Buildings: 2–3R for 5–7 Durability.
    Whenever a friendly Revenge effect triggers, restore 1 Health to this and +1 Guard.
 
 **Equipment**
-9. **Spiritbone Spear** `[TODO: rename]` — Rare · Equipment · 2E
+9. **Spiritbone Spear** — Rare · Equipment · 2E
    +2 Attack. When its bearer dies, automatically equip this to another friendly character if possible.
 
 **Hero**
@@ -537,7 +536,7 @@ Buildings: 2–3R for 5–7 Durability.
    Whenever one of your characters takes damage from your own card, gain +1 Attack this turn.
 7. **Menagerie of Chains** — Rare · Building · 3R · 6 Durability
    Your first Beast or Monster character each turn costs 1 less Energy.
-8. **Hydra Mistress** `[TODO: rename]` — Epic · Mage · 6E · 4/5
+8. **Hydra Mistress** — Epic · Mage · 6E · 4/5
    Warcry: Summon two 2/2 Hydra Heads into empty adjacent spaces.
 
 **Equipment**
@@ -575,7 +574,7 @@ Buildings: 2–3R for 5–7 Durability.
    Cleave.
 7. **Gate of Red Dominion** — Rare · Building · 3R · 6 Durability
    Your first Demon Fighter each turn costs 1 less Energy.
-8. **Fourfold Butcheress** `[TODO: rename]` — Epic · Fighter · 8E · 8/8
+8. **Fourfold Butcheress** — Epic · Fighter · 8E · 8/8
    Massive — occupies two adjacent spaces. Cleave. May attack twice each turn.
 
 **Equipment**
@@ -602,7 +601,7 @@ Buildings: 2–3R for 5–7 Durability.
    Stealth. When it damages the enemy Hero, reveal a random card in their hand.
 
 **Spells**
-4. **Devil's Bargain** `[TODO: rename]` — Common · Instant · 1M
+4. **Devil's Bargain** — Common · Instant · 1M
    Both players draw a card. You gain 1 Mana; your opponent restores 2 Guard.
 5. **Just Trust Me** — Rare · Ongoing · 2M
    The next enemy Warcry is also resolved for you where possible, then this Fizzles.
@@ -612,7 +611,7 @@ Buildings: 2–3R for 5–7 Durability.
    Warcry: Opponent chooses: you draw a card, or you gain 2 Mana.
 7. **Hall of Borrowed Faces** — Rare · Building · 3R · 5 Durability
    The first time an opponent buffs one of their characters each turn, give a random friendly character +1 Attack.
-8. **Face-Stealer** `[TODO: rename]` — Epic · Rogue · 5E · 4/4
+8. **Face-Stealer** — Epic · Rogue · 5E · 4/4
    Stealth. Warcry: Copy the rules text of an enemy character until that character leaves play.
 
 **Equipment**
@@ -641,13 +640,13 @@ Buildings: 2–3R for 5–7 Durability.
 **Spells**
 4. **Just One More** — Common · Instant · 1M
    Give an ally +2/+2 this turn. At end of turn, deal 2 damage to it.
-5. **Irresistible Invitation** `[TODO: rename]` — Rare · Instant · 3M
+5. **Irresistible Invitation** — Rare · Instant · 3M
    Temporarily take control of an enemy with 3 or less Attack until end of turn. It may attack its former controller.
 
 **Faction Cards**
 6. **Velvet-Horn Succubus** — Rare · Mage · 4E · 3/4
    Warcry: An enemy gets -2 Attack until your next turn.
-7. **Palace of Excess** `[TODO: rename]` — Rare · Building · 3R · 5 Durability
+7. **Palace of Excess** — Rare · Building · 3R · 5 Durability
    The first time you spend four or more total resources during a turn, draw a card.
 8. **Exalted Flesh-Reveler** — Epic · Fighter · 6E · 5/5
    Whenever this receives an Attack buff, increase that buff by another +1. If it reaches 10+ Attack, it takes 2 damage at end of turn.
@@ -775,16 +774,8 @@ Buildings: 2–3R for 5–7 Durability.
 
 ## Open items before this becomes a real card set
 
-**Renames still needed** (currently on their working name):
-Reinforcements (Kingdom), Spell Echo (Mage Order), Living Saint
-(Church), Mark for Death (Assassin Order), Spiritbone Spear (Spirit
-Tribe), Hydra Mistress (Dark Elves), Fourfold Butcheress (Dominion),
-Devil's Bargain and Face-Stealer (Whispers), Irresistible Invitation
-and Palace of Excess (Excess).
-
-**Needs full stats:** Pit-Bred Stud (Orc Might Tribe) — a male
-champion-tier counterpart to Pit Champion; no cost/stats/ability
-defined yet.
+Naming and stats are locked for all cards, including Pit-Bred Stud.
+What's left is entirely engine work:
 
 **New engine concepts these cards assume, not yet built:**
 - Spell forms beyond the current single shape — Instant/Ongoing/Trap/
