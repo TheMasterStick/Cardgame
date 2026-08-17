@@ -126,12 +126,12 @@ Only meaningful on Creature cards (`keywords: Keyword[]`). See DESIGN.md
 
 | Keyword | Effect |
 |---|---|
-| `ranged` | Lets a creature attack from Support (the only way a Support creature can attack at all), and can strike enemy Support creatures directly even while the enemy Vanguard is populated. Also fires from outside melee range: a Ranged attacker never takes retaliation damage, no matter what it attacks. This is attacker-only — a Ranged creature that gets attacked still trades damage back normally. Does **not** by itself bypass a populated enemy Vanguard/Support to hit Buildings/Guard/Hero — that needs Infiltrate. |
+| `ranged` | Lets a creature attack from Support (the only way a Support creature can attack at all), and can strike enemy Support creatures directly even while the enemy Vanguard is populated. Also fires from outside melee range: a Ranged attacker never takes retaliation damage, no matter what it attacks. This is attacker-only — a Ranged creature that gets attacked still trades damage back normally. |
 | `reach` | Same enemy-Support-targeting reach as Ranged, but doesn't grant attacking from Support — a Reach creature must still be in Vanguard to attack at all. |
-| `infiltrate` | Can strike enemy Buildings/Guard/Hero directly regardless of the enemy board's row state. Doesn't grant Support-row targeting by itself — pair with Reach/Ranged on the same card for that. |
+| `infiltrate` | Can strike enemy Buildings directly regardless of the enemy board's row state, and is the one thing that lets an attacker bypass a Taunt creature to hit the Hero. Doesn't grant Support-row targeting by itself — pair with Reach/Ranged on the same card for that. |
 | `charge` | Can attack the same turn it's played, ignoring summoning sickness. |
 | `battlecry` | Marks a card whose `onPlay` trigger represents a Battlecry effect (fires when played). Purely a label — the actual effect still comes from a `triggers: [{ on: "onPlay", ... }]` entry. |
-| `taunt` | While alive, forces enemy attackers to target it first among the creatures in whichever row is actually being attacked — a Vanguard Taunt gates Vanguard-tier attacks, a Support Taunt gates Support-tier attacks (reachable only via Reach/Ranged) the same way. Doesn't affect Building/Guard/Hero targeting. |
+| `taunt` | While alive, forces enemy attackers to target it first among the creatures in whichever row is actually being attacked — a Vanguard Taunt gates Vanguard-tier attacks, a Support Taunt gates Support-tier attacks (reachable only via Reach/Ranged) the same way. Also gates Hero-targeting for any attacker that can reach the row it's in (a Vanguard Taunt blocks everyone, a Support Taunt only blocks Reach/Ranged attackers) — bypassed only by Infiltrate. Doesn't affect Building targeting. |
 | `counter` | Marks a card whose `onDefend` trigger fires when it's attacked (pair with a `triggers: [{ on: "onDefend", ... }]` entry, e.g. reflect damage back at the attacker). |
 | `revenge` | Marks a card whose `onDeath` trigger fires when it dies (pair with a `triggers: [{ on: "onDeath", ... }]` entry). |
 | `frenzy` | Every time this creature takes damage and survives, its Attack permanently increases by the damage amount taken. Built into the engine — no trigger needed, just the keyword. |
@@ -147,13 +147,28 @@ the engine from the keyword alone. `ranged`, `reach`, `infiltrate`, and
 
 **Reach-tier targeting chain** (full writeup: DESIGN.md §5): Base (no
 reach keyword) can only target enemy Vanguard, subject to Taunt; Reach
-and Ranged can also target enemy Support directly; Infiltrate can hit
-Buildings/Guard/Hero regardless of enemy row state. Without Infiltrate,
-Buildings/Guard/Hero become legal targets only once the enemy Vanguard
-**and** Support are both empty — except Buildings, which use
-**column** protection instead: a Building is attackable once **both**
-rows in its own column are empty, independent of what's happening in
-other columns (DESIGN.md §11).
+and Ranged can also target enemy Support directly, subject to Support's
+own Taunt; Infiltrate can hit enemy Buildings regardless of row state.
+**The enemy Hero has no board-population gate at all** — every
+attacker can always target it directly, the same as any other card —
+the only thing that narrows this is a reachable Taunt creature (a
+Vanguard Taunt blocks every attacker, a Support Taunt only blocks
+Reach/Ranged attackers), and Infiltrate bypasses even that. Buildings
+use **column** protection instead: a Building is attackable once
+**both** rows in its own column are empty, or the attacker has
+Infiltrate, independent of what's happening in other columns
+(DESIGN.md §11).
+
+**A target-restricted effect with no legal target still lets the card
+play/activate** — it just fizzles (does nothing) rather than making the
+card unplayable. E.g. Apprentice Mage's "On Play: deal 1 damage to an
+enemy creature" (`target: "targetCreature"`) is still playable with an
+empty enemy board; the Warcry just whiffs and the creature still enters
+play. This applies to any effect whose `target` category is
+`targetCreature`, `targetBuilding`, or `targetCreatureOrBuilding` with
+nothing on the relevant side of the board to hit — `targetPlayer` and
+`targetAny` effects never hit this case since the Hero is always a
+legal target. See `effectHasLegalTarget` in `src/ui/targeting.ts`.
 
 **Creature row placement:** `playCardFromHand` (see `game.ts`) takes
 an optional `row: "vanguard" | "support"` in its options, defaulting

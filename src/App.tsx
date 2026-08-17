@@ -24,7 +24,7 @@ import { MainMenu } from "./ui/components/MainMenu";
 import { PackOpening } from "./ui/components/PackOpening";
 import { PlayerBoard } from "./ui/components/PlayerBoard";
 import { ResourceBar } from "./ui/components/ResourceBar";
-import { effectNeedsExplicitTarget, type PendingAction } from "./ui/targeting";
+import { effectHasLegalTarget, effectNeedsExplicitTarget, type PendingAction } from "./ui/targeting";
 
 type Screen = "menu" | "heroSelect" | "collection" | "packs" | "deckBuilder" | "admin" | "playing";
 
@@ -194,13 +194,16 @@ export default function App() {
 
     if (def.archetype === "creature" || def.archetype === "building") {
       const trigger = def.triggers.find((t) => t.on === "onPlay");
-      if (trigger && effectNeedsExplicitTarget(trigger.effect)) {
+      if (trigger && effectNeedsExplicitTarget(trigger.effect) && effectHasLegalTarget(state, trigger.effect)) {
         // A creature that also needs an onPlay target skips row choice and
         // always lands in Vanguard — combining the two pending steps is
         // deferred (Phase B1 scope; DESIGN.md §17 Phase B).
         setPending({ kind: "playCard", instanceId });
         return;
       }
+      // No legal target for a Creature/Building-restricted effect (e.g. no
+      // enemy creature to hit): the card is still playable, its Warcry just
+      // fizzles (DESIGN.md §7) rather than the card becoming stuck in hand.
     }
     if (def.archetype === "creature") {
       setPending({ kind: "placeCreature", instanceId });
@@ -232,10 +235,12 @@ export default function App() {
     const pool = def.archetype === "spell" ? state.players.player.mana : state.players.player.energy;
     if (pool.current < def.activateCost || card.chargesRemaining === 0) return;
 
-    if (effectNeedsExplicitTarget(def.effect)) {
+    if (effectNeedsExplicitTarget(def.effect) && effectHasLegalTarget(state, def.effect)) {
       setPending({ kind: "activate", slotIndex });
       return;
     }
+    // No legal target right now (e.g. a Creature-only Spell with no enemy
+    // creature out): still activate it, the effect just fizzles.
     const result = activateSlotCard(state, "player", slotIndex, null);
     if (!result.ok) fail(result.reason);
     commit();

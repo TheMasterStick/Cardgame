@@ -249,29 +249,18 @@ describe("targeting chain", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("does NOT let a Ranged attacker bypass a populated enemy Vanguard to hit the player (only Infiltrate does)", () => {
+  it("lets any attacker hit the player directly even with a populated enemy Vanguard (Hero has no board-state gate)", () => {
     const state = makeState();
-    const attacker = createCardInstance("arrow-archer", "player");
+    const attacker = createCardInstance("footman", "player"); // plain melee, no reach keywords at all
     attacker.summonedTurn = 0;
     state.players.player.board.vanguard[0] = attacker;
     state.players.opponent.board.vanguard[0] = createCardInstance("footman", "opponent");
 
     const result = declareCreatureAttack(state, "player", attacker.instanceId, { type: "player" });
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
   });
 
-  it("blocks hitting Guard/Hero while the enemy Vanguard still has creatures and the attacker isn't Infiltrate", () => {
-    const state = makeState();
-    const attacker = createCardInstance("footman", "player");
-    attacker.summonedTurn = 0;
-    state.players.player.board.vanguard[0] = attacker;
-    state.players.opponent.board.vanguard[0] = createCardInstance("footman", "opponent");
-
-    const result = declareCreatureAttack(state, "player", attacker.instanceId, { type: "player" });
-    expect(result.ok).toBe(false);
-  });
-
-  it("blocks hitting the player while enemy Support still has a creature, even with Vanguard empty", () => {
+  it("lets any attacker hit the player directly even with a populated enemy Support", () => {
     const state = makeState();
     const attacker = createCardInstance("footman", "player");
     attacker.summonedTurn = 0;
@@ -279,7 +268,66 @@ describe("targeting chain", () => {
     state.players.opponent.board.support[0] = createCardInstance("footman", "opponent");
 
     const result = declareCreatureAttack(state, "player", attacker.instanceId, { type: "player" });
+    expect(result.ok).toBe(true);
+  });
+
+  it("lets any attacker hit the player even with both enemy rows fully populated", () => {
+    const state = makeState();
+    const attacker = createCardInstance("footman", "player");
+    attacker.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = attacker;
+    state.players.opponent.board.vanguard[0] = createCardInstance("footman", "opponent");
+    state.players.opponent.board.support[0] = createCardInstance("footman", "opponent");
+
+    const result = declareCreatureAttack(state, "player", attacker.instanceId, { type: "player" });
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe("Taunt blocks Hero-targeting", () => {
+  it("blocks a base attacker from hitting the player while a Vanguard Taunt creature is up", () => {
+    const state = makeState();
+    const attacker = createCardInstance("footman", "player");
+    attacker.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = attacker;
+    state.players.opponent.board.vanguard[0] = createCardInstance("stonewall-guardian", "opponent"); // taunt
+
+    const result = declareCreatureAttack(state, "player", attacker.instanceId, { type: "player" });
     expect(result.ok).toBe(false);
+  });
+
+  it("blocks a Reach attacker from hitting the player while a Support Taunt creature is up", () => {
+    const state = makeState();
+    const pikeman = createCardInstance("long-pikeman", "player"); // reach
+    pikeman.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = pikeman;
+    const supportTaunt = createCardInstance("stonewall-guardian", "opponent");
+    state.players.opponent.board.support[0] = supportTaunt;
+
+    const result = declareCreatureAttack(state, "player", pikeman.instanceId, { type: "player" });
+    expect(result.ok).toBe(false);
+  });
+
+  it("does NOT block a base attacker from hitting the player over a Support-only Taunt (it can't reach Support at all)", () => {
+    const state = makeState();
+    const attacker = createCardInstance("footman", "player"); // no reach keywords
+    attacker.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = attacker;
+    state.players.opponent.board.support[0] = createCardInstance("stonewall-guardian", "opponent");
+
+    const result = declareCreatureAttack(state, "player", attacker.instanceId, { type: "player" });
+    expect(result.ok).toBe(true);
+  });
+
+  it("Infiltrate bypasses a Vanguard Taunt creature for Hero-targeting", () => {
+    const state = makeState();
+    const infiltrator = createCardInstance("shadow-infiltrator", "player");
+    infiltrator.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = infiltrator;
+    state.players.opponent.board.vanguard[0] = createCardInstance("stonewall-guardian", "opponent");
+
+    const result = declareCreatureAttack(state, "player", infiltrator.instanceId, { type: "player" });
+    expect(result.ok).toBe(true);
   });
 });
 

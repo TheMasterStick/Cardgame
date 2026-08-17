@@ -34,6 +34,31 @@ export function effectAllowsPortraitTarget(effect: CardEffect): boolean {
   return effectTargetCategory(effect) === "targetAny" || effectTargetCategory(effect) === "targetPlayer";
 }
 
+/**
+ * Whether an effect that needs an explicit target actually has one to pick
+ * right now. The enemy Hero is always targetable (DESIGN.md §5), so
+ * `targetPlayer`/`targetAny` are never stuck — but a card mechanically
+ * restricted to Creatures/Buildings only (e.g. "deal 1 damage to an enemy
+ * creature") can still have zero legal targets on an empty board. That's not
+ * a reason to make the card unplayable: it should still go off and the
+ * effect just fizzles (DESIGN.md §7 "Warcry with no target").
+ */
+export function effectHasLegalTarget(state: GameState, effect: CardEffect): boolean {
+  const category = effectTargetCategory(effect);
+  if (category === null || category === "targetPlayer" || category === "targetAny") return true;
+
+  const side = effectTargetSide(effect);
+  const targetOwner: PlayerId = side === "own" ? "player" : "opponent";
+  const board = state.players[targetOwner].board;
+  const hasCreature = [...board.vanguard, ...board.support].some((c) => c !== null);
+  const hasBuilding = board.buildings.some((c) => c !== null);
+
+  if (category === "targetCreature") return hasCreature;
+  if (category === "targetBuilding") return hasBuilding;
+  if (category === "targetCreatureOrBuilding") return hasCreature || hasBuilding;
+  return true;
+}
+
 export type PendingAction =
   | { kind: "playCard"; instanceId: string }
   | { kind: "placeCreature"; instanceId: string }

@@ -52,8 +52,7 @@ function pickActivationTarget(state: GameState, effect: CardEffect): EffectTarge
         return null;
       }
       if (effect.target === "targetPlayer") {
-        const frontEmpty = state.players[enemy].board.vanguard.every((c) => c === null);
-        return frontEmpty ? { kind: "player", owner: enemy } : "skip";
+        return { kind: "player", owner: enemy }; // the Hero is always a legal target (DESIGN.md §5)
       }
       const enemyFront = alive(state.players[enemy].board.vanguard);
       if (enemyFront.length > 0) {
@@ -64,7 +63,10 @@ function pickActivationTarget(state: GameState, effect: CardEffect): EffectTarge
         const enemyBuildings = alive(state.players[enemy].board.buildings);
         if (enemyBuildings.length > 0) return { kind: "card", owner: enemy, instanceId: enemyBuildings[0].instanceId };
       }
-      return "skip";
+      if (effect.target === "targetAny") {
+        return { kind: "player", owner: enemy }; // nothing else to hit — go face
+      }
+      return "skip"; // Creature-only with no enemy creature out — not worth burning the activation on a no-op
     }
     case "applyStatus": {
       const enemyFront = alive(state.players[enemy].board.vanguard);
@@ -168,10 +170,6 @@ function reachableCreatures(enemyBoard: BoardState, reach: ReachProfile): CardIn
   return [...vanguard, ...gateByTaunt(alive(enemyBoard.support))];
 }
 
-function boardFullyClear(enemyBoard: BoardState): boolean {
-  return enemyBoard.vanguard.every((c) => c === null) && enemyBoard.support.every((c) => c === null);
-}
-
 /** Buildings whose own column is clear on both rows — attackable without Infiltrate (DESIGN.md §11). */
 function openBuildingColumns(enemyBoard: BoardState): CardInstance[] {
   return enemyBoard.buildings.filter(
@@ -179,13 +177,21 @@ function openBuildingColumns(enemyBoard: BoardState): CardInstance[] {
   );
 }
 
-/** Picks the best legal target for an attacker with the given reach tier, or null to skip attacking. */
-function chooseAttackTarget(
-  state: GameState,
-  reach: ReachProfile,
-  attackerAttack: number,
-  attackerHp: number,
-): AttackTarget | null {
+function rowHasTaunt(row: (CardInstance | null)[]): boolean {
+  return row.some((c) => c !== null && hasKeyword(c, "taunt"));
+}
+
+/**
+ * Picks the best legal target for an attacker with the given reach tier.
+ * The enemy Hero has no board-*population* gate (DESIGN.md §5) — a full
+ * enemy Vanguard/Support doesn't wall it off — so a bad creature trade
+ * just goes to the face instead of sitting idle. Taunt is the one thing
+ * that still blocks Hero-targeting, and it's non-optional: if a reachable
+ * Taunt creature is what's forcing a bad trade, there's no legal way
+ * around it (short of Infiltrate), so the trade is taken anyway rather
+ * than the attacker doing nothing.
+ */
+function chooseAttackTarget(state: GameState, reach: ReachProfile, attackerAttack: number, attackerHp: number): AttackTarget {
   const enemy = otherPlayer(AI);
   const enemyBoard = state.players[enemy].board;
 
@@ -201,18 +207,21 @@ function chooseAttackTarget(
     if (killable.length > 0 || willSurvive) {
       return { type: "creature", instanceId: target.instanceId };
     }
-    if (!reach.infiltrate) return null; // bad trade, and nothing bypasses it — sit this one out
+    const tauntForcesIt = !reach.infiltrate && (rowHasTaunt(enemyBoard.vanguard) || ((reach.reach || reach.ranged) && rowHasTaunt(enemyBoard.support)));
+    if (tauntForcesIt) {
+      return { type: "creature", instanceId: target.instanceId };
+    }
   }
 
   if (reach.infiltrate) {
     const anyBuilding = alive(enemyBoard.buildings)[0];
-    return anyBuilding ? { type: "building", instanceId: anyBuilding.instanceId } : { type: "player" };
+    if (anyBuilding) return { type: "building", instanceId: anyBuilding.instanceId };
+  } else {
+    const openBuildings = openBuildingColumns(enemyBoard);
+    if (openBuildings.length > 0) return { type: "building", instanceId: openBuildings[0].instanceId };
   }
 
-  const openBuildings = openBuildingColumns(enemyBoard);
-  if (openBuildings.length > 0) return { type: "building", instanceId: openBuildings[0].instanceId };
-
-  return boardFullyClear(enemyBoard) ? { type: "player" } : null;
+  return { type: "player" };
 }
 
 function playCombatPhase(state: GameState): void {
@@ -228,13 +237,13 @@ function playCombatPhase(state: GameState): void {
     const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
     const reach = reachProfileOf(def);
     const target = chooseAttackTarget(state, reach, getCreatureAttack(card), card.currentHp ?? 0);
-    if (target) declareCreatureAttack(state, AI, card.instanceId, target);
+    declareCreatureAttack(state, AI, card.instanceId, target);
   }
 
   if (heroCanAttack(state, AI)) {
     const hero = player.hero;
     const target = chooseAttackTarget(state, NO_REACH, getHeroAttack(state, AI), hero.currentHp);
-    if (target) declareHeroAttack(state, AI, target);
+    declareHeroAttack(state, AI, target);
   }
 }
 

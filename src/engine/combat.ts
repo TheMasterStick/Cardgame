@@ -61,9 +61,12 @@ export function reachProfileOf(def: CreatureDefinition): ReachProfile {
 
 const NO_REACH: ReachProfile = { reach: false, ranged: false, infiltrate: false };
 
+function rowHasTaunt(row: (CardInstance | null)[]): boolean {
+  return row.some((c) => c !== null && hasKeyword(c, "taunt"));
+}
+
 function checkTaunt(row: (CardInstance | null)[], targetInstanceId: string, rowLabel: string): ValidationResult {
-  const taunts = row.filter((c): c is CardInstance => c !== null && hasKeyword(c, "taunt"));
-  if (taunts.length > 0 && !taunts.some((c) => c.instanceId === targetInstanceId)) {
+  if (rowHasTaunt(row) && !row.some((c) => c?.instanceId === targetInstanceId && hasKeyword(c, "taunt"))) {
     return { ok: false, reason: `An enemy Taunt creature in ${rowLabel} must be attacked first.` };
   }
   return { ok: true };
@@ -73,9 +76,18 @@ function checkTaunt(row: (CardInstance | null)[], targetInstanceId: string, rowL
  * Reach-tier targeting (DESIGN.md §5): Base can only hit enemy Vanguard
  * (subject to Taunt); Reach/Ranged can also hit enemy Support directly, even
  * while Vanguard is populated (subject to Support's own Taunt); Infiltrate
- * bypasses straight to Buildings/Guard/Hero regardless of enemy row state.
- * Buildings are gated per-column (both rows in that column must be empty)
- * rather than needing the whole board cleared like Guard/Hero.
+ * bypasses straight to enemy Buildings regardless of row state. Buildings
+ * are gated per-column (both rows in that column must be empty) rather than
+ * needing the whole board cleared.
+ *
+ * The enemy Guard/Hero has no *board-population* gate — a full enemy
+ * Vanguard/Support no longer walls it off by itself, every attacker can
+ * still reach past ordinary creatures straight to the Hero. Taunt is the
+ * one thing that still stops it: a Taunt creature in a row this attacker
+ * can actually reach (Vanguard always; Support too with Reach/Ranged) must
+ * be dealt with first, exactly like it gates ordinary creature-targeting.
+ * Infiltrate bypasses Taunt for Hero-targeting the same way it bypasses
+ * everything else about enemy row state.
  */
 function validateTarget(
   state: GameState,
@@ -102,26 +114,24 @@ function validateTarget(
 
   if (reach.infiltrate) return { ok: true };
 
-  if (target.type === "building") {
-    const column = defenderBoard.buildings.findIndex((c) => c?.instanceId === target.instanceId);
-    if (column === -1) return { ok: false, reason: "Target Building not found." };
-    const columnClear = defenderBoard.vanguard[column] === null && defenderBoard.support[column] === null;
-    if (!columnClear) {
-      return {
-        ok: false,
-        reason: "That Building's column must be cleared first, or the attacker needs Infiltrate.",
-      };
+  if (target.type === "player") {
+    if (rowHasTaunt(defenderBoard.vanguard)) {
+      return { ok: false, reason: "An enemy Taunt creature in Vanguard must be attacked first." };
+    }
+    if ((reach.reach || reach.ranged) && rowHasTaunt(defenderBoard.support)) {
+      return { ok: false, reason: "An enemy Taunt creature in Support must be attacked first." };
     }
     return { ok: true };
   }
 
-  // target.type === "player"
-  const vanguardEmpty = defenderBoard.vanguard.every((c) => c === null);
-  const supportEmpty = defenderBoard.support.every((c) => c === null);
-  if (!vanguardEmpty || !supportEmpty) {
+  // target.type === "building"
+  const column = defenderBoard.buildings.findIndex((c) => c?.instanceId === target.instanceId);
+  if (column === -1) return { ok: false, reason: "Target Building not found." };
+  const columnClear = defenderBoard.vanguard[column] === null && defenderBoard.support[column] === null;
+  if (!columnClear) {
     return {
       ok: false,
-      reason: "Enemy Vanguard and Support must both be cleared first, or the attacker needs Infiltrate.",
+      reason: "That Building's column must be cleared first, or the attacker needs Infiltrate.",
     };
   }
   return { ok: true };

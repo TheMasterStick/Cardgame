@@ -14,10 +14,11 @@ labels) are all in `src/engine` and the running UI today. **Phase B1
 is also live**: the full reach-tier targeting chain — Base/Reach/
 Ranged/Infiltrate (§5) — deliberate Vanguard-vs-Support placement when
 playing a creature, Support creatures attacking if they have Ranged,
-and column-based Building protection (§11) that's independent of the
-whole-board-clear rule Player/Hero targeting still uses. Wave B2 of
-Phase B (Protector, Flank, Formation, Advance, Push, Massive) is still
-spec only. Everything else below (Hero Passive/Power/Signature,
+column-based Building protection (§11), and the enemy Hero being
+always attackable (no board-population gate — only a reachable Taunt
+creature, or a card's own Creature-only restriction, narrows it). Wave
+B2 of Phase B (Protector, Flank, Formation, Advance, Push, Massive) is
+still spec only. Everything else below (Hero Passive/Power/Signature,
 Allegiance, Spell forms, the fuller keyword pool beyond what's listed
 above, Buildings-as-objects, the Equipment rework) is also still spec
 only. CARDS.md/BACKEND.md describe what's live today; check them (not
@@ -159,17 +160,31 @@ to strongest:
 
 | Tier | Can target | Notes |
 |---|---|---|
-| Base (no reach keyword) | Enemy Vanguard only | Free choice among Vanguard creatures, subject to Taunt (below). Enemy Buildings/Guard/Hero become legal once the enemy Vanguard **and** Support are both empty. |
-| **Reach** | + enemy Support directly | Even while the enemy Vanguard is populated. Subject to Taunt if a Support creature has it. Still needs both enemy rows empty to reach Buildings/Guard/Hero. |
-| **Ranged** | Same reach as Reach | Plus: usable **from your own Support row** (this is what actually lets a Support creature attack at all). Still needs both enemy rows empty to reach Buildings/Guard/Hero. |
-| **Infiltrate** | + enemy Buildings/Guard/Hero directly | Regardless of enemy Vanguard/Support state. Doesn't grant Support-row targeting by itself — pair with Reach/Ranged on the same card if that's the intent. |
+| Base (no reach keyword) | Enemy Vanguard, or the enemy Hero directly | Free choice among Vanguard creatures, subject to Taunt (below). The Hero has no board-population gate — it's always a legal target regardless of what's on the enemy board — but a reachable Taunt creature still has to be dealt with first, same as it gates ordinary creature-targeting. Enemy Buildings become legal per-column once that column is empty (§11), independent of the rest of the board. |
+| **Reach** | + enemy Support directly | Even while the enemy Vanguard is populated. Subject to Taunt if a Support creature has it — and a Support Taunt now also gates Hero-targeting for an attacker with Reach/Ranged, the same way a Vanguard Taunt does. |
+| **Ranged** | Same reach as Reach | Plus: usable **from your own Support row** (this is what actually lets a Support creature attack at all). |
+| **Infiltrate** | + enemy Buildings directly | Regardless of enemy Vanguard/Support state. Also the one thing that bypasses Taunt for Hero-targeting — an Infiltrate attacker ignores enemy row state (including Taunt) entirely. Doesn't grant Support-row targeting by itself — pair with Reach/Ranged on the same card if that's the intent. |
+
+**Every card can hit the enemy Hero** — that's the default, not a
+special case. The only thing that narrows it is a card's own mechanical
+restriction (e.g. a Spell worded "deal damage to an enemy creature" is
+Creature-only by its own text) or a reachable Taunt creature standing in
+the way. A Creature-/Building-restricted card with no legal target at
+all (empty board on that side) is still fully playable — it just
+fizzles, like a Warcry that whiffs — rather than becoming stuck unplayable
+(§7).
 
 **Taunt:** while alive, forces enemy attackers to target it first among
 the creatures in *whichever row is actually being attacked* (Vanguard
 Taunt gates Vanguard-tier attacks; a Support Taunt — rare, usually
-granted by an effect — gates Support-tier attacks the same way).
-Doesn't affect Buildings/Guard/Hero targeting, and doesn't affect
-Spell/Ability targeting.
+granted by an effect — gates Support-tier attacks the same way). It
+also gates Hero-targeting for any attacker that can reach the row it's
+standing in — a Vanguard Taunt blocks every attacker's Hero-targeting,
+a Support Taunt only blocks Reach/Ranged attackers' Hero-targeting
+(a Base attacker can't reach Support at all, so a Support Taunt doesn't
+constrain it). Infiltrate bypasses Taunt for Hero-targeting the same way
+it bypasses everything else about enemy row state. Doesn't affect
+Building targeting, and doesn't affect Spell/Ability targeting.
 
 **Retaliation:** a creature-vs-creature attack is normally a trade —
 both sides deal damage. **Ranged (and, once it lands, Reach/Infiltrate)
@@ -239,7 +254,7 @@ rebuild itself).
 | Keyword | Effect |
 |---|---|
 | **Taunt** | See §5. |
-| **Warcry** | *(renamed from Battlecry.)* Label for a card with an `onPlay` trigger. |
+| **Warcry** | *(renamed from Battlecry.)* Label for a card with an `onPlay` trigger. If the trigger needs an explicit target and there isn't a legal one on the board (e.g. "deal 1 damage to an enemy creature" with no enemy creature out), the card is still fully playable — the Warcry just fizzles, doing nothing, rather than the card becoming unplayable (see §5). |
 | **Revenge** | Label for a card with an `onDeath` trigger. |
 | **Charge** | Enters play Ready instead of Exhausted (§3). |
 | **Ranged** | See §5. |
@@ -488,7 +503,7 @@ Suggested build order, each phase individually shippable/testable:
 | Phase | Scope |
 |---|---|
 | **A — Foundation** ✅ *(live)* | Board reshape (Vanguard+Support+columns), the 3-pool resource-by-archetype split, Ready/Exhausted, Guard rename (+ faction display labels), base reach-tier targeting (no Reach/Ranged/Infiltrate yet — just Vanguard-first, matches v1's existing chain shape). |
-| **B1 — Reach & position, wave 1** ✅ *(live)* | Reach, Ranged, Infiltrate keywords and the full targeting chain they unlock (§5). Deliberate Vanguard-vs-Support placement on play. Support creatures can attack if Ranged. Column-based Building protection (§11), independent of the whole-board-clear rule for Player/Hero. |
+| **B1 — Reach & position, wave 1** ✅ *(live)* | Reach, Ranged, Infiltrate keywords and the full targeting chain they unlock (§5). Deliberate Vanguard-vs-Support placement on play. Support creatures can attack if Ranged. Column-based Building protection (§11). Hero-targeting has no board-population gate — every attacker can always reach the Hero, gated only by a reachable Taunt creature (Infiltrate bypasses that too). Target-restricted Warcries/Spells with no legal target just fizzle instead of making the card unplayable. |
 | **B2 — Reach & position, wave 2** | Protector, Flank, Formation, Advance, Push, Massive. |
 | **C — Spell forms & Hero rework** | Instant/Ritual/Charged split for Spells. Hero Passive/Power/Signature. Allegiance deckbuilding validation. |
 | **D — Keyword expansion** | Stealth, Ward, Cleave, Drain, Bloodied, Summon (+ the `summonCreature` effect kind), Warcry rename. |
