@@ -218,7 +218,7 @@ describe("spell/ability charges", () => {
 });
 
 describe("turn flow", () => {
-  it("refills Energy/Mana but leaves Resources untouched, and resets attack flags", () => {
+  it("refills Energy/Mana to cap, trickles Resources by +1, and resets attack flags", () => {
     const state = makeState();
     state.players.player.energy.current = 0;
     state.players.player.mana.current = 0;
@@ -231,8 +231,16 @@ describe("turn flow", () => {
     startTurn(state);
     expect(state.players.player.energy.current).toBe(state.players.player.energy.cap);
     expect(state.players.player.mana.current).toBe(state.players.player.mana.cap);
-    expect(state.players.player.resources.current).toBe(0);
+    expect(state.players.player.resources.current).toBe(1);
     expect(creature.hasAttackedThisTurn).toBe(false);
+  });
+
+  it("caps the Resources trickle at the current max instead of overflowing", () => {
+    const state = makeState();
+    state.players.player.resources.current = state.players.player.resources.cap;
+    state.turnNumber = 2;
+    startTurn(state);
+    expect(state.players.player.resources.current).toBe(state.players.player.resources.cap);
   });
 
   it("does not draw on the very first turn of the game", () => {

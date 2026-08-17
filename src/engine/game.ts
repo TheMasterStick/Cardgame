@@ -60,10 +60,14 @@ export function startTurn(state: GameState): void {
   player.hero.hasAttackedThisTurn = false;
 
   // Energy/Mana are tempo pools and fully refill each turn. Resources is a
-  // persistent stockpile (Buildings/Equipment) and does NOT refill — it only
-  // changes by being spent or by a gainCap effect (DESIGN.md §2).
+  // persistent stockpile (Buildings/Equipment) and does NOT refill to cap —
+  // instead it trickles up by a flat +1/turn (capped at its current max), on
+  // top of whatever's left from spending or a gainCap effect. Without this,
+  // a player who ever spent Resources down to 0 had no way back in without
+  // already owning a Resources-generating Building (DESIGN.md §2).
   player.mana.current = player.mana.cap;
   player.energy.current = player.energy.cap;
+  player.resources.current = Math.min(player.resources.cap, player.resources.current + 1);
 
   // The player who goes first skips their turn-1 draw (standard alternating-turn balancing).
   if (state.turnNumber > 1) {

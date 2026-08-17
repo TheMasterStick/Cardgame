@@ -77,7 +77,7 @@ second activation-specific pool:
 |---|---|---|
 | **Energy** | Playing Creatures from hand. Activating Abilities. Hero Power. Tactical actions (Advance — see §5). | Refills fully to its current cap at the start of your turn. Does not carry over. |
 | **Mana** | Playing/casting all Spells (Instant, Ritual, Charged) and activating them. | Refills fully to its current cap at the start of your turn. **Open default:** same refill model as Energy for now — a slower/accumulating Mana feels good thematically but adds real complexity; revisit once the rest of v2 is live. |
-| **Resources** | Playing Buildings and Equipment from hand. Repairing/assigning Equipment (§12). Building activated abilities (unless a specific card's text overrides this, e.g. a Demon Gate spending Mana instead — card text can always deviate). | **Persists between turns** — it accumulates rather than resetting, since it represents a standing stockpile, not tempo. |
+| **Resources** | Playing Buildings and Equipment from hand. Repairing/assigning Equipment (§12). Building activated abilities (unless a specific card's text overrides this, e.g. a Demon Gate spending Mana instead — card text can always deviate). | **Persists between turns rather than refilling to cap** — but trickles up by a flat **+1 at the start of every turn** (capped at current max), on top of whatever's left from spending or a gainCap effect. Without the trickle, spending down to 0 with no Resources-generating Building already in play was a soft lockout — nothing could ever bring the pool back up. |
 
 All three still **start at 5, cap at 10**, and the cap is raised by
 Building/Spell/Ability cards exactly as before. This split is meant to
