@@ -91,12 +91,20 @@ function fireOnDefendTrigger(
   }
 }
 
-/** Attacker deals damage to a creature target; the defending creature trades damage back. */
+/**
+ * Attacker deals damage to a creature target; the defending creature trades
+ * damage back — unless the attacker is Ranged. A Ranged attacker fires from
+ * outside melee range, so it never takes retaliation damage regardless of
+ * what it's attacking. Ranged has no effect on defense: a Ranged creature
+ * that gets attacked (by anyone) trades damage back exactly like melee vs
+ * melee — Ranged is an attacker-side privilege, not a defensive one.
+ */
 function resolveCreatureTrade(
   state: GameState,
   attackerOwner: PlayerId,
   attackerInstanceId: string | "hero",
   attackerAttack: number,
+  attackerIsRanged: boolean,
   defenderOwner: PlayerId,
   defenderInstanceId: string,
 ): void {
@@ -113,9 +121,11 @@ function resolveCreatureTrade(
 
   damageCard(state, defenderOwner, defenderInstanceId, attackerAttack);
 
+  if (attackerIsRanged || defenderAttack <= 0) return;
+
   if (attackerInstanceId === "hero") {
-    if (defenderAttack > 0) damagePlayer(state, attackerOwner, defenderAttack);
-  } else if (defenderAttack > 0) {
+    damagePlayer(state, attackerOwner, defenderAttack);
+  } else {
     damageCard(state, attackerOwner, attackerInstanceId, defenderAttack);
   }
 }
@@ -133,14 +143,15 @@ export function declareCreatureAttack(
     return { ok: false, reason: "This creature can't attack right now." };
   }
   const def = CARD_DEFINITIONS[attacker.defId] as CreatureDefinition;
-  const validation = validateTarget(state, attackerOwner, def.keywords.includes("ranged"), target);
+  const isRanged = def.keywords.includes("ranged");
+  const validation = validateTarget(state, attackerOwner, isRanged, target);
   if (!validation.ok) return validation;
 
   const attackerAttack = getCreatureAttack(attacker);
   const defenderOwner = otherPlayer(attackerOwner);
 
   if (target.type === "creature") {
-    resolveCreatureTrade(state, attackerOwner, attackerInstanceId, attackerAttack, defenderOwner, target.instanceId);
+    resolveCreatureTrade(state, attackerOwner, attackerInstanceId, attackerAttack, isRanged, defenderOwner, target.instanceId);
   } else if (target.type === "building") {
     damageCard(state, defenderOwner, target.instanceId, attackerAttack);
   } else {
@@ -166,7 +177,8 @@ export function declareHeroAttack(
   const defenderOwner = otherPlayer(attackerOwner);
 
   if (target.type === "creature") {
-    resolveCreatureTrade(state, attackerOwner, "hero", attackerAttack, defenderOwner, target.instanceId);
+    // Heroes have no Ranged weapon flag yet (Equipment has no `ranged` field) — always a melee trade for now.
+    resolveCreatureTrade(state, attackerOwner, "hero", attackerAttack, false, defenderOwner, target.instanceId);
   } else if (target.type === "building") {
     damageCard(state, defenderOwner, target.instanceId, attackerAttack);
   } else {

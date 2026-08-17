@@ -167,6 +167,16 @@ granted by an effect — gates Support-tier attacks the same way).
 Doesn't affect Buildings/Guard/Hero targeting, and doesn't affect
 Spell/Ability targeting.
 
+**Retaliation:** a creature-vs-creature attack is normally a trade —
+both sides deal damage. **Ranged (and, once it lands, Reach/Infiltrate)
+is an attacker-side privilege only**: an attacker with any of those
+keywords fires from outside melee range and never takes retaliation
+damage, no matter what it's attacking. It's not a defensive property —
+a Ranged creature that gets attacked (by a melee or Ranged attacker
+alike) trades damage back exactly like a melee creature would. Only
+the *attacker's* Ranged status matters for whether retaliation happens
+at all.
+
 **Protector** (replaces the naming collision with the Guard pool —
 see §7): when an enemy attack is declared against an allied creature,
 if you control a Protector creature in the same row, you may redirect
@@ -264,7 +274,7 @@ A Hero card carries:
 |---|---|
 | Faction | Drives Allegiance (§10). A Faction-less Hero has no Allegiance restriction at all. |
 | Class | Fighter / Mage / Rogue — a deckbuilding *identity*, not a strict profession. Fighter = direct confrontation (knights, barbarians, paladins, monstrous bruisers). Mage = supernatural manipulation (wizards, priests, necromancers, witches). Rogue = indirect warfare (archers, assassins, scouts, spies, duelists) — archers live here, not under Fighter. |
-| Health, Attack | Same as v1 — Attack only matters once Equipment is assigned. |
+| Health, Attack | Attack only matters once Equipment is assigned (unchanged from v1) — but a Hero's own base Attack should now be **low or 0**, since a Weapon's `attackBonus` is meant to be the primary source of a Hero's Attack, not a bonus layered on top of an already-large base. **Open default / known exception:** the three original starter Heroes (Fighter 10, Mage 20, Rogue 15 base Attack) predate this convention and haven't been retconned — they still hit hard the moment *any* Equipment is assigned, weapon or not. Revisit those three numbers whenever they're touched again; every faction Hero authored from here on should follow the low/0-base convention. |
 | Passive | An always-on effect. **Open default:** built from a small curated set of templates (aura buff to a matching Faction/Race/Class, a first-spell-cheaper-per-turn discount, an on-reveal-enemy-card effect, etc.) rather than a free-form scripting language — matches how `CardEffect` is already a fixed set of `kind`s, not arbitrary code. The template set grows as new Heroes need new patterns. |
 | Hero Power | An activated effect using the same `CardEffect` shape as a Spell/Ability, Energy-costed, usable **once per turn** (not charge-based). |
 | Signature Ability *(optional)* | Same shape as Hero Power, but a stronger effect gated to a small number of uses **per match** (e.g. 1) instead of per turn. |
@@ -377,6 +387,12 @@ creature can hold anything" made it feel less special, not more:
   Equipment to attack at all** (preserves the v1 hook) — Equipment on
   an Armiger creature is a bonus, not a gate; that creature can already
   attack normally without it.
+- **Weapon is the primary source of a Hero's Attack** (§9) — a
+  Hero's own base Attack should be low/0, with the equipped Weapon's
+  `attackBonus` doing most of the work. Armor/Accessory/Mount pieces
+  are expected to mostly grant Health, damage reduction, or utility
+  effects rather than Attack, though nothing in the engine enforces
+  that split yet (categories themselves land in Phase F).
 
 ---
 

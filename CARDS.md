@@ -126,7 +126,7 @@ Only meaningful on Creature cards (`keywords: Keyword[]`). See DESIGN.md
 
 | Keyword | Effect |
 |---|---|
-| `ranged` | Can attack the enemy Hero directly even while the enemy has Vanguard creatures out (bypasses the Guard/Vanguard block). |
+| `ranged` | Can attack the enemy Hero directly even while the enemy has Vanguard creatures out (bypasses the Guard/Vanguard block). Also fires from outside melee range: a Ranged attacker never takes retaliation damage, no matter what it attacks. This is attacker-only — a Ranged creature that gets attacked still trades damage back normally. |
 | `charge` | Can attack the same turn it's played, ignoring summoning sickness. |
 | `battlecry` | Marks a card whose `onPlay` trigger represents a Battlecry effect (fires when played). Purely a label — the actual effect still comes from a `triggers: [{ on: "onPlay", ... }]` entry. |
 | `taunt` | While this creature is alive in Vanguard, enemies attacking a creature must target a Taunt creature first if one is present. |

@@ -356,3 +356,31 @@ describe("Counter", () => {
     expect(attacker.currentHp).toBe(0);
   });
 });
+
+describe("Ranged retaliation", () => {
+  it("a Ranged attacker takes no damage back even if the defender survives and could hit back", () => {
+    const state = makeState();
+    const archer = createCardInstance("arrow-archer", "player"); // 2 attack / 1 HP, ranged
+    archer.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = archer;
+    const defender = createCardInstance("footman", "opponent"); // 2 attack / 3 HP
+    state.players.opponent.board.vanguard[0] = defender;
+
+    declareCreatureAttack(state, "player", archer.instanceId, { type: "creature", instanceId: defender.instanceId });
+    expect(defender.currentHp).toBe(1); // took the archer's 2 damage, survived
+    expect(archer.currentHp).toBe(1); // took no retaliation despite the defender surviving with Attack
+  });
+
+  it("a Ranged creature on defense still trades damage back normally", () => {
+    const state = makeState();
+    const attacker = createCardInstance("footman", "player"); // melee, 2 attack / 3 HP
+    attacker.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = attacker;
+    const archer = createCardInstance("arrow-archer", "opponent"); // 2 attack / 1 HP, ranged
+    state.players.opponent.board.vanguard[0] = archer;
+
+    declareCreatureAttack(state, "player", attacker.instanceId, { type: "creature", instanceId: archer.instanceId });
+    expect(archer.currentHp).toBeLessThanOrEqual(0); // died to the melee attacker's 2 damage
+    expect(attacker.currentHp).toBe(1); // still took the archer's 2 retaliation damage on the way out
+  });
+});
