@@ -61,18 +61,52 @@ describe("resources are spent from the pool matching the card's archetype", () =
   });
 });
 
-describe("Support row (Phase A: placeholder, not yet reachable)", () => {
-  it("can't attack from Support even if otherwise eligible", () => {
+describe("creature row placement", () => {
+  it("plays into Vanguard by default", () => {
+    const state = makeState();
+    const footman = createCardInstance("footman", "player");
+    state.players.player.hand.push(footman);
+
+    const result = playCardFromHand(state, "player", footman.instanceId);
+    expect(result.ok).toBe(true);
+    expect(state.players.player.board.vanguard[0]?.instanceId).toBe(footman.instanceId);
+  });
+
+  it("plays into Support when explicitly requested", () => {
+    const state = makeState();
+    const archer = createCardInstance("arrow-archer", "player");
+    state.players.player.hand.push(archer);
+
+    const result = playCardFromHand(state, "player", archer.instanceId, { row: "support" });
+    expect(result.ok).toBe(true);
+    expect(state.players.player.board.support[0]?.instanceId).toBe(archer.instanceId);
+  });
+});
+
+describe("reach tiers: attacking from Support", () => {
+  it("a non-Ranged creature in Support cannot attack at all", () => {
+    const state = makeState();
+    const footman = createCardInstance("footman", "player");
+    footman.summonedTurn = 0;
+    state.players.player.board.support[0] = footman;
+
+    const result = declareCreatureAttack(state, "player", footman.instanceId, { type: "player" });
+    expect(result.ok).toBe(false);
+  });
+
+  it("a Ranged creature in Support can attack from there", () => {
     const state = makeState();
     const archer = createCardInstance("arrow-archer", "player");
     archer.summonedTurn = 0;
     state.players.player.board.support[0] = archer;
 
     const result = declareCreatureAttack(state, "player", archer.instanceId, { type: "player" });
-    expect(result.ok).toBe(false);
+    expect(result.ok).toBe(true);
   });
+});
 
-  it("can't be targeted by an enemy attack", () => {
+describe("reach tiers: targeting enemy Support", () => {
+  it("a Base (no reach keyword) attacker cannot target an enemy Support creature", () => {
     const state = makeState();
     const attacker = createCardInstance("footman", "player");
     attacker.summonedTurn = 0;
@@ -85,6 +119,101 @@ describe("Support row (Phase A: placeholder, not yet reachable)", () => {
       instanceId: hiding.instanceId,
     });
     expect(result.ok).toBe(false);
+  });
+
+  it("a Reach attacker can target an enemy Support creature directly, even through a full enemy Vanguard", () => {
+    const state = makeState();
+    const pikeman = createCardInstance("long-pikeman", "player");
+    pikeman.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = pikeman;
+    state.players.opponent.board.vanguard[0] = createCardInstance("footman", "opponent");
+    const hiding = createCardInstance("footman", "opponent");
+    state.players.opponent.board.support[0] = hiding;
+
+    const result = declareCreatureAttack(state, "player", pikeman.instanceId, {
+      type: "creature",
+      instanceId: hiding.instanceId,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("a Ranged attacker can also target an enemy Support creature directly", () => {
+    const state = makeState();
+    const archer = createCardInstance("arrow-archer", "player");
+    archer.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = archer;
+    const hiding = createCardInstance("footman", "opponent");
+    state.players.opponent.board.support[0] = hiding;
+
+    const result = declareCreatureAttack(state, "player", archer.instanceId, {
+      type: "creature",
+      instanceId: hiding.instanceId,
+    });
+    expect(result.ok).toBe(true);
+  });
+});
+
+describe("Building targeting: column protection", () => {
+  it("a Building is attackable once its own column is clear, even if other columns still have creatures", () => {
+    const state = makeState();
+    const attacker = createCardInstance("footman", "player");
+    attacker.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = attacker;
+    state.players.opponent.board.vanguard[1] = createCardInstance("footman", "opponent"); // column 1, not 0
+    const building = createCardInstance("gold-mine", "opponent");
+    state.players.opponent.board.buildings[0] = building;
+
+    const result = declareCreatureAttack(state, "player", attacker.instanceId, {
+      type: "building",
+      instanceId: building.instanceId,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("blocks a Building attack while its own column's Support slot is still occupied", () => {
+    const state = makeState();
+    const attacker = createCardInstance("footman", "player");
+    attacker.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = attacker;
+    state.players.opponent.board.support[0] = createCardInstance("footman", "opponent");
+    const building = createCardInstance("gold-mine", "opponent");
+    state.players.opponent.board.buildings[0] = building;
+
+    const result = declareCreatureAttack(state, "player", attacker.instanceId, {
+      type: "building",
+      instanceId: building.instanceId,
+    });
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe("Infiltrate", () => {
+  it("hits the player even with both enemy rows fully populated", () => {
+    const state = makeState();
+    const infiltrator = createCardInstance("shadow-infiltrator", "player");
+    infiltrator.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = infiltrator;
+    state.players.opponent.board.vanguard[0] = createCardInstance("footman", "opponent");
+    state.players.opponent.board.support[0] = createCardInstance("footman", "opponent");
+
+    const result = declareCreatureAttack(state, "player", infiltrator.instanceId, { type: "player" });
+    expect(result.ok).toBe(true);
+  });
+
+  it("hits a Building even while its own column is still populated", () => {
+    const state = makeState();
+    const infiltrator = createCardInstance("shadow-infiltrator", "player");
+    infiltrator.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = infiltrator;
+    state.players.opponent.board.vanguard[0] = createCardInstance("footman", "opponent");
+    const building = createCardInstance("gold-mine", "opponent");
+    state.players.opponent.board.buildings[0] = building;
+
+    const result = declareCreatureAttack(state, "player", infiltrator.instanceId, {
+      type: "building",
+      instanceId: building.instanceId,
+    });
+    expect(result.ok).toBe(true);
   });
 });
 
@@ -120,7 +249,7 @@ describe("targeting chain", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("lets a Ranged attacker bypass a full enemy Vanguard to hit the player", () => {
+  it("does NOT let a Ranged attacker bypass a populated enemy Vanguard to hit the player (only Infiltrate does)", () => {
     const state = makeState();
     const attacker = createCardInstance("arrow-archer", "player");
     attacker.summonedTurn = 0;
@@ -128,15 +257,26 @@ describe("targeting chain", () => {
     state.players.opponent.board.vanguard[0] = createCardInstance("footman", "opponent");
 
     const result = declareCreatureAttack(state, "player", attacker.instanceId, { type: "player" });
-    expect(result.ok).toBe(true);
+    expect(result.ok).toBe(false);
   });
 
-  it("blocks hitting Guard/Hero while the enemy Vanguard still has creatures and the attacker isn't Ranged", () => {
+  it("blocks hitting Guard/Hero while the enemy Vanguard still has creatures and the attacker isn't Infiltrate", () => {
     const state = makeState();
     const attacker = createCardInstance("footman", "player");
     attacker.summonedTurn = 0;
     state.players.player.board.vanguard[0] = attacker;
     state.players.opponent.board.vanguard[0] = createCardInstance("footman", "opponent");
+
+    const result = declareCreatureAttack(state, "player", attacker.instanceId, { type: "player" });
+    expect(result.ok).toBe(false);
+  });
+
+  it("blocks hitting the player while enemy Support still has a creature, even with Vanguard empty", () => {
+    const state = makeState();
+    const attacker = createCardInstance("footman", "player");
+    attacker.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = attacker;
+    state.players.opponent.board.support[0] = createCardInstance("footman", "opponent");
 
     const result = declareCreatureAttack(state, "player", attacker.instanceId, { type: "player" });
     expect(result.ok).toBe(false);

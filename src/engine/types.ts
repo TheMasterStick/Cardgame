@@ -17,6 +17,8 @@ export type CardArchetype =
 
 export type Keyword =
   | "ranged"
+  | "reach"
+  | "infiltrate"
   | "charge"
   | "battlecry"
   | "counter"

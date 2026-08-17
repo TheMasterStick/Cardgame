@@ -44,33 +44,84 @@ interface ValidationResult {
   reason?: string;
 }
 
+/** Which reach-tier keywords the attacker has (DESIGN.md §5). */
+export interface ReachProfile {
+  reach: boolean;
+  ranged: boolean;
+  infiltrate: boolean;
+}
+
+export function reachProfileOf(def: CreatureDefinition): ReachProfile {
+  return {
+    reach: def.keywords.includes("reach"),
+    ranged: def.keywords.includes("ranged"),
+    infiltrate: def.keywords.includes("infiltrate"),
+  };
+}
+
+const NO_REACH: ReachProfile = { reach: false, ranged: false, infiltrate: false };
+
+function checkTaunt(row: (CardInstance | null)[], targetInstanceId: string, rowLabel: string): ValidationResult {
+  const taunts = row.filter((c): c is CardInstance => c !== null && hasKeyword(c, "taunt"));
+  if (taunts.length > 0 && !taunts.some((c) => c.instanceId === targetInstanceId)) {
+    return { ok: false, reason: `An enemy Taunt creature in ${rowLabel} must be attacked first.` };
+  }
+  return { ok: true };
+}
+
+/**
+ * Reach-tier targeting (DESIGN.md §5): Base can only hit enemy Vanguard
+ * (subject to Taunt); Reach/Ranged can also hit enemy Support directly, even
+ * while Vanguard is populated (subject to Support's own Taunt); Infiltrate
+ * bypasses straight to Buildings/Guard/Hero regardless of enemy row state.
+ * Buildings are gated per-column (both rows in that column must be empty)
+ * rather than needing the whole board cleared like Guard/Hero.
+ */
 function validateTarget(
   state: GameState,
   attackerOwner: PlayerId,
-  isRanged: boolean,
+  reach: ReachProfile,
   target: AttackTarget,
 ): ValidationResult {
   const defenderOwner = otherPlayer(attackerOwner);
   const defenderBoard = state.players[defenderOwner].board;
-  const vanguardEmpty = defenderBoard.vanguard.every((c) => c === null);
 
   if (target.type === "creature") {
-    // Support isn't a legal target category yet — that unlocks with Reach/Ranged/Infiltrate
-    // in Phase B (DESIGN.md §5). Only Vanguard creatures can be attacked directly for now.
     const onVanguard = defenderBoard.vanguard.some((c) => c?.instanceId === target.instanceId);
-    if (!onVanguard) return { ok: false, reason: "Can only attack enemy Vanguard creatures directly." };
-    const taunts = defenderBoard.vanguard.filter(
-      (c): c is CardInstance => c !== null && hasKeyword(c, "taunt"),
-    );
-    if (taunts.length > 0 && !taunts.some((c) => c.instanceId === target.instanceId)) {
-      return { ok: false, reason: "An enemy Taunt creature must be attacked first." };
+    if (onVanguard) return checkTaunt(defenderBoard.vanguard, target.instanceId, "Vanguard");
+
+    const onSupport = defenderBoard.support.some((c) => c?.instanceId === target.instanceId);
+    if (onSupport) {
+      if (!reach.reach && !reach.ranged) {
+        return { ok: false, reason: "Can only reach enemy Support with Reach or Ranged." };
+      }
+      return checkTaunt(defenderBoard.support, target.instanceId, "Support");
+    }
+    return { ok: false, reason: "Target creature not found." };
+  }
+
+  if (reach.infiltrate) return { ok: true };
+
+  if (target.type === "building") {
+    const column = defenderBoard.buildings.findIndex((c) => c?.instanceId === target.instanceId);
+    if (column === -1) return { ok: false, reason: "Target Building not found." };
+    const columnClear = defenderBoard.vanguard[column] === null && defenderBoard.support[column] === null;
+    if (!columnClear) {
+      return {
+        ok: false,
+        reason: "That Building's column must be cleared first, or the attacker needs Infiltrate.",
+      };
     }
     return { ok: true };
   }
-  if (!vanguardEmpty && !isRanged) {
+
+  // target.type === "player"
+  const vanguardEmpty = defenderBoard.vanguard.every((c) => c === null);
+  const supportEmpty = defenderBoard.support.every((c) => c === null);
+  if (!vanguardEmpty || !supportEmpty) {
     return {
       ok: false,
-      reason: "Enemy Vanguard must be cleared first, or the attacker needs Ranged.",
+      reason: "Enemy Vanguard and Support must both be cleared first, or the attacker needs Infiltrate.",
     };
   }
   return { ok: true };
@@ -109,7 +160,10 @@ function resolveCreatureTrade(
   defenderInstanceId: string,
 ): void {
   const defenderBoard = state.players[defenderOwner].board;
-  const defender = defenderBoard.vanguard.find((c) => c?.instanceId === defenderInstanceId) ?? null;
+  const defender =
+    defenderBoard.vanguard.find((c) => c?.instanceId === defenderInstanceId) ??
+    defenderBoard.support.find((c) => c?.instanceId === defenderInstanceId) ??
+    null;
   if (!defender) return;
   const defenderAttack = getCreatureAttack(defender);
 
@@ -130,6 +184,33 @@ function resolveCreatureTrade(
   }
 }
 
+/**
+ * Non-mutating preview of whether declareCreatureAttack/declareHeroAttack
+ * would accept this target right now. The UI uses this to decide what to
+ * highlight as clickable during a pending attack, so it never lights up a
+ * target the engine would then reject.
+ */
+export function canAttack(
+  state: GameState,
+  attackerOwner: PlayerId,
+  attackerId: string | "hero",
+  target: AttackTarget,
+): boolean {
+  if (attackerId === "hero") {
+    return heroCanAttack(state, attackerOwner) && validateTarget(state, attackerOwner, NO_REACH, target).ok;
+  }
+  const board = state.players[attackerOwner].board;
+  const onVanguard = board.vanguard.find((c) => c?.instanceId === attackerId) ?? null;
+  const onSupport = onVanguard ? null : board.support.find((c) => c?.instanceId === attackerId) ?? null;
+  const attacker = onVanguard ?? onSupport;
+  if (!attacker) return false;
+  const def = CARD_DEFINITIONS[attacker.defId] as CreatureDefinition;
+  const reach = reachProfileOf(def);
+  if (onSupport && !reach.ranged) return false;
+  if (!creatureCanAttack(state, attacker)) return false;
+  return validateTarget(state, attackerOwner, reach, target).ok;
+}
+
 export function declareCreatureAttack(
   state: GameState,
   attackerOwner: PlayerId,
@@ -137,21 +218,26 @@ export function declareCreatureAttack(
   target: AttackTarget,
 ): ValidationResult {
   const board = state.players[attackerOwner].board;
-  const attacker = board.vanguard.find((c) => c?.instanceId === attackerInstanceId) ?? null;
-  if (!attacker) return { ok: false, reason: "Attacker not found in Vanguard (only Vanguard creatures can attack)." };
+  const onVanguard = board.vanguard.find((c) => c?.instanceId === attackerInstanceId) ?? null;
+  const onSupport = onVanguard ? null : board.support.find((c) => c?.instanceId === attackerInstanceId) ?? null;
+  const attacker = onVanguard ?? onSupport;
+  if (!attacker) return { ok: false, reason: "Attacker not found on the board." };
+  const def = CARD_DEFINITIONS[attacker.defId] as CreatureDefinition;
+  const reach = reachProfileOf(def);
+  if (onSupport && !reach.ranged) {
+    return { ok: false, reason: "Only Ranged creatures can attack from Support." };
+  }
   if (!creatureCanAttack(state, attacker)) {
     return { ok: false, reason: "This creature can't attack right now." };
   }
-  const def = CARD_DEFINITIONS[attacker.defId] as CreatureDefinition;
-  const isRanged = def.keywords.includes("ranged");
-  const validation = validateTarget(state, attackerOwner, isRanged, target);
+  const validation = validateTarget(state, attackerOwner, reach, target);
   if (!validation.ok) return validation;
 
   const attackerAttack = getCreatureAttack(attacker);
   const defenderOwner = otherPlayer(attackerOwner);
 
   if (target.type === "creature") {
-    resolveCreatureTrade(state, attackerOwner, attackerInstanceId, attackerAttack, isRanged, defenderOwner, target.instanceId);
+    resolveCreatureTrade(state, attackerOwner, attackerInstanceId, attackerAttack, reach.ranged, defenderOwner, target.instanceId);
   } else if (target.type === "building") {
     damageCard(state, defenderOwner, target.instanceId, attackerAttack);
   } else {
@@ -170,7 +256,7 @@ export function declareHeroAttack(
   if (!heroCanAttack(state, attackerOwner)) {
     return { ok: false, reason: "Hero can't attack right now (needs Equipment, once per turn)." };
   }
-  const validation = validateTarget(state, attackerOwner, false, target);
+  const validation = validateTarget(state, attackerOwner, NO_REACH, target);
   if (!validation.ok) return validation;
 
   const attackerAttack = getHeroAttack(state, attackerOwner);

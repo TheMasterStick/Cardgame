@@ -60,6 +60,8 @@ export const RARITY_LABELS: Record<Rarity, string> = {
 
 export const KEYWORD_LABELS: Record<Keyword, string> = {
   ranged: "Ranged",
+  reach: "Reach",
+  infiltrate: "Infiltrate",
   charge: "Charge",
   battlecry: "Battlecry",
   counter: "Counter",
@@ -77,6 +79,8 @@ export const KEYWORD_ICONS: Record<Keyword, string> = {
   revenge: "⚰️",
   charge: "⚡",
   ranged: "🏹",
+  reach: "🔱",
+  infiltrate: "🥷",
   counter: "⚔️",
   frenzy: "💢",
   immune: "✨",

@@ -108,6 +108,8 @@ export function endTurn(state: GameState): void {
 export interface PlayCardOptions {
   slotIndex?: number;
   target?: EffectTargetRef;
+  /** Creature only: which row to place it in. Defaults to "vanguard" (DESIGN.md §4 — any Creature may go in either row). */
+  row?: "vanguard" | "support";
 }
 
 /**
@@ -140,11 +142,12 @@ export function playCardFromHand(
   }
 
   let slot = -1;
+  const creatureRow = options.row ?? "vanguard";
   if (def.archetype === "creature") {
-    // Vanguard only for now — Support has no way to be deliberately placed into
-    // until Advance/Ranged land in Phase B (DESIGN.md §5/§17).
-    slot = findOpenSlot(player.board.vanguard, options.slotIndex);
-    if (slot === -1) return { ok: false, reason: "Vanguard is full." };
+    slot = findOpenSlot(player.board[creatureRow], options.slotIndex);
+    if (slot === -1) {
+      return { ok: false, reason: creatureRow === "vanguard" ? "Vanguard is full." : "Support is full." };
+    }
   } else if (def.archetype === "building") {
     slot = findOpenSlot(player.board.buildings, options.slotIndex);
     if (slot === -1) return { ok: false, reason: "No open Building slot." };
@@ -158,7 +161,7 @@ export function playCardFromHand(
 
   if (def.archetype === "creature") {
     card.summonedTurn = state.turnNumber;
-    player.board.vanguard[slot] = card;
+    player.board[creatureRow][slot] = card;
     for (const trigger of def.triggers) {
       if (trigger.on === "onPlay") resolveEffect(state, owner, trigger.effect, options.target ?? null);
     }

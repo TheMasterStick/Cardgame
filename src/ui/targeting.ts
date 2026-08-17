@@ -1,5 +1,5 @@
 import { CARD_DEFINITIONS } from "../data/cards";
-import type { CardEffect, CreatureDefinition, EffectTarget, GameState, PlayerId } from "../engine/types";
+import type { CardEffect, EffectTarget, GameState, PlayerId } from "../engine/types";
 
 const EXPLICIT_TARGET_CATEGORIES: EffectTarget[] = [
   "targetCreature",
@@ -36,6 +36,7 @@ export function effectAllowsPortraitTarget(effect: CardEffect): boolean {
 
 export type PendingAction =
   | { kind: "playCard"; instanceId: string }
+  | { kind: "placeCreature"; instanceId: string }
   | { kind: "activate"; slotIndex: number }
   | { kind: "attack"; attackerId: string | "hero" };
 
@@ -44,7 +45,7 @@ export type PendingAction =
  * seat, so target-side checks can hardcode player=own, opponent=enemy.
  */
 export function getPendingEffect(state: GameState, pending: PendingAction | null): CardEffect | null {
-  if (!pending || pending.kind === "attack") return null;
+  if (!pending || pending.kind === "attack" || pending.kind === "placeCreature") return null;
   if (pending.kind === "playCard") {
     const card = state.players.player.hand.find((c) => c.instanceId === pending.instanceId);
     if (!card) return null;
@@ -57,27 +58,6 @@ export function getPendingEffect(state: GameState, pending: PendingAction | null
   const def = CARD_DEFINITIONS[card.defId];
   if (def.archetype !== "spell" && def.archetype !== "ability") return null;
   return def.effect;
-}
-
-/**
- * Whether an attack-pending action (always human-initiated, from "player")
- * can legally reach the Buildings / Guard-Hero of `defenderOwner` right
- * now: the defender's Vanguard must be empty, unless the attacker is
- * Ranged. Mirrors the engine's own validateTarget rule so the UI doesn't
- * highlight targets it knows will be rejected.
- */
-export function canBypassVanguard(
-  state: GameState,
-  defenderOwner: PlayerId,
-  attackerId: string | "hero",
-): boolean {
-  const vanguardEmpty = state.players[defenderOwner].board.vanguard.every((c) => c === null);
-  if (vanguardEmpty) return true;
-  if (attackerId === "hero") return false;
-  const attacker = state.players.player.board.vanguard.find((c) => c?.instanceId === attackerId);
-  if (!attacker) return false;
-  const def = CARD_DEFINITIONS[attacker.defId] as CreatureDefinition;
-  return def.keywords.includes("ranged");
 }
 
 export function isEffectTargetable(

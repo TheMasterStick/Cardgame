@@ -4,12 +4,17 @@ import {
   declareCreatureAttack,
   declareHeroAttack,
   getCreatureAttack,
+  getHeroAttack,
   heroCanAttack,
+  reachProfileOf,
+  type AttackTarget,
+  type ReachProfile,
 } from "./combat";
-import type { EffectTargetRef } from "./effects";
+import { hasKeyword, type EffectTargetRef } from "./effects";
 import { activateSlotCard, costPoolFor, endTurn, playCardFromHand } from "./game";
 import {
   otherPlayer,
+  type BoardState,
   type CardEffect,
   type CardInstance,
   type CreatureDefinition,
@@ -97,7 +102,20 @@ function playMainPhase(state: GameState): void {
     for (const card of [...player.hand]) {
       const def = CARD_DEFINITIONS[card.defId];
       if (costPoolFor(player, def.archetype).pool.current < def.cost) continue;
-      if (def.archetype === "creature" && player.board.vanguard.every((c) => c !== null)) continue;
+
+      // Ranged creatures prefer Support (safe from base-tier attacks, still
+      // able to fight); everything else wants Vanguard. Fall back to
+      // whichever row still has room (DESIGN.md §4 — any Creature may
+      // occupy either row structurally).
+      let row: "vanguard" | "support" = "vanguard";
+      if (def.archetype === "creature") {
+        const isRanged = (def as CreatureDefinition).keywords.includes("ranged");
+        const preferred = isRanged ? "support" : "vanguard";
+        const fallback = preferred === "vanguard" ? "support" : "vanguard";
+        if (!player.board[preferred].every((c) => c !== null)) row = preferred;
+        else if (!player.board[fallback].every((c) => c !== null)) row = fallback;
+        else continue;
+      }
       if (def.archetype === "building" && player.board.buildings.every((c) => c !== null)) continue;
       if (
         (def.archetype === "spell" || def.archetype === "ability") &&
@@ -107,7 +125,7 @@ function playMainPhase(state: GameState): void {
       }
 
       const target = def.archetype === "creature" ? pickOnPlayTarget(state, AI) : null;
-      const result = playCardFromHand(state, AI, card.instanceId, { target });
+      const result = playCardFromHand(state, AI, card.instanceId, { target, row });
       if (result.ok) {
         playedSomething = true;
         break;
@@ -137,38 +155,86 @@ function playMainPhase(state: GameState): void {
   }
 }
 
-function playCombatPhase(state: GameState): void {
-  const player = state.players[AI];
+const NO_REACH: ReachProfile = { reach: false, ranged: false, infiltrate: false };
+
+/** Enemy creatures this reach tier can actually target, gated by Taunt per row (DESIGN.md §5). */
+function reachableCreatures(enemyBoard: BoardState, reach: ReachProfile): CardInstance[] {
+  const gateByTaunt = (row: CardInstance[]): CardInstance[] => {
+    const taunts = row.filter((c) => hasKeyword(c, "taunt"));
+    return taunts.length > 0 ? taunts : row;
+  };
+  const vanguard = gateByTaunt(alive(enemyBoard.vanguard));
+  if (!reach.reach && !reach.ranged) return vanguard;
+  return [...vanguard, ...gateByTaunt(alive(enemyBoard.support))];
+}
+
+function boardFullyClear(enemyBoard: BoardState): boolean {
+  return enemyBoard.vanguard.every((c) => c === null) && enemyBoard.support.every((c) => c === null);
+}
+
+/** Buildings whose own column is clear on both rows — attackable without Infiltrate (DESIGN.md §11). */
+function openBuildingColumns(enemyBoard: BoardState): CardInstance[] {
+  return enemyBoard.buildings.filter(
+    (c, i): c is CardInstance => c !== null && enemyBoard.vanguard[i] === null && enemyBoard.support[i] === null,
+  );
+}
+
+/** Picks the best legal target for an attacker with the given reach tier, or null to skip attacking. */
+function chooseAttackTarget(
+  state: GameState,
+  reach: ReachProfile,
+  attackerAttack: number,
+  attackerHp: number,
+): AttackTarget | null {
   const enemy = otherPlayer(AI);
+  const enemyBoard = state.players[enemy].board;
 
-  for (const card of [...player.board.vanguard]) {
-    if (!card || !creatureCanAttack(state, card)) continue;
-    const attack = getCreatureAttack(card);
-    const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
-    const isRanged = def.keywords.includes("ranged");
-    const enemyFront = alive(state.players[enemy].board.vanguard);
-
-    if (enemyFront.length === 0 || isRanged) {
-      declareCreatureAttack(state, AI, card.instanceId, { type: "player" });
-      continue;
-    }
-
-    const killable = enemyFront.filter((d) => attack >= (d.currentHp ?? 0));
+  const reachable = reachableCreatures(enemyBoard, reach);
+  if (reachable.length > 0) {
+    const killable = reachable.filter((d) => attackerAttack >= (d.currentHp ?? 0));
     const target =
       killable.length > 0
         ? killable.reduce((a, b) => ((a.currentHp ?? 0) >= (b.currentHp ?? 0) ? a : b))
-        : enemyFront.reduce((a, b) => (getCreatureAttack(a) <= getCreatureAttack(b) ? a : b));
-
-    const myHp = card.currentHp ?? 0;
-    const willSurvive = myHp > getCreatureAttack(target);
+        : reachable.reduce((a, b) => (getCreatureAttack(a) <= getCreatureAttack(b) ? a : b));
+    // A Ranged attacker never takes retaliation damage, so it always trades.
+    const willSurvive = reach.ranged || attackerHp > getCreatureAttack(target);
     if (killable.length > 0 || willSurvive) {
-      declareCreatureAttack(state, AI, card.instanceId, { type: "creature", instanceId: target.instanceId });
+      return { type: "creature", instanceId: target.instanceId };
     }
+    if (!reach.infiltrate) return null; // bad trade, and nothing bypasses it — sit this one out
+  }
+
+  if (reach.infiltrate) {
+    const anyBuilding = alive(enemyBoard.buildings)[0];
+    return anyBuilding ? { type: "building", instanceId: anyBuilding.instanceId } : { type: "player" };
+  }
+
+  const openBuildings = openBuildingColumns(enemyBoard);
+  if (openBuildings.length > 0) return { type: "building", instanceId: openBuildings[0].instanceId };
+
+  return boardFullyClear(enemyBoard) ? { type: "player" } : null;
+}
+
+function playCombatPhase(state: GameState): void {
+  const player = state.players[AI];
+
+  const vanguardAttackers = alive(player.board.vanguard);
+  const supportAttackers = alive(player.board.support).filter((c) =>
+    (CARD_DEFINITIONS[c.defId] as CreatureDefinition).keywords.includes("ranged"),
+  );
+
+  for (const card of [...vanguardAttackers, ...supportAttackers]) {
+    if (!creatureCanAttack(state, card)) continue;
+    const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
+    const reach = reachProfileOf(def);
+    const target = chooseAttackTarget(state, reach, getCreatureAttack(card), card.currentHp ?? 0);
+    if (target) declareCreatureAttack(state, AI, card.instanceId, target);
   }
 
   if (heroCanAttack(state, AI)) {
-    const enemyFrontEmpty = state.players[enemy].board.vanguard.every((c) => c === null);
-    if (enemyFrontEmpty) declareHeroAttack(state, AI, { type: "player" });
+    const hero = player.hero;
+    const target = chooseAttackTarget(state, NO_REACH, getHeroAttack(state, AI), hero.currentHp);
+    if (target) declareHeroAttack(state, AI, target);
   }
 }
 

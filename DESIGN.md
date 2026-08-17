@@ -9,15 +9,19 @@ This document is the single source of truth for the target ruleset.
 **Implementation status:** this is a v2 architecture, landing in
 phases (see §17). **Phase A is live**: the Vanguard/Support/Buildings
 board (§4), the Energy/Mana/Resources-by-archetype cost split (§2),
-Ready/Exhausted (§3), base Vanguard-first targeting (§5, no Reach/
-Ranged-tier/Infiltrate yet), and the Guard rename (§6, with faction
-display labels) are all in `src/engine` and the running UI today.
-Support exists as a real board row but nothing can be deliberately
-placed into it yet, and can't attack or be attacked — that's Phase B.
-Everything else below (Hero Passive/Power/Signature, Allegiance,
-Spell forms, the fuller keyword pool, Buildings-as-objects, the
-Equipment rework) is still spec only. CARDS.md/BACKEND.md describe
-what's live today; check them (not just this doc) for current schema.
+Ready/Exhausted (§3), and the Guard rename (§6, with faction display
+labels) are all in `src/engine` and the running UI today. **Phase B1
+is also live**: the full reach-tier targeting chain — Base/Reach/
+Ranged/Infiltrate (§5) — deliberate Vanguard-vs-Support placement when
+playing a creature, Support creatures attacking if they have Ranged,
+and column-based Building protection (§11) that's independent of the
+whole-board-clear rule Player/Hero targeting still uses. Wave B2 of
+Phase B (Protector, Flank, Formation, Advance, Push, Massive) is still
+spec only. Everything else below (Hero Passive/Power/Signature,
+Allegiance, Spell forms, the fuller keyword pool beyond what's listed
+above, Buildings-as-objects, the Equipment rework) is also still spec
+only. CARDS.md/BACKEND.md describe what's live today; check them (not
+just this doc) for current schema.
 
 Sections marked **Open default** are judgment calls made to keep the
 spec internally consistent and buildable; flag any of them if they
@@ -473,17 +477,19 @@ patterns layered on top of a working positional board, not core rules:
 - **Platform:** unchanged — TypeScript + React + Vite, optional
   Supabase backend, local hot-seat or vs. a heuristic AI. No live
   networked multiplayer yet.
-- **AI opponent:** the existing greedy heuristic needs to grow
-  position-awareness (Vanguard vs. Support placement, when to Advance,
-  when a Building is worth protecting) — scoped into whichever phase
-  introduces the mechanic it needs to evaluate.
+- **AI opponent:** the greedy heuristic now has basic position-
+  awareness from Wave B1 (places Ranged creatures into Support, picks
+  targets by reach tier, opportunistically hits column-clear
+  Buildings). Advance and Building-defense judgment are still open —
+  scoped into Wave B2, which introduces the mechanics they need.
 
 Suggested build order, each phase individually shippable/testable:
 
 | Phase | Scope |
 |---|---|
 | **A — Foundation** ✅ *(live)* | Board reshape (Vanguard+Support+columns), the 3-pool resource-by-archetype split, Ready/Exhausted, Guard rename (+ faction display labels), base reach-tier targeting (no Reach/Ranged/Infiltrate yet — just Vanguard-first, matches v1's existing chain shape). |
-| **B — Reach & position** | Reach, Ranged, Infiltrate, Protector, Flank, Formation, Advance, Push, Massive. Column-based Building protection. |
+| **B1 — Reach & position, wave 1** ✅ *(live)* | Reach, Ranged, Infiltrate keywords and the full targeting chain they unlock (§5). Deliberate Vanguard-vs-Support placement on play. Support creatures can attack if Ranged. Column-based Building protection (§11), independent of the whole-board-clear rule for Player/Hero. |
+| **B2 — Reach & position, wave 2** | Protector, Flank, Formation, Advance, Push, Massive. |
 | **C — Spell forms & Hero rework** | Instant/Ritual/Charged split for Spells. Hero Passive/Power/Signature. Allegiance deckbuilding validation. |
 | **D — Keyword expansion** | Stealth, Ward, Cleave, Drain, Bloodied, Summon (+ the `summonCreature` effect kind), Warcry rename. |
 | **E — Buildings as objects** | Durability/attackability, activated abilities, On Construction triggers, enemy interaction (Siege/Sabotage). |

@@ -1,10 +1,10 @@
 import type { CSSProperties, ReactNode } from "react";
 import { CARD_DEFINITIONS } from "../../data/cards";
 import { guardLabel } from "../../data/taxonomy";
-import { creatureCanAttack, heroCanAttack } from "../../engine/combat";
-import type { CardInstance, GameState, HeroCardDefinition, PlayerId } from "../../engine/types";
+import { canAttack, creatureCanAttack, heroCanAttack } from "../../engine/combat";
+import type { CardInstance, CreatureDefinition, GameState, HeroCardDefinition, PlayerId } from "../../engine/types";
 import { BOARD_THEME, cssImage } from "../../data/theme";
-import { canBypassVanguard, getPendingEffect, isEffectTargetable, type PendingAction } from "../targeting";
+import { getPendingEffect, isEffectTargetable, type PendingAction } from "../targeting";
 import { CardView } from "./CardView";
 
 interface PlayerBoardProps {
@@ -12,14 +12,23 @@ interface PlayerBoardProps {
   owner: PlayerId;
   isEnemy: boolean;
   pending: PendingAction | null;
-  onVanguardClick: (owner: PlayerId, instanceId: string) => void;
+  onCreatureClick: (owner: PlayerId, instanceId: string) => void;
   onBuildingClick: (owner: PlayerId, instanceId: string) => void;
   onSlotClick: (owner: PlayerId, slotIndex: number) => void;
   onPortraitClick: (owner: PlayerId) => void;
+  onPlaceCreature: (owner: PlayerId, row: "vanguard" | "support", slotIndex: number) => void;
 }
 
 function Slot({ children }: { children?: ReactNode }) {
   return <div className={`slot ${children ? "" : "slot--empty"}`}>{children}</div>;
+}
+
+function PlaceableSlot({ onClick }: { onClick: () => void }) {
+  return (
+    <div className="slot slot--placeable" onClick={onClick}>
+      +
+    </div>
+  );
 }
 
 export function PlayerBoard({
@@ -27,20 +36,22 @@ export function PlayerBoard({
   owner,
   isEnemy,
   pending,
-  onVanguardClick,
+  onCreatureClick,
   onBuildingClick,
   onSlotClick,
   onPortraitClick,
+  onPlaceCreature,
 }: PlayerBoardProps) {
   const playerState = state.players[owner];
   const pendingEffect = getPendingEffect(state, pending);
   const heroDef = CARD_DEFINITIONS[playerState.hero.defId] as HeroCardDefinition | undefined;
 
   const canInitiate = !pending && owner === "player" && state.activePlayer === "player" && !state.winner;
+  const canPlaceHere = pending?.kind === "placeCreature" && owner === "player";
 
   let portraitClickable = false;
   if (pending?.kind === "attack") {
-    portraitClickable = owner === "opponent" && canBypassVanguard(state, owner, pending.attackerId);
+    portraitClickable = owner === "opponent" && canAttack(state, owner, pending.attackerId, { type: "player" });
   } else if (pending && pendingEffect) {
     portraitClickable = isEffectTargetable(pendingEffect, "portrait", owner);
   } else if (canInitiate) {
@@ -61,7 +72,9 @@ export function PlayerBoard({
           let clickable = false;
           if (card) {
             if (pending?.kind === "attack") {
-              clickable = owner === "opponent" && canBypassVanguard(state, owner, pending.attackerId);
+              clickable =
+                owner === "opponent" &&
+                canAttack(state, owner, pending.attackerId, { type: "building", instanceId: card.instanceId });
             } else if (pending && pendingEffect) {
               clickable = isEffectTargetable(pendingEffect, "building", owner);
             }
@@ -123,29 +136,56 @@ export function PlayerBoard({
         ))}
       </div>
 
-      <div className="row row--support" title="Support: can't attack or be attacked yet — lands in a later phase.">
-        {playerState.board.support.map((card, i) => (
-          <Slot key={i}>{card && <CardView instance={card} />}</Slot>
-        ))}
+      <div className="row row--support" title="Support: backline. Only Ranged creatures can attack from here.">
+        {playerState.board.support.map((card, i) => {
+          if (!card) {
+            return <Slot key={i}>{canPlaceHere && <PlaceableSlot onClick={() => onPlaceCreature(owner, "support", i)} />}</Slot>;
+          }
+          let clickable = false;
+          if (pending?.kind === "attack") {
+            clickable =
+              owner === "opponent" &&
+              canAttack(state, owner, pending.attackerId, { type: "creature", instanceId: card.instanceId });
+          } else if (pending && pendingEffect) {
+            clickable = isEffectTargetable(pendingEffect, "creature", owner);
+          } else if (canInitiate) {
+            const isRanged = (CARD_DEFINITIONS[card.defId] as CreatureDefinition).keywords.includes("ranged");
+            clickable = isRanged && creatureCanAttack(state, card);
+          }
+          return (
+            <Slot key={i}>
+              <CardView
+                instance={card}
+                highlighted={clickable}
+                onClick={clickable ? () => onCreatureClick(owner, card.instanceId) : undefined}
+              />
+            </Slot>
+          );
+        })}
       </div>
 
       <div className="row row--vanguard">
         {playerState.board.vanguard.map((card, i) => {
+          if (!card) {
+            return <Slot key={i}>{canPlaceHere && <PlaceableSlot onClick={() => onPlaceCreature(owner, "vanguard", i)} />}</Slot>;
+          }
           let clickable = false;
-          if (card) {
-            if (pending?.kind === "attack") clickable = owner === "opponent";
-            else if (pending && pendingEffect) clickable = isEffectTargetable(pendingEffect, "creature", owner);
-            else if (canInitiate) clickable = creatureCanAttack(state, card);
+          if (pending?.kind === "attack") {
+            clickable =
+              owner === "opponent" &&
+              canAttack(state, owner, pending.attackerId, { type: "creature", instanceId: card.instanceId });
+          } else if (pending && pendingEffect) {
+            clickable = isEffectTargetable(pendingEffect, "creature", owner);
+          } else if (canInitiate) {
+            clickable = creatureCanAttack(state, card);
           }
           return (
             <Slot key={i}>
-              {card && (
-                <CardView
-                  instance={card}
-                  highlighted={clickable}
-                  onClick={clickable ? () => onVanguardClick(owner, card.instanceId) : undefined}
-                />
-              )}
+              <CardView
+                instance={card}
+                highlighted={clickable}
+                onClick={clickable ? () => onCreatureClick(owner, card.instanceId) : undefined}
+              />
             </Slot>
           );
         })}

@@ -131,7 +131,7 @@ const buildings: BuildingDefinition[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Creatures — Front Row.
+// Creatures — Vanguard or Support (see game.ts playCardFromHand `row` option).
 // ---------------------------------------------------------------------------
 
 const creatures: CreatureDefinition[] = [
@@ -177,7 +177,7 @@ const creatures: CreatureDefinition[] = [
     attack: 2,
     hp: 1,
     keywords: ["ranged"],
-    text: "Ranged: can attack the Back Row through a full enemy Front Row.",
+    text: "Ranged: can attack from Support, and can strike enemy Support directly. Never takes retaliation damage.",
     triggers: [],
   },
   {
@@ -190,6 +190,30 @@ const creatures: CreatureDefinition[] = [
     hp: 3,
     keywords: ["ranged"],
     text: "Ranged.",
+    triggers: [],
+  },
+  {
+    id: "long-pikeman",
+    name: "Long Pikeman",
+    archetype: "creature",
+    cost: 2,
+    rarity: "uncommon",
+    attack: 2,
+    hp: 3,
+    keywords: ["reach"],
+    text: "Reach: can strike enemy Support directly, even through a full enemy Vanguard.",
+    triggers: [],
+  },
+  {
+    id: "shadow-infiltrator",
+    name: "Shadow Infiltrator",
+    archetype: "creature",
+    cost: 3,
+    rarity: "rare",
+    attack: 3,
+    hp: 2,
+    keywords: ["infiltrate"],
+    text: "Infiltrate: can strike enemy Buildings, Guard, or Hero directly, regardless of the enemy board state.",
     triggers: [],
   },
   {
@@ -284,7 +308,7 @@ const creatures: CreatureDefinition[] = [
     attack: 6,
     hp: 6,
     keywords: ["ranged"],
-    text: "Ranged. On Play: deal 2 damage to all enemy Front Row creatures.",
+    text: "Ranged. On Play: deal 2 damage to all enemy creatures.",
     triggers: [{ on: "onPlay", effect: { kind: "damage", amount: 2, target: "allEnemyCreatures" } }],
   },
   {
@@ -387,7 +411,7 @@ const spells: SpellDefinition[] = [
     rarity: "epic",
     activateCost: 3,
     charges: 1,
-    text: "Activate (3 Mana): deal 2 damage to all enemy Front Row creatures.",
+    text: "Activate (3 Mana): deal 2 damage to all enemy creatures.",
     effect: { kind: "damage", amount: 2, target: "allEnemyCreatures" },
   },
   {

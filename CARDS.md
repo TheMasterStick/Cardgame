@@ -126,10 +126,12 @@ Only meaningful on Creature cards (`keywords: Keyword[]`). See DESIGN.md
 
 | Keyword | Effect |
 |---|---|
-| `ranged` | Can attack the enemy Hero directly even while the enemy has Vanguard creatures out (bypasses the Guard/Vanguard block). Also fires from outside melee range: a Ranged attacker never takes retaliation damage, no matter what it attacks. This is attacker-only — a Ranged creature that gets attacked still trades damage back normally. |
+| `ranged` | Lets a creature attack from Support (the only way a Support creature can attack at all), and can strike enemy Support creatures directly even while the enemy Vanguard is populated. Also fires from outside melee range: a Ranged attacker never takes retaliation damage, no matter what it attacks. This is attacker-only — a Ranged creature that gets attacked still trades damage back normally. Does **not** by itself bypass a populated enemy Vanguard/Support to hit Buildings/Guard/Hero — that needs Infiltrate. |
+| `reach` | Same enemy-Support-targeting reach as Ranged, but doesn't grant attacking from Support — a Reach creature must still be in Vanguard to attack at all. |
+| `infiltrate` | Can strike enemy Buildings/Guard/Hero directly regardless of the enemy board's row state. Doesn't grant Support-row targeting by itself — pair with Reach/Ranged on the same card for that. |
 | `charge` | Can attack the same turn it's played, ignoring summoning sickness. |
 | `battlecry` | Marks a card whose `onPlay` trigger represents a Battlecry effect (fires when played). Purely a label — the actual effect still comes from a `triggers: [{ on: "onPlay", ... }]` entry. |
-| `taunt` | While this creature is alive in Vanguard, enemies attacking a creature must target a Taunt creature first if one is present. |
+| `taunt` | While alive, forces enemy attackers to target it first among the creatures in whichever row is actually being attacked — a Vanguard Taunt gates Vanguard-tier attacks, a Support Taunt gates Support-tier attacks (reachable only via Reach/Ranged) the same way. Doesn't affect Building/Guard/Hero targeting. |
 | `counter` | Marks a card whose `onDefend` trigger fires when it's attacked (pair with a `triggers: [{ on: "onDefend", ... }]` entry, e.g. reflect damage back at the attacker). |
 | `revenge` | Marks a card whose `onDeath` trigger fires when it dies (pair with a `triggers: [{ on: "onDeath", ... }]` entry). |
 | `frenzy` | Every time this creature takes damage and survives, its Attack permanently increases by the damage amount taken. Built into the engine — no trigger needed, just the keyword. |
@@ -140,8 +142,23 @@ Only meaningful on Creature cards (`keywords: Keyword[]`). See DESIGN.md
 matching `triggers` entry (`onPlay`, `onDefend`, `onDeath`
 respectively) — the keyword itself doesn't do anything without the
 trigger. `taunt`, `frenzy`, `immune`, and `poison` are fully handled by
-the engine from the keyword alone. `ranged` and `charge` are also
-engine-handled, no trigger needed.
+the engine from the keyword alone. `ranged`, `reach`, `infiltrate`, and
+`charge` are also engine-handled, no trigger needed.
+
+**Reach-tier targeting chain** (full writeup: DESIGN.md §5): Base (no
+reach keyword) can only target enemy Vanguard, subject to Taunt; Reach
+and Ranged can also target enemy Support directly; Infiltrate can hit
+Buildings/Guard/Hero regardless of enemy row state. Without Infiltrate,
+Buildings/Guard/Hero become legal targets only once the enemy Vanguard
+**and** Support are both empty — except Buildings, which use
+**column** protection instead: a Building is attackable once **both**
+rows in its own column are empty, independent of what's happening in
+other columns (DESIGN.md §11).
+
+**Creature row placement:** `playCardFromHand` (see `game.ts`) takes
+an optional `row: "vanguard" | "support"` in its options, defaulting
+to `"vanguard"`. Any creature can be played into either row — only
+attacking from Support requires Ranged.
 
 ## Elements
 
@@ -261,8 +278,9 @@ drop its JSON output straight into the array in
 > `troll`, `dryad`, `fairy`, `harpy`, `fiend`, `vampire` — only
 > meaningful on `hero`/`creature`). Hero cards additionally need
 > `attack`, `hp`. Creatures additionally need `attack`, `hp`,
-> `keywords` (array, any of `ranged`, `charge`, `battlecry`, `taunt`,
-> `counter`, `revenge`, `frenzy`, `immune`, `poison`), `triggers`
+> `keywords` (array, any of `ranged`, `reach`, `infiltrate`, `charge`,
+> `battlecry`, `taunt`, `counter`, `revenge`, `frenzy`, `immune`,
+> `poison`), `triggers`
 > (array of `{on, effect}`, `on` one of
 > `onPlay`/`onAttack`/`onDeath`/`onDefend`/`startOfTurn`/`endOfTurn`).
 > Buildings need `hp` and `triggers`. Spells/abilities need

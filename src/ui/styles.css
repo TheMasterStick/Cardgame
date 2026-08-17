@@ -160,9 +160,9 @@ body {
   align-items: stretch;
 }
 
-/* Support can't attack or be attacked yet (DESIGN.md §5/§17 Phase B) — dimmed to read as inert for now. */
+/* Support is a full backline row (DESIGN.md §5) — only lightly muted so it still reads as "behind" Vanguard. */
 .row--support {
-  opacity: 0.5;
+  opacity: 0.85;
 }
 
 .hero-column {
@@ -189,6 +189,20 @@ body {
   min-height: 24px;
   border: 1px dashed var(--border);
   opacity: 0.5;
+}
+
+/* Clickable empty slot shown while placing a creature from hand (row choice, DESIGN.md §4). */
+.slot--placeable {
+  min-height: 24px;
+  border: 1px dashed var(--accent);
+  opacity: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent);
+  font-size: 1rem;
+  font-weight: bold;
 }
 
 .portrait {

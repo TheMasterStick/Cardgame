@@ -195,12 +195,28 @@ export default function App() {
     if (def.archetype === "creature" || def.archetype === "building") {
       const trigger = def.triggers.find((t) => t.on === "onPlay");
       if (trigger && effectNeedsExplicitTarget(trigger.effect)) {
+        // A creature that also needs an onPlay target skips row choice and
+        // always lands in Vanguard — combining the two pending steps is
+        // deferred (Phase B1 scope; DESIGN.md §17 Phase B).
         setPending({ kind: "playCard", instanceId });
         return;
       }
     }
+    if (def.archetype === "creature") {
+      setPending({ kind: "placeCreature", instanceId });
+      return;
+    }
     const result = playCardFromHand(state, "player", instanceId);
     if (!result.ok) fail(result.reason);
+    commit();
+  }
+
+  function handlePlaceCreature(owner: PlayerId, row: "vanguard" | "support", slotIndex: number) {
+    const state = gameRef.current;
+    if (!state || !pending || pending.kind !== "placeCreature" || owner !== "player") return;
+    const result = playCardFromHand(state, "player", pending.instanceId, { row, slotIndex });
+    if (!result.ok) fail(result.reason);
+    setPending(null);
     commit();
   }
 
@@ -225,7 +241,7 @@ export default function App() {
     commit();
   }
 
-  function handleVanguardClick(owner: PlayerId, instanceId: string) {
+  function handleCreatureClick(owner: PlayerId, instanceId: string) {
     const state = gameRef.current;
     if (!state) return;
     if (pending) {
@@ -233,7 +249,9 @@ export default function App() {
       return;
     }
     if (owner !== "player" || state.activePlayer !== "player" || state.winner) return;
-    const card = state.players.player.board.vanguard.find((c) => c?.instanceId === instanceId);
+    const card =
+      state.players.player.board.vanguard.find((c) => c?.instanceId === instanceId) ??
+      state.players.player.board.support.find((c) => c?.instanceId === instanceId);
     if (card && creatureCanAttack(state, card)) {
       setPending({ kind: "attack", attackerId: instanceId });
     }
@@ -275,6 +293,7 @@ export default function App() {
       commit();
       return;
     }
+    if (pending.kind === "placeCreature") return; // resolved via handlePlaceCreature, not this path
 
     const targetRef: EffectTargetRef = { kind: "card", owner, instanceId };
     const result =
@@ -305,6 +324,7 @@ export default function App() {
       commit();
       return;
     }
+    if (pending.kind === "placeCreature") return; // resolved via handlePlaceCreature, not this path
 
     const targetRef: EffectTargetRef = { kind: "player", owner };
     const result =
@@ -428,10 +448,11 @@ export default function App() {
         owner="opponent"
         isEnemy
         pending={pending}
-        onVanguardClick={handleVanguardClick}
+        onCreatureClick={handleCreatureClick}
         onBuildingClick={handleBuildingClick}
         onSlotClick={handleSlotClick}
         onPortraitClick={handlePortraitClick}
+        onPlaceCreature={handlePlaceCreature}
       />
 
       <PlayerBoard
@@ -439,10 +460,11 @@ export default function App() {
         owner="player"
         isEnemy={false}
         pending={pending}
-        onVanguardClick={handleVanguardClick}
+        onCreatureClick={handleCreatureClick}
         onBuildingClick={handleBuildingClick}
         onSlotClick={handleSlotClick}
         onPortraitClick={handlePortraitClick}
+        onPlaceCreature={handlePlaceCreature}
       />
       <ResourceBar playerState={state.players.player} label="You" />
 
