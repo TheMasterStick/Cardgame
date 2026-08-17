@@ -30,7 +30,7 @@ function isValidEffect(effect: unknown): effect is CardEffect {
   if (EFFECT_KINDS_NEEDING_TARGET.has(kind) && typeof effect.target !== "string") return false;
   if ((kind === "damage" || kind === "heal") && typeof effect.amount !== "number") return false;
   if (kind === "applyStatus" && (typeof effect.status !== "string" || typeof effect.amount !== "number")) return false;
-  if ((kind === "drawCard" || kind === "gainMilitia") && typeof effect.amount !== "number") return false;
+  if ((kind === "drawCard" || kind === "gainGuard") && typeof effect.amount !== "number") return false;
   if (kind === "gainCap" && (typeof effect.pool !== "string" || typeof effect.amount !== "number")) return false;
 
   return true;

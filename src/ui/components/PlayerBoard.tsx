@@ -1,9 +1,10 @@
 import type { CSSProperties, ReactNode } from "react";
 import { CARD_DEFINITIONS } from "../../data/cards";
+import { guardLabel } from "../../data/taxonomy";
 import { creatureCanAttack, heroCanAttack } from "../../engine/combat";
 import type { CardInstance, GameState, HeroCardDefinition, PlayerId } from "../../engine/types";
 import { BOARD_THEME, cssImage } from "../../data/theme";
-import { canBypassFrontRow, getPendingEffect, isEffectTargetable, type PendingAction } from "../targeting";
+import { canBypassVanguard, getPendingEffect, isEffectTargetable, type PendingAction } from "../targeting";
 import { CardView } from "./CardView";
 
 interface PlayerBoardProps {
@@ -11,8 +12,8 @@ interface PlayerBoardProps {
   owner: PlayerId;
   isEnemy: boolean;
   pending: PendingAction | null;
-  onFrontRowClick: (owner: PlayerId, instanceId: string) => void;
-  onBackRowClick: (owner: PlayerId, instanceId: string) => void;
+  onVanguardClick: (owner: PlayerId, instanceId: string) => void;
+  onBuildingClick: (owner: PlayerId, instanceId: string) => void;
   onSlotClick: (owner: PlayerId, slotIndex: number) => void;
   onPortraitClick: (owner: PlayerId) => void;
 }
@@ -26,8 +27,8 @@ export function PlayerBoard({
   owner,
   isEnemy,
   pending,
-  onFrontRowClick,
-  onBackRowClick,
+  onVanguardClick,
+  onBuildingClick,
   onSlotClick,
   onPortraitClick,
 }: PlayerBoardProps) {
@@ -39,7 +40,7 @@ export function PlayerBoard({
 
   let portraitClickable = false;
   if (pending?.kind === "attack") {
-    portraitClickable = owner === "opponent" && canBypassFrontRow(state, owner, pending.attackerId);
+    portraitClickable = owner === "opponent" && canBypassVanguard(state, owner, pending.attackerId);
   } else if (pending && pendingEffect) {
     portraitClickable = isEffectTargetable(pendingEffect, "portrait", owner);
   } else if (canInitiate) {
@@ -55,12 +56,12 @@ export function PlayerBoard({
       className={`player-board ${isEnemy ? "player-board--enemy" : "player-board--own"}`}
       style={{ "--board-bg-image": boardBgImage } as CSSProperties}
     >
-      <div className="row row--back">
-        {playerState.board.backRow.map((card, i) => {
+      <div className="row row--buildings">
+        {playerState.board.buildings.map((card, i) => {
           let clickable = false;
           if (card) {
             if (pending?.kind === "attack") {
-              clickable = owner === "opponent" && canBypassFrontRow(state, owner, pending.attackerId);
+              clickable = owner === "opponent" && canBypassVanguard(state, owner, pending.attackerId);
             } else if (pending && pendingEffect) {
               clickable = isEffectTargetable(pendingEffect, "building", owner);
             }
@@ -71,7 +72,7 @@ export function PlayerBoard({
                 <CardView
                   instance={card}
                   highlighted={clickable}
-                  onClick={clickable ? () => onBackRowClick(owner, card.instanceId) : undefined}
+                  onClick={clickable ? () => onBuildingClick(owner, card.instanceId) : undefined}
                 />
               )}
             </Slot>
@@ -92,7 +93,9 @@ export function PlayerBoard({
           >
             <div className="portrait__name">{playerState.hero.name}</div>
             <div className="portrait__hp">HP {playerState.hero.currentHp}/{playerState.hero.maxHp}</div>
-            <div className="portrait__militia">Militia {playerState.militia.current}/{playerState.militia.max}</div>
+            <div className="portrait__guard">
+              {guardLabel(heroDef?.faction)} {playerState.guard.current}/{playerState.guard.max}
+            </div>
             {playerState.board.equipment && (
               <div className="portrait__attack">
                 ⚔ {playerState.hero.baseAttack +
@@ -120,8 +123,14 @@ export function PlayerBoard({
         ))}
       </div>
 
-      <div className="row row--front">
-        {playerState.board.frontRow.map((card, i) => {
+      <div className="row row--support" title="Support: can't attack or be attacked yet — lands in a later phase.">
+        {playerState.board.support.map((card, i) => (
+          <Slot key={i}>{card && <CardView instance={card} />}</Slot>
+        ))}
+      </div>
+
+      <div className="row row--vanguard">
+        {playerState.board.vanguard.map((card, i) => {
           let clickable = false;
           if (card) {
             if (pending?.kind === "attack") clickable = owner === "opponent";
@@ -134,7 +143,7 @@ export function PlayerBoard({
                 <CardView
                   instance={card}
                   highlighted={clickable}
-                  onClick={clickable ? () => onFrontRowClick(owner, card.instanceId) : undefined}
+                  onClick={clickable ? () => onVanguardClick(owner, card.instanceId) : undefined}
                 />
               )}
             </Slot>

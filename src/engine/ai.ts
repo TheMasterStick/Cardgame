@@ -7,7 +7,7 @@ import {
   heroCanAttack,
 } from "./combat";
 import type { EffectTargetRef } from "./effects";
-import { activateSlotCard, endTurn, playCardFromHand } from "./game";
+import { activateSlotCard, costPoolFor, endTurn, playCardFromHand } from "./game";
 import {
   otherPlayer,
   type CardEffect,
@@ -31,7 +31,7 @@ function creatureMaxHp(card: CardInstance): number {
 /** Picks a reasonable target for an onPlay battlecry-style effect: the weakest enemy creature. */
 function pickOnPlayTarget(state: GameState, owner: PlayerId): EffectTargetRef {
   const enemy = otherPlayer(owner);
-  const enemyFront = alive(state.players[enemy].board.frontRow);
+  const enemyFront = alive(state.players[enemy].board.vanguard);
   if (enemyFront.length === 0) return null;
   const weakest = enemyFront.reduce((a, b) => ((a.currentHp ?? Infinity) <= (b.currentHp ?? Infinity) ? a : b));
   return { kind: "card", owner: enemy, instanceId: weakest.instanceId };
@@ -47,22 +47,22 @@ function pickActivationTarget(state: GameState, effect: CardEffect): EffectTarge
         return null;
       }
       if (effect.target === "targetPlayer") {
-        const frontEmpty = state.players[enemy].board.frontRow.every((c) => c === null);
+        const frontEmpty = state.players[enemy].board.vanguard.every((c) => c === null);
         return frontEmpty ? { kind: "player", owner: enemy } : "skip";
       }
-      const enemyFront = alive(state.players[enemy].board.frontRow);
+      const enemyFront = alive(state.players[enemy].board.vanguard);
       if (enemyFront.length > 0) {
         const weakest = enemyFront.reduce((a, b) => ((a.currentHp ?? Infinity) <= (b.currentHp ?? Infinity) ? a : b));
         return { kind: "card", owner: enemy, instanceId: weakest.instanceId };
       }
       if (effect.target === "targetBuilding" || effect.target === "targetCreatureOrBuilding") {
-        const enemyBack = alive(state.players[enemy].board.backRow);
-        if (enemyBack.length > 0) return { kind: "card", owner: enemy, instanceId: enemyBack[0].instanceId };
+        const enemyBuildings = alive(state.players[enemy].board.buildings);
+        if (enemyBuildings.length > 0) return { kind: "card", owner: enemy, instanceId: enemyBuildings[0].instanceId };
       }
       return "skip";
     }
     case "applyStatus": {
-      const enemyFront = alive(state.players[enemy].board.frontRow);
+      const enemyFront = alive(state.players[enemy].board.vanguard);
       if (enemyFront.length === 0) return "skip";
       return { kind: "card", owner: enemy, instanceId: enemyFront[0].instanceId };
     }
@@ -71,18 +71,18 @@ function pickActivationTarget(state: GameState, effect: CardEffect): EffectTarge
         const hero = state.players[AI].hero;
         return hero.currentHp >= hero.maxHp ? "skip" : null;
       }
-      const damaged = alive(state.players[AI].board.frontRow).find(
+      const damaged = alive(state.players[AI].board.vanguard).find(
         (c) => (c.currentHp ?? 0) < creatureMaxHp(c),
       );
       return damaged ? { kind: "card", owner: AI, instanceId: damaged.instanceId } : "skip";
     }
     case "buff": {
       if (effect.target === "allFriendlyCreatures") return null;
-      const ownFront = alive(state.players[AI].board.frontRow);
+      const ownFront = alive(state.players[AI].board.vanguard);
       return ownFront.length > 0 ? { kind: "card", owner: AI, instanceId: ownFront[0].instanceId } : "skip";
     }
     case "drawCard":
-    case "gainMilitia":
+    case "gainGuard":
     case "gainCap":
       return null;
   }
@@ -96,9 +96,9 @@ function playMainPhase(state: GameState): void {
     playedSomething = false;
     for (const card of [...player.hand]) {
       const def = CARD_DEFINITIONS[card.defId];
-      if (player.resources.current < def.cost) continue;
-      if (def.archetype === "creature" && player.board.frontRow.every((c) => c !== null)) continue;
-      if (def.archetype === "building" && player.board.backRow.every((c) => c !== null)) continue;
+      if (costPoolFor(player, def.archetype).pool.current < def.cost) continue;
+      if (def.archetype === "creature" && player.board.vanguard.every((c) => c !== null)) continue;
+      if (def.archetype === "building" && player.board.buildings.every((c) => c !== null)) continue;
       if (
         (def.archetype === "spell" || def.archetype === "ability") &&
         player.board.spellAbilitySlots.every((c) => c !== null)
@@ -141,12 +141,12 @@ function playCombatPhase(state: GameState): void {
   const player = state.players[AI];
   const enemy = otherPlayer(AI);
 
-  for (const card of [...player.board.frontRow]) {
+  for (const card of [...player.board.vanguard]) {
     if (!card || !creatureCanAttack(state, card)) continue;
     const attack = getCreatureAttack(card);
     const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
     const isRanged = def.keywords.includes("ranged");
-    const enemyFront = alive(state.players[enemy].board.frontRow);
+    const enemyFront = alive(state.players[enemy].board.vanguard);
 
     if (enemyFront.length === 0 || isRanged) {
       declareCreatureAttack(state, AI, card.instanceId, { type: "player" });
@@ -167,7 +167,7 @@ function playCombatPhase(state: GameState): void {
   }
 
   if (heroCanAttack(state, AI)) {
-    const enemyFrontEmpty = state.players[enemy].board.frontRow.every((c) => c === null);
+    const enemyFrontEmpty = state.players[enemy].board.vanguard.every((c) => c === null);
     if (enemyFrontEmpty) declareHeroAttack(state, AI, { type: "player" });
   }
 }

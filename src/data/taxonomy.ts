@@ -83,6 +83,26 @@ export const KEYWORD_ICONS: Record<Keyword, string> = {
   poison: "☠️",
 };
 
+/**
+ * Guard is one mechanic (DESIGN.md §6) skinned per Faction — a Human Kingdom
+ * deck sees "Militia", a Necropolitan deck sees "Grave Wardens", etc. A
+ * Hero with no Faction (most starter Heroes today) falls back to "Guard".
+ */
+export const GUARD_LABELS: Record<Faction, string> = {
+  "infernal-court": "Infernal Legion",
+  "roseguard-kingdom": "Militia",
+  "moonveil-coven": "Coven Wardens",
+  "velvet-syndicate": "Syndicate Enforcers",
+  "wildheart-tribes": "Wildheart Warband",
+  "celestial-academy": "Heavenly Host",
+  necropolitan: "Grave Wardens",
+  "arcane-industries": "Construct Wardens",
+};
+
+export function guardLabel(faction: Faction | undefined): string {
+  return faction ? GUARD_LABELS[faction] : "Guard";
+}
+
 export const ELEMENT_OPTIONS = Object.keys(ELEMENT_LABELS) as Element[];
 export const FACTION_OPTIONS = Object.keys(FACTION_LABELS) as Faction[];
 export const RACE_OPTIONS = Object.keys(RACE_LABELS) as Race[];

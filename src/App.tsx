@@ -225,7 +225,7 @@ export default function App() {
     commit();
   }
 
-  function handleFrontRowClick(owner: PlayerId, instanceId: string) {
+  function handleVanguardClick(owner: PlayerId, instanceId: string) {
     const state = gameRef.current;
     if (!state) return;
     if (pending) {
@@ -233,13 +233,13 @@ export default function App() {
       return;
     }
     if (owner !== "player" || state.activePlayer !== "player" || state.winner) return;
-    const card = state.players.player.board.frontRow.find((c) => c?.instanceId === instanceId);
+    const card = state.players.player.board.vanguard.find((c) => c?.instanceId === instanceId);
     if (card && creatureCanAttack(state, card)) {
       setPending({ kind: "attack", attackerId: instanceId });
     }
   }
 
-  function handleBackRowClick(owner: PlayerId, instanceId: string) {
+  function handleBuildingClick(owner: PlayerId, instanceId: string) {
     if (pending) resolvePendingCardTarget(owner, instanceId, "building");
   }
 
@@ -428,8 +428,8 @@ export default function App() {
         owner="opponent"
         isEnemy
         pending={pending}
-        onFrontRowClick={handleFrontRowClick}
-        onBackRowClick={handleBackRowClick}
+        onVanguardClick={handleVanguardClick}
+        onBuildingClick={handleBuildingClick}
         onSlotClick={handleSlotClick}
         onPortraitClick={handlePortraitClick}
       />
@@ -439,8 +439,8 @@ export default function App() {
         owner="player"
         isEnemy={false}
         pending={pending}
-        onFrontRowClick={handleFrontRowClick}
-        onBackRowClick={handleBackRowClick}
+        onVanguardClick={handleVanguardClick}
+        onBuildingClick={handleBuildingClick}
         onSlotClick={handleSlotClick}
         onPortraitClick={handlePortraitClick}
       />

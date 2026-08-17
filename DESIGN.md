@@ -6,18 +6,23 @@ spell/ability "items", building-driven economy), and the **Pokemon
 TCG** (simple status conditions instead of a full elemental chart).
 This document is the single source of truth for the target ruleset.
 
-**Implementation status:** this is a v2 architecture. The live engine
-in `src/engine` still implements v1 (a single 5-slot creature row, one
-Hero-only Equipment slot, a shared Resources pool that pays for
-everything from hand). Nothing below is built yet — it's the locked
-spec the rebuild works from, in phases (see §17). Until a phase lands,
-treat the corresponding part of the *running app* as still v1, and
-CARDS.md/BACKEND.md as describing what's live today, not this doc.
+**Implementation status:** this is a v2 architecture, landing in
+phases (see §17). **Phase A is live**: the Vanguard/Support/Buildings
+board (§4), the Energy/Mana/Resources-by-archetype cost split (§2),
+Ready/Exhausted (§3), base Vanguard-first targeting (§5, no Reach/
+Ranged-tier/Infiltrate yet), and the Guard rename (§6, with faction
+display labels) are all in `src/engine` and the running UI today.
+Support exists as a real board row but nothing can be deliberately
+placed into it yet, and can't attack or be attacked — that's Phase B.
+Everything else below (Hero Passive/Power/Signature, Allegiance,
+Spell forms, the fuller keyword pool, Buildings-as-objects, the
+Equipment rework) is still spec only. CARDS.md/BACKEND.md describe
+what's live today; check them (not just this doc) for current schema.
 
 Sections marked **Open default** are judgment calls made to keep the
 spec internally consistent and buildable; flag any of them if they
-don't match what you had in mind — they're easy to revisit before
-Phase A starts.
+don't match what you had in mind — they're easy to revisit before the
+phase that depends on them starts.
 
 For how to add/generate/reskin cards, see `CARDS.md`. For the
 account/admin backend, see `BACKEND.md`.
@@ -461,7 +466,7 @@ Suggested build order, each phase individually shippable/testable:
 
 | Phase | Scope |
 |---|---|
-| **A — Foundation** | Board reshape (Vanguard+Support+columns), the 3-pool resource-by-archetype split, Ready/Exhausted, Guard rename (+ faction display labels), base reach-tier targeting (no Reach/Ranged/Infiltrate yet — just Vanguard-first, matches v1's existing chain shape). |
+| **A — Foundation** ✅ *(live)* | Board reshape (Vanguard+Support+columns), the 3-pool resource-by-archetype split, Ready/Exhausted, Guard rename (+ faction display labels), base reach-tier targeting (no Reach/Ranged/Infiltrate yet — just Vanguard-first, matches v1's existing chain shape). |
 | **B — Reach & position** | Reach, Ranged, Infiltrate, Protector, Flank, Formation, Advance, Push, Massive. Column-based Building protection. |
 | **C — Spell forms & Hero rework** | Instant/Ritual/Charged split for Spells. Hero Passive/Power/Signature. Allegiance deckbuilding validation. |
 | **D — Keyword expansion** | Stealth, Ward, Cleave, Drain, Bloodied, Summon (+ the `summonCreature` effect kind), Warcry rename. |

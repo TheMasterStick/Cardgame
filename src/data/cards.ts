@@ -23,8 +23,8 @@ const heroes: HeroCardDefinition[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Buildings — Back Row. Economy/pool buildings raise a resource cap on play;
-// militia buildings grant Militia on play or each turn. See DESIGN.md §2, §5.
+// Buildings — Buildings row. Economy/pool buildings raise a resource cap on
+// play; guard buildings grant Guard on play or each turn. See DESIGN.md §2, §6.
 // ---------------------------------------------------------------------------
 
 const buildings: BuildingDefinition[] = [
@@ -105,8 +105,8 @@ const buildings: BuildingDefinition[] = [
     cost: 2,
     rarity: "rare",
     hp: 3,
-    text: "On Play: gain 15 Militia.",
-    triggers: [{ on: "onPlay", effect: { kind: "gainMilitia", amount: 15 } }],
+    text: "On Play: gain 15 Guard.",
+    triggers: [{ on: "onPlay", effect: { kind: "gainGuard", amount: 15 } }],
   },
   {
     id: "call-to-arms",
@@ -115,8 +115,8 @@ const buildings: BuildingDefinition[] = [
     cost: 3,
     rarity: "epic",
     hp: 4,
-    text: "Start of Turn: gain 5 Militia.",
-    triggers: [{ on: "startOfTurn", effect: { kind: "gainMilitia", amount: 5 } }],
+    text: "Start of Turn: gain 5 Guard.",
+    triggers: [{ on: "startOfTurn", effect: { kind: "gainGuard", amount: 5 } }],
   },
   {
     id: "bulletin-board",
@@ -125,8 +125,8 @@ const buildings: BuildingDefinition[] = [
     cost: 1,
     rarity: "common",
     hp: 2,
-    text: "On Play: gain 5 Militia.",
-    triggers: [{ on: "onPlay", effect: { kind: "gainMilitia", amount: 5 } }],
+    text: "On Play: gain 5 Guard.",
+    triggers: [{ on: "onPlay", effect: { kind: "gainGuard", amount: 5 } }],
   },
 ];
 

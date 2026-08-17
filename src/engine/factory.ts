@@ -1,10 +1,11 @@
 import { CARD_DEFINITIONS } from "../data/cards";
 import {
-  BACK_ROW_SIZE,
-  FRONT_ROW_SIZE,
+  BUILDING_SLOTS,
   SPELL_ABILITY_SLOTS,
-  STARTING_MILITIA,
+  STARTING_GUARD,
   STARTING_POOL,
+  SUPPORT_SIZE,
+  VANGUARD_SIZE,
   type BoardState,
   type CardInstance,
   type GameState,
@@ -59,8 +60,9 @@ export function createHeroInstance(heroDefId: string): HeroInstance {
 
 function emptyBoard(): BoardState {
   return {
-    frontRow: Array(FRONT_ROW_SIZE).fill(null),
-    backRow: Array(BACK_ROW_SIZE).fill(null),
+    vanguard: Array(VANGUARD_SIZE).fill(null),
+    support: Array(SUPPORT_SIZE).fill(null),
+    buildings: Array(BUILDING_SLOTS).fill(null),
     spellAbilitySlots: Array(SPELL_ABILITY_SLOTS).fill(null),
     equipment: null,
   };
@@ -75,7 +77,7 @@ export function createInitialPlayerState(
   return {
     id,
     hero: createHeroInstance(heroDefId),
-    militia: { current: STARTING_MILITIA, max: STARTING_MILITIA },
+    guard: { current: STARTING_GUARD, max: STARTING_GUARD },
     resources: { current: STARTING_POOL, cap: STARTING_POOL },
     mana: { current: STARTING_POOL, cap: STARTING_POOL },
     energy: { current: STARTING_POOL, cap: STARTING_POOL },

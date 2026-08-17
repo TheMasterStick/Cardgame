@@ -52,12 +52,14 @@ function validateTarget(
 ): ValidationResult {
   const defenderOwner = otherPlayer(attackerOwner);
   const defenderBoard = state.players[defenderOwner].board;
-  const frontRowEmpty = defenderBoard.frontRow.every((c) => c === null);
+  const vanguardEmpty = defenderBoard.vanguard.every((c) => c === null);
 
   if (target.type === "creature") {
-    const onFront = defenderBoard.frontRow.some((c) => c?.instanceId === target.instanceId);
-    if (!onFront) return { ok: false, reason: "Can only attack enemy Front Row creatures directly." };
-    const taunts = defenderBoard.frontRow.filter(
+    // Support isn't a legal target category yet — that unlocks with Reach/Ranged/Infiltrate
+    // in Phase B (DESIGN.md §5). Only Vanguard creatures can be attacked directly for now.
+    const onVanguard = defenderBoard.vanguard.some((c) => c?.instanceId === target.instanceId);
+    if (!onVanguard) return { ok: false, reason: "Can only attack enemy Vanguard creatures directly." };
+    const taunts = defenderBoard.vanguard.filter(
       (c): c is CardInstance => c !== null && hasKeyword(c, "taunt"),
     );
     if (taunts.length > 0 && !taunts.some((c) => c.instanceId === target.instanceId)) {
@@ -65,10 +67,10 @@ function validateTarget(
     }
     return { ok: true };
   }
-  if (!frontRowEmpty && !isRanged) {
+  if (!vanguardEmpty && !isRanged) {
     return {
       ok: false,
-      reason: "Enemy Front Row must be cleared first, or the attacker needs Ranged.",
+      reason: "Enemy Vanguard must be cleared first, or the attacker needs Ranged.",
     };
   }
   return { ok: true };
@@ -99,7 +101,7 @@ function resolveCreatureTrade(
   defenderInstanceId: string,
 ): void {
   const defenderBoard = state.players[defenderOwner].board;
-  const defender = defenderBoard.frontRow.find((c) => c?.instanceId === defenderInstanceId) ?? null;
+  const defender = defenderBoard.vanguard.find((c) => c?.instanceId === defenderInstanceId) ?? null;
   if (!defender) return;
   const defenderAttack = getCreatureAttack(defender);
 
@@ -125,8 +127,8 @@ export function declareCreatureAttack(
   target: AttackTarget,
 ): ValidationResult {
   const board = state.players[attackerOwner].board;
-  const attacker = board.frontRow.find((c) => c?.instanceId === attackerInstanceId) ?? null;
-  if (!attacker) return { ok: false, reason: "Attacker not found on Front Row." };
+  const attacker = board.vanguard.find((c) => c?.instanceId === attackerInstanceId) ?? null;
+  if (!attacker) return { ok: false, reason: "Attacker not found in Vanguard (only Vanguard creatures can attack)." };
   if (!creatureCanAttack(state, attacker)) {
     return { ok: false, reason: "This creature can't attack right now." };
   }

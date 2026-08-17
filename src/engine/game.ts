@@ -6,10 +6,13 @@ import {
   STARTING_HAND_SIZE,
   otherPlayer,
   type BuildingDefinition,
+  type CardArchetype,
   type CardInstance,
   type CreatureDefinition,
   type GameState,
   type PlayerId,
+  type PlayerState,
+  type ResourcePool,
 } from "./types";
 
 export interface ActionResult {
@@ -24,7 +27,7 @@ function findOpenSlot(row: (CardInstance | null)[], preferred?: number): number 
 
 function processEndOfTurnStatuses(state: GameState, owner: PlayerId): void {
   const player = state.players[owner];
-  for (const row of ["frontRow", "backRow"] as const) {
+  for (const row of ["vanguard", "support", "buildings"] as const) {
     for (const card of player.board[row]) {
       if (!card) continue;
       const dmg = tickStatuses(card);
@@ -51,12 +54,14 @@ export function startTurn(state: GameState): void {
   state.phase = "draw";
   const player = state.players[state.activePlayer];
 
-  for (const card of player.board.frontRow) {
+  for (const card of [...player.board.vanguard, ...player.board.support]) {
     if (card) card.hasAttackedThisTurn = false;
   }
   player.hero.hasAttackedThisTurn = false;
 
-  player.resources.current = player.resources.cap;
+  // Energy/Mana are tempo pools and fully refill each turn. Resources is a
+  // persistent stockpile (Buildings/Equipment) and does NOT refill — it only
+  // changes by being spent or by a gainCap effect (DESIGN.md §2).
   player.mana.current = player.mana.cap;
   player.energy.current = player.energy.cap;
 
@@ -65,7 +70,7 @@ export function startTurn(state: GameState): void {
     drawCard(state, state.activePlayer);
   }
 
-  for (const row of ["frontRow", "backRow"] as const) {
+  for (const row of ["vanguard", "support", "buildings"] as const) {
     for (const card of player.board[row]) {
       if (!card) continue;
       const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition | BuildingDefinition;
@@ -101,7 +106,18 @@ export interface PlayCardOptions {
   target?: EffectTargetRef;
 }
 
-/** Plays a card from hand: pays its Resources cost and places it on the board. */
+/**
+ * Which pool pays to play a card of this archetype, and its display name for
+ * error messages. Each archetype's pool covers both playing it from hand and
+ * (for Spells/Abilities) activating it on the field — see DESIGN.md §2.
+ */
+export function costPoolFor(player: PlayerState, archetype: CardArchetype): { pool: ResourcePool; label: string } {
+  if (archetype === "creature" || archetype === "ability") return { pool: player.energy, label: "Energy" };
+  if (archetype === "spell") return { pool: player.mana, label: "Mana" };
+  return { pool: player.resources, label: "Resources" };
+}
+
+/** Plays a card from hand: pays its cost from the pool its archetype uses, and places it on the board. */
 export function playCardFromHand(
   state: GameState,
   owner: PlayerId,
@@ -113,34 +129,37 @@ export function playCardFromHand(
   if (handIndex === -1) return { ok: false, reason: "Card not in hand." };
   const card = player.hand[handIndex];
   const def = CARD_DEFINITIONS[card.defId];
+  const { pool, label } = costPoolFor(player, def.archetype);
 
-  if (player.resources.current < def.cost) {
-    return { ok: false, reason: "Not enough Resources." };
+  if (pool.current < def.cost) {
+    return { ok: false, reason: `Not enough ${label}.` };
   }
 
   let slot = -1;
   if (def.archetype === "creature") {
-    slot = findOpenSlot(player.board.frontRow, options.slotIndex);
-    if (slot === -1) return { ok: false, reason: "Front Row is full." };
+    // Vanguard only for now — Support has no way to be deliberately placed into
+    // until Advance/Ranged land in Phase B (DESIGN.md §5/§17).
+    slot = findOpenSlot(player.board.vanguard, options.slotIndex);
+    if (slot === -1) return { ok: false, reason: "Vanguard is full." };
   } else if (def.archetype === "building") {
-    slot = findOpenSlot(player.board.backRow, options.slotIndex);
-    if (slot === -1) return { ok: false, reason: "Back Row is full." };
+    slot = findOpenSlot(player.board.buildings, options.slotIndex);
+    if (slot === -1) return { ok: false, reason: "No open Building slot." };
   } else if (def.archetype === "spell" || def.archetype === "ability") {
     slot = findOpenSlot(player.board.spellAbilitySlots, options.slotIndex);
     if (slot === -1) return { ok: false, reason: "No open Spell/Ability slot." };
   }
 
-  player.resources.current -= def.cost;
+  pool.current -= def.cost;
   player.hand.splice(handIndex, 1);
 
   if (def.archetype === "creature") {
     card.summonedTurn = state.turnNumber;
-    player.board.frontRow[slot] = card;
+    player.board.vanguard[slot] = card;
     for (const trigger of def.triggers) {
       if (trigger.on === "onPlay") resolveEffect(state, owner, trigger.effect, options.target ?? null);
     }
   } else if (def.archetype === "building") {
-    player.board.backRow[slot] = card;
+    player.board.buildings[slot] = card;
     for (const trigger of def.triggers) {
       if (trigger.on === "onPlay") resolveEffect(state, owner, trigger.effect, options.target ?? null);
     }

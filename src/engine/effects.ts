@@ -34,9 +34,9 @@ function findCard(
   state: GameState,
   owner: PlayerId,
   instanceId: string,
-): { card: CardInstance; row: "frontRow" | "backRow"; index: number } | null {
+): { card: CardInstance; row: "vanguard" | "support" | "buildings"; index: number } | null {
   const board = state.players[owner].board;
-  for (const row of ["frontRow", "backRow"] as const) {
+  for (const row of ["vanguard", "support", "buildings"] as const) {
     const index = board[row].findIndex((c) => c?.instanceId === instanceId);
     if (index !== -1) {
       return { card: board[row][index]!, row, index };
@@ -87,8 +87,8 @@ export function healCard(state: GameState, owner: PlayerId, instanceId: string, 
 }
 
 /**
- * Deals damage to a player through the full Militia -> Hero HP chain
- * (DESIGN.md §5). Equipment damage reduction applies to the total.
+ * Deals damage to a player through the full Guard -> Hero HP chain
+ * (DESIGN.md §6). Equipment damage reduction applies to the total.
  */
 export function damagePlayer(state: GameState, target: PlayerId, amount: number): void {
   const player = state.players[target];
@@ -96,19 +96,19 @@ export function damagePlayer(state: GameState, target: PlayerId, amount: number)
   const def = equipment ? (CARD_DEFINITIONS[equipment.defId] as { damageReduction: number }) : null;
   const reduced = Math.max(0, amount - (def?.damageReduction ?? 0));
 
-  const fromMilitia = Math.min(player.militia.current, reduced);
-  player.militia.current -= fromMilitia;
-  const overflow = reduced - fromMilitia;
+  const fromGuard = Math.min(player.guard.current, reduced);
+  player.guard.current -= fromGuard;
+  const overflow = reduced - fromGuard;
   if (overflow > 0) {
     player.hero.currentHp -= overflow;
   }
   state.log.push(
-    `${target} took ${reduced} damage (${fromMilitia} to Militia${overflow > 0 ? `, ${overflow} to Hero HP` : ""}).`,
+    `${target} took ${reduced} damage (${fromGuard} to Guard${overflow > 0 ? `, ${overflow} to Hero HP` : ""}).`,
   );
   checkWinner(state);
 }
 
-/** Damages the Hero's HP directly, bypassing Militia entirely. */
+/** Damages the Hero's HP directly, bypassing Guard entirely. */
 export function damageHeroDirect(state: GameState, target: PlayerId, amount: number): void {
   const player = state.players[target];
   const equipment = player.board.equipment;
@@ -124,10 +124,10 @@ export function healHero(state: GameState, target: PlayerId, amount: number): vo
   player.hero.currentHp = Math.min(player.hero.maxHp, player.hero.currentHp + amount);
 }
 
-export function gainMilitia(state: GameState, target: PlayerId, amount: number): void {
+export function gainGuard(state: GameState, target: PlayerId, amount: number): void {
   const player = state.players[target];
-  player.militia.max += amount;
-  player.militia.current += amount;
+  player.guard.max += amount;
+  player.guard.current += amount;
 }
 
 export function gainCap(
@@ -174,7 +174,8 @@ export function resolveEffect(
     case "damage": {
       if (effect.target === "allEnemyCreatures" || effect.target === "allFriendlyCreatures") {
         const owner = effect.target === "allEnemyCreatures" ? otherPlayer(actingPlayer) : actingPlayer;
-        for (const c of [...state.players[owner].board.frontRow]) {
+        const board = state.players[owner].board;
+        for (const c of [...board.vanguard, ...board.support]) {
           if (c && !isImmuneToSpell(c, sourceArchetype)) damageCard(state, owner, c.instanceId, effect.amount);
         }
         return;
@@ -233,7 +234,8 @@ export function resolveEffect(
       };
       if (effect.target === "allFriendlyCreatures" || effect.target === "allEnemyCreatures") {
         const owner = effect.target === "allFriendlyCreatures" ? actingPlayer : otherPlayer(actingPlayer);
-        for (const c of state.players[owner].board.frontRow) {
+        const board = state.players[owner].board;
+        for (const c of [...board.vanguard, ...board.support]) {
           if (c && !isImmuneToSpell(c, sourceArchetype)) applyBuff(c);
         }
         return;
@@ -248,8 +250,8 @@ export function resolveEffect(
       for (let i = 0; i < effect.amount; i++) drawCard(state, actingPlayer);
       return;
     }
-    case "gainMilitia": {
-      gainMilitia(state, actingPlayer, effect.amount);
+    case "gainGuard": {
+      gainGuard(state, actingPlayer, effect.amount);
       return;
     }
     case "gainCap": {

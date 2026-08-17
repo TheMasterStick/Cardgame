@@ -61,20 +61,20 @@ export function getPendingEffect(state: GameState, pending: PendingAction | null
 
 /**
  * Whether an attack-pending action (always human-initiated, from "player")
- * can legally reach the Back Row / Militia-Hero of `defenderOwner` right
- * now: the defender's Front Row must be empty, unless the attacker is
+ * can legally reach the Buildings / Guard-Hero of `defenderOwner` right
+ * now: the defender's Vanguard must be empty, unless the attacker is
  * Ranged. Mirrors the engine's own validateTarget rule so the UI doesn't
  * highlight targets it knows will be rejected.
  */
-export function canBypassFrontRow(
+export function canBypassVanguard(
   state: GameState,
   defenderOwner: PlayerId,
   attackerId: string | "hero",
 ): boolean {
-  const frontRowEmpty = state.players[defenderOwner].board.frontRow.every((c) => c === null);
-  if (frontRowEmpty) return true;
+  const vanguardEmpty = state.players[defenderOwner].board.vanguard.every((c) => c === null);
+  if (vanguardEmpty) return true;
   if (attackerId === "hero") return false;
-  const attacker = state.players.player.board.frontRow.find((c) => c?.instanceId === attackerId);
+  const attacker = state.players.player.board.vanguard.find((c) => c?.instanceId === attackerId);
   if (!attacker) return false;
   const def = CARD_DEFINITIONS[attacker.defId] as CreatureDefinition;
   return def.keywords.includes("ranged");

@@ -131,8 +131,8 @@ export interface DrawCardEffect {
   amount: number;
 }
 
-export interface GainMilitiaEffect {
-  kind: "gainMilitia";
+export interface GainGuardEffect {
+  kind: "gainGuard";
   amount: number;
 }
 
@@ -148,7 +148,7 @@ export type CardEffect =
   | ApplyStatusEffect
   | BuffEffect
   | DrawCardEffect
-  | GainMilitiaEffect
+  | GainGuardEffect
   | GainCapEffect;
 
 export type TriggerName =
@@ -273,8 +273,16 @@ export interface HeroInstance {
 }
 
 export interface BoardState {
-  frontRow: (CardInstance | null)[]; // length 5, creatures
-  backRow: (CardInstance | null)[]; // length 5, buildings
+  /** Melee-forward creature row, columns 0-4. Always eligible to attack. */
+  vanguard: (CardInstance | null)[]; // length 5
+  /**
+   * Backline creature row, columns 0-4. Cannot attack and cannot be
+   * targeted by an attack yet — that unlocks with Ranged/Reach/Infiltrate
+   * in Phase B (DESIGN.md §5). It exists structurally now so Phase B has
+   * somewhere to put creatures.
+   */
+  support: (CardInstance | null)[]; // length 5
+  buildings: (CardInstance | null)[]; // length 5, one per column
   spellAbilitySlots: (CardInstance | null)[]; // length 4
   equipment: CardInstance | null;
 }
@@ -282,7 +290,7 @@ export interface BoardState {
 export interface PlayerState {
   id: PlayerId;
   hero: HeroInstance;
-  militia: { current: number; max: number };
+  guard: { current: number; max: number };
   resources: ResourcePool;
   mana: ResourcePool;
   energy: ResourcePool;
@@ -304,12 +312,13 @@ export interface GameState {
   winner: PlayerId | null;
 }
 
-export const FRONT_ROW_SIZE = 5;
-export const BACK_ROW_SIZE = 5;
+export const VANGUARD_SIZE = 5;
+export const SUPPORT_SIZE = 5;
+export const BUILDING_SLOTS = 5;
 export const SPELL_ABILITY_SLOTS = 4;
 export const STARTING_HAND_SIZE = 4;
 export const MAX_HAND_SIZE = 10;
 export const STARTING_POOL = 5;
 export const MAX_POOL = 10;
-export const STARTING_MILITIA = 100;
+export const STARTING_GUARD = 100;
 export const DECK_SIZE = 30;

@@ -34,8 +34,8 @@ the panel.
 |---|---|---|
 | `id` | string | Unique. Used everywhere internally — pack odds, deck lists, save data. |
 | `name` | string | Display name. |
-| `archetype` | `"hero" \| "creature" \| "building" \| "spell" \| "ability" \| "equipment"` | Which zone it's played into — see DESIGN.md §1/§3. |
-| `cost` | number | Resources cost to play it from hand. Unused (0) for Hero cards. |
+| `archetype` | `"hero" \| "creature" \| "building" \| "spell" \| "ability" \| "equipment"` | Which zone it's played into — see DESIGN.md §1/§4. |
+| `cost` | number | Cost to play it from hand, paid from the pool its archetype uses: **Energy** for Creature/Ability, **Mana** for Spell, **Resources** for Building/Equipment (DESIGN.md §2). Unused (0) for Hero cards. |
 | `rarity` | `"common" \| "uncommon" \| "rare" \| "epic" \| "legendary"` | Drives pack odds (`src/data/packs.ts`) and the corner pip color. |
 | `text` | string (optional) | Flavor/rules text shown on the card. |
 | `art` | string (optional) | Image URL or a path into `public/` (e.g. `"/cards/lava-hound.png"`). Omit for the plain text layout. See "Adding images" below. |
@@ -98,7 +98,7 @@ of a match; its stats become the starting Hero HP/Attack (see DESIGN.md
   "element": "arcane",
   "activateCost": 3,
   "charges": 2,
-  "text": "Activate (3 Mana): deal 2 damage to all enemy Front Row creatures.",
+  "text": "Activate (3 Mana): deal 2 damage to all enemy creatures.",
   "effect": { "kind": "damage", "amount": 2, "target": "allEnemyCreatures" }
 }
 ```
@@ -115,21 +115,21 @@ of a match; its stats become the starting Hero HP/Attack (see DESIGN.md
   "attackBonus": 0, "damageReduction": 0, "text": "Your Hero can attack." }
 ```
 - `attackBonus`: added to the Hero's base Attack once equipped.
-- `damageReduction`: subtracted from all incoming damage to that player (Militia + Hero HP) while equipped.
+- `damageReduction`: subtracted from all incoming damage to that player (Guard + Hero HP) while equipped.
 
 ---
 
 ## Keywords
 
 Only meaningful on Creature cards (`keywords: Keyword[]`). See DESIGN.md
-§5 for the full mechanics writeup; short version:
+§7 for the full mechanics writeup; short version:
 
 | Keyword | Effect |
 |---|---|
-| `ranged` | Can attack the enemy Hero directly even while the enemy has Front Row creatures out (bypasses the Militia/front-row block). |
+| `ranged` | Can attack the enemy Hero directly even while the enemy has Vanguard creatures out (bypasses the Guard/Vanguard block). |
 | `charge` | Can attack the same turn it's played, ignoring summoning sickness. |
 | `battlecry` | Marks a card whose `onPlay` trigger represents a Battlecry effect (fires when played). Purely a label — the actual effect still comes from a `triggers: [{ on: "onPlay", ... }]` entry. |
-| `taunt` | While this creature is alive in the Front Row, enemies attacking a creature must target a Taunt creature first if one is present. |
+| `taunt` | While this creature is alive in Vanguard, enemies attacking a creature must target a Taunt creature first if one is present. |
 | `counter` | Marks a card whose `onDefend` trigger fires when it's attacked (pair with a `triggers: [{ on: "onDefend", ... }]` entry, e.g. reflect damage back at the attacker). |
 | `revenge` | Marks a card whose `onDeath` trigger fires when it dies (pair with a `triggers: [{ on: "onDeath", ... }]` entry). |
 | `frenzy` | Every time this creature takes damage and survives, its Attack permanently increases by the damage amount taken. Built into the engine — no trigger needed, just the keyword. |
@@ -181,7 +181,7 @@ Used in a spell/ability's `effect` field, and in any creature/building
 | `applyStatus` | `status` (`"burn"\|"poison"`), `amount`, `target`, `duration` (optional, burn only) | Applies a DOT. |
 | `buff` | `target`, `attackDelta`? , `hpDelta`? | Permanent stat change (negative deltas work too — a debuff). |
 | `drawCard` | `amount` | Draws for the acting player. No `target`. |
-| `gainMilitia` | `amount` | Grants Militia to the acting player. No `target`. |
+| `gainGuard` | `amount` | Grants Guard to the acting player. No `target`. |
 | `gainCap` | `pool` (`"resource"\|"mana"\|"energy"`), `amount` | Raises a resource cap (and current amount) for the acting player. No `target`. |
 
 `target` (on the four kinds that need one) is one of:
@@ -269,11 +269,11 @@ drop its JSON output straight into the array in
 > `activateCost` (number), `charges` (number or `"unlimited"`), and a
 > single `effect`. Equipment needs `attackBonus` and `damageReduction`.
 > An `effect` object has a `kind` (`damage`, `heal`, `applyStatus`,
-> `buff`, `drawCard`, `gainMilitia`, or `gainCap`) plus kind-specific
+> `buff`, `drawCard`, `gainGuard`, or `gainCap`) plus kind-specific
 > fields: `damage`/`heal` need `amount` + `target`; `applyStatus` needs
 > `status` (`"burn"` or `"poison"`) + `amount` + `target`; `buff` needs
 > `target` + `attackDelta`/`hpDelta`; `drawCard` needs `amount`;
-> `gainMilitia` needs `amount`; `gainCap` needs `pool`
+> `gainGuard` needs `amount`; `gainCap` needs `pool`
 > (`"resource"`/`"mana"`/`"energy"`) + `amount`. `target` is one of
 > `targetCreature`, `targetBuilding`, `targetCreatureOrBuilding`,
 > `targetAny`, `targetPlayer`, `allEnemyCreatures`,

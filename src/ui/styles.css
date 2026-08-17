@@ -155,6 +155,11 @@ body {
   align-items: stretch;
 }
 
+/* Support can't attack or be attacked yet (DESIGN.md §5/§17 Phase B) — dimmed to read as inert for now. */
+.row--support {
+  opacity: 0.55;
+}
+
 .hero-column {
   display: flex;
   flex-direction: column;
@@ -222,7 +227,7 @@ body {
   color: var(--hp);
 }
 
-.portrait__militia {
+.portrait__guard {
   color: var(--text-dim);
 }
 

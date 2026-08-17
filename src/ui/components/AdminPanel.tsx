@@ -38,7 +38,7 @@ interface AdminPanelProps {
 }
 
 const ARCHETYPES: CardArchetype[] = ["hero", "creature", "building", "spell", "ability", "equipment"];
-const EFFECT_KINDS: CardEffect["kind"][] = ["damage", "heal", "applyStatus", "buff", "drawCard", "gainMilitia", "gainCap"];
+const EFFECT_KINDS: CardEffect["kind"][] = ["damage", "heal", "applyStatus", "buff", "drawCard", "gainGuard", "gainCap"];
 const CREATURE_TRIGGER_NAMES: TriggerName[] = ["onPlay", "onAttack", "onDeath", "onDefend", "startOfTurn", "endOfTurn"];
 const TARGET_OPTIONS = [
   "targetCreature",
@@ -125,7 +125,7 @@ function loadEffectIntoDraft(draft: CardDraft, effect: CardEffect): void {
     draft.effectTarget = effect.target as CardDraft["effectTarget"];
     draft.effectAttackDelta = effect.attackDelta ?? 0;
     draft.effectHpDelta = effect.hpDelta ?? 0;
-  } else if (effect.kind === "drawCard" || effect.kind === "gainMilitia") {
+  } else if (effect.kind === "drawCard" || effect.kind === "gainGuard") {
     draft.effectAmount = effect.amount;
   } else if (effect.kind === "gainCap") {
     draft.effectAmount = effect.amount;
@@ -197,8 +197,8 @@ function buildEffect(draft: CardDraft): CardEffect | null {
       };
     case "drawCard":
       return { kind: "drawCard", amount: draft.effectAmount };
-    case "gainMilitia":
-      return { kind: "gainMilitia", amount: draft.effectAmount };
+    case "gainGuard":
+      return { kind: "gainGuard", amount: draft.effectAmount };
     case "gainCap":
       return { kind: "gainCap", pool: draft.effectPool, amount: draft.effectAmount };
     default:
@@ -623,7 +623,7 @@ export function AdminPanel({ collection, userId, onSetCoins, onCardsChanged, onB
                   draft.effectKind === "heal" ||
                   draft.effectKind === "applyStatus" ||
                   draft.effectKind === "drawCard" ||
-                  draft.effectKind === "gainMilitia" ||
+                  draft.effectKind === "gainGuard" ||
                   draft.effectKind === "gainCap") && (
                   <label>
                     Amount
