@@ -70,6 +70,19 @@ export const KEYWORD_LABELS: Record<Keyword, string> = {
   taunt: "Taunt",
 };
 
+/** Small glyphs shown on the compact card face so keyworded cards are recognizable at a glance. */
+export const KEYWORD_ICONS: Record<Keyword, string> = {
+  taunt: "🛡️",
+  battlecry: "📯",
+  revenge: "⚰️",
+  charge: "⚡",
+  ranged: "🏹",
+  counter: "⚔️",
+  frenzy: "💢",
+  immune: "✨",
+  poison: "☠️",
+};
+
 export const ELEMENT_OPTIONS = Object.keys(ELEMENT_LABELS) as Element[];
 export const FACTION_OPTIONS = Object.keys(FACTION_LABELS) as Faction[];
 export const RACE_OPTIONS = Object.keys(RACE_LABELS) as Race[];
