@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { CARD_DEFINITIONS } from "../../data/cards";
 import { ELEMENT_LABELS, KEYWORD_ICONS, KEYWORD_LABELS, RACE_LABELS } from "../../data/taxonomy";
 import type { CardDefinition, CardInstance, CreatureDefinition, HeroCardDefinition, Keyword } from "../../engine/types";
@@ -16,15 +17,22 @@ const ZOOM_HEIGHT = Math.round((ZOOM_WIDTH * 776) / 512);
 const ZOOM_MARGIN = 12;
 const HOVER_DELAY_MS = 400;
 
+/** Viewport size, excluding scrollbars — more reliable than window.innerWidth/Height for clamping a fixed-position element. */
+function viewportSize(): { width: number; height: number } {
+  return { width: document.documentElement.clientWidth, height: document.documentElement.clientHeight };
+}
+
 function computeZoomPosition(rect: DOMRect): { top: number; left: number } {
+  const { width: vw, height: vh } = viewportSize();
+
   let left = rect.right + ZOOM_MARGIN;
-  if (left + ZOOM_WIDTH > window.innerWidth - ZOOM_MARGIN) {
+  if (left + ZOOM_WIDTH > vw - ZOOM_MARGIN) {
     left = rect.left - ZOOM_WIDTH - ZOOM_MARGIN;
   }
-  left = Math.max(ZOOM_MARGIN, Math.min(left, window.innerWidth - ZOOM_WIDTH - ZOOM_MARGIN));
+  left = Math.max(ZOOM_MARGIN, Math.min(left, vw - ZOOM_WIDTH - ZOOM_MARGIN));
 
   let top = rect.top + rect.height / 2 - ZOOM_HEIGHT / 2;
-  top = Math.max(ZOOM_MARGIN, Math.min(top, window.innerHeight - ZOOM_HEIGHT - ZOOM_MARGIN));
+  top = Math.max(ZOOM_MARGIN, Math.min(top, vh - ZOOM_HEIGHT - ZOOM_MARGIN));
 
   return { top, left };
 }
@@ -40,6 +48,18 @@ export function CardView({ instance, onClick, highlighted, defOverride }: CardVi
       if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current);
     };
   }, []);
+
+  // Scrolling invalidates the fixed-position popup's anchor — close it rather than let it drift.
+  useEffect(() => {
+    if (!zoomPos) return;
+    const close = () => setZoomPos(null);
+    window.addEventListener("scroll", close, { capture: true, passive: true });
+    window.addEventListener("resize", close);
+    return () => {
+      window.removeEventListener("scroll", close, { capture: true });
+      window.removeEventListener("resize", close);
+    };
+  }, [zoomPos]);
 
   function handleMouseEnter() {
     hoverTimer.current = window.setTimeout(() => {
@@ -135,30 +155,32 @@ export function CardView({ instance, onClick, highlighted, defOverride }: CardVi
         {statsRow}
         {statuses}
       </div>
-      {zoomPos && (
-        <div
-          className={[...classes, "card--zoom"].join(" ")}
-          style={{ position: "fixed", top: zoomPos.top, left: zoomPos.left, width: ZOOM_WIDTH }}
-        >
-          {art}
-          {rarityDot}
-          {topRow}
-          {metaParts.length > 0 && <div className="card__meta">{metaParts.join(" · ")}</div>}
-          {keywords.length > 0 && (
-            <div className="card__keywords">
-              {keywords.map((k) => (
-                <span key={k} className="card__keyword-tag">
-                  {KEYWORD_ICONS[k]} {KEYWORD_LABELS[k]}
-                </span>
-              ))}
-            </div>
-          )}
-          {def.text && <div className="card__text">{def.text}</div>}
-          <div className="card__spacer" />
-          {statsRow}
-          {statuses}
-        </div>
-      )}
+      {zoomPos &&
+        createPortal(
+          <div
+            className={[...classes, "card--zoom"].join(" ")}
+            style={{ position: "fixed", top: zoomPos.top, left: zoomPos.left, width: ZOOM_WIDTH }}
+          >
+            {art}
+            {rarityDot}
+            {topRow}
+            {metaParts.length > 0 && <div className="card__meta">{metaParts.join(" · ")}</div>}
+            {keywords.length > 0 && (
+              <div className="card__keywords">
+                {keywords.map((k) => (
+                  <span key={k} className="card__keyword-tag">
+                    {KEYWORD_ICONS[k]} {KEYWORD_LABELS[k]}
+                  </span>
+                ))}
+              </div>
+            )}
+            {def.text && <div className="card__text">{def.text}</div>}
+            <div className="card__spacer" />
+            {statsRow}
+            {statuses}
+          </div>,
+          document.body,
+        )}
     </>
   );
 }
