@@ -1,9 +1,10 @@
 import { CARD_DEFINITIONS } from "../data/cards";
 import {
   creatureCanAttack,
+  declareAdvance,
   declareCreatureAttack,
   declareHeroAttack,
-  getCreatureAttack,
+  getEffectiveCreatureAttack,
   getHeroAttack,
   heroCanAttack,
   reachProfileOf,
@@ -24,8 +25,17 @@ import {
 
 const AI: PlayerId = "opponent";
 
+/** Non-null cards in a row, deduped by instanceId — a Massive creature (DESIGN.md §5) occupies more than one slot with the same instance. */
 function alive(cards: (CardInstance | null)[]): CardInstance[] {
-  return cards.filter((c): c is CardInstance => c !== null);
+  const seen = new Set<string>();
+  const result: CardInstance[] = [];
+  for (const c of cards) {
+    if (c && !seen.has(c.instanceId)) {
+      seen.add(c.instanceId);
+      result.push(c);
+    }
+  }
+  return result;
 }
 
 function creatureMaxHp(card: CardInstance): number {
@@ -201,9 +211,11 @@ function chooseAttackTarget(state: GameState, reach: ReachProfile, attackerAttac
     const target =
       killable.length > 0
         ? killable.reduce((a, b) => ((a.currentHp ?? 0) >= (b.currentHp ?? 0) ? a : b))
-        : reachable.reduce((a, b) => (getCreatureAttack(a) <= getCreatureAttack(b) ? a : b));
+        : reachable.reduce((a, b) =>
+            getEffectiveCreatureAttack(state, enemy, a) <= getEffectiveCreatureAttack(state, enemy, b) ? a : b,
+          );
     // A Ranged attacker never takes retaliation damage, so it always trades.
-    const willSurvive = reach.ranged || attackerHp > getCreatureAttack(target);
+    const willSurvive = reach.ranged || attackerHp > getEffectiveCreatureAttack(state, enemy, target);
     if (killable.length > 0 || willSurvive) {
       return { type: "creature", instanceId: target.instanceId };
     }
@@ -227,6 +239,16 @@ function chooseAttackTarget(state: GameState, reach: ReachProfile, attackerAttac
 function playCombatPhase(state: GameState): void {
   const player = state.players[AI];
 
+  // Advance (DESIGN.md §5): a non-Ranged Support creature that has Advance
+  // just sits idle otherwise (it can't attack from Support without Ranged),
+  // so move it into an open same-column Vanguard slot instead.
+  for (const card of alive(player.board.support)) {
+    const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
+    if (!def.keywords.includes("advance") || def.keywords.includes("ranged")) continue;
+    if (!creatureCanAttack(state, card)) continue;
+    declareAdvance(state, AI, card.instanceId);
+  }
+
   const vanguardAttackers = alive(player.board.vanguard);
   const supportAttackers = alive(player.board.support).filter((c) =>
     (CARD_DEFINITIONS[c.defId] as CreatureDefinition).keywords.includes("ranged"),
@@ -236,7 +258,7 @@ function playCombatPhase(state: GameState): void {
     if (!creatureCanAttack(state, card)) continue;
     const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
     const reach = reachProfileOf(def);
-    const target = chooseAttackTarget(state, reach, getCreatureAttack(card), card.currentHp ?? 0);
+    const target = chooseAttackTarget(state, reach, getEffectiveCreatureAttack(state, AI, card), card.currentHp ?? 0);
     declareCreatureAttack(state, AI, card.instanceId, target);
   }
 

@@ -24,6 +24,23 @@ function isImmuneToSpell(card: CardInstance, sourceArchetype: CardArchetype | un
   return sourceArchetype === "spell" && hasKeyword(card, "immune");
 }
 
+/**
+ * All creatures across both rows, deduplicated by instanceId. A Massive
+ * creature (DESIGN.md §5) occupies more than one slot with the same
+ * instance — without dedup, an AOE effect would hit/buff it once per slot.
+ */
+function allBoardCreatures(rows: { vanguard: (CardInstance | null)[]; support: (CardInstance | null)[] }): CardInstance[] {
+  const seen = new Set<string>();
+  const result: CardInstance[] = [];
+  for (const c of [...rows.vanguard, ...rows.support]) {
+    if (c && !seen.has(c.instanceId)) {
+      seen.add(c.instanceId);
+      result.push(c);
+    }
+  }
+  return result;
+}
+
 /** A target chosen by the caller (UI click or AI decision) for an effect that needs one. */
 export type EffectTargetRef =
   | { kind: "card"; owner: PlayerId; instanceId: string }
@@ -56,7 +73,12 @@ export function killCardIfDead(state: GameState, owner: PlayerId, instanceId: st
   if (!found) return;
   if (found.card.currentHp !== undefined && found.card.currentHp <= 0) {
     const player = state.players[owner];
-    player.board[found.row][found.index] = null;
+    // A Massive creature (DESIGN.md §5) occupies every slot it spans with
+    // this same instance — clear all of them, not just the first found.
+    const row = player.board[found.row];
+    for (let i = 0; i < row.length; i++) {
+      if (row[i]?.instanceId === instanceId) row[i] = null;
+    }
     player.graveyard.push(found.card);
     state.log.push(`${found.card.defId} (${owner}) was destroyed.`);
     const def = CARD_DEFINITIONS[found.card.defId] as CreatureDefinition | BuildingDefinition;
@@ -174,9 +196,8 @@ export function resolveEffect(
     case "damage": {
       if (effect.target === "allEnemyCreatures" || effect.target === "allFriendlyCreatures") {
         const owner = effect.target === "allEnemyCreatures" ? otherPlayer(actingPlayer) : actingPlayer;
-        const board = state.players[owner].board;
-        for (const c of [...board.vanguard, ...board.support]) {
-          if (c && !isImmuneToSpell(c, sourceArchetype)) damageCard(state, owner, c.instanceId, effect.amount);
+        for (const c of allBoardCreatures(state.players[owner].board)) {
+          if (!isImmuneToSpell(c, sourceArchetype)) damageCard(state, owner, c.instanceId, effect.amount);
         }
         return;
       }
@@ -234,9 +255,8 @@ export function resolveEffect(
       };
       if (effect.target === "allFriendlyCreatures" || effect.target === "allEnemyCreatures") {
         const owner = effect.target === "allFriendlyCreatures" ? actingPlayer : otherPlayer(actingPlayer);
-        const board = state.players[owner].board;
-        for (const c of [...board.vanguard, ...board.support]) {
-          if (c && !isImmuneToSpell(c, sourceArchetype)) applyBuff(c);
+        for (const c of allBoardCreatures(state.players[owner].board)) {
+          if (!isImmuneToSpell(c, sourceArchetype)) applyBuff(c);
         }
         return;
       }

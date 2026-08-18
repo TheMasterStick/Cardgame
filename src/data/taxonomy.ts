@@ -70,6 +70,11 @@ export const KEYWORD_LABELS: Record<Keyword, string> = {
   immune: "Immune",
   poison: "Poison",
   taunt: "Taunt",
+  protector: "Protector",
+  flank: "Flank",
+  formation: "Formation",
+  advance: "Advance",
+  push: "Push",
 };
 
 /** Small glyphs shown on the compact card face so keyworded cards are recognizable at a glance. */
@@ -85,6 +90,11 @@ export const KEYWORD_ICONS: Record<Keyword, string> = {
   frenzy: "💢",
   immune: "✨",
   poison: "☠️",
+  protector: "🔰",
+  flank: "↔️",
+  formation: "🤝",
+  advance: "⏩",
+  push: "🫸",
 };
 
 /**

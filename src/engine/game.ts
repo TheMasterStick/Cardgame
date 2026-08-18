@@ -25,11 +25,51 @@ function findOpenSlot(row: (CardInstance | null)[], preferred?: number): number 
   return row.findIndex((c) => c === null);
 }
 
+/**
+ * Finds `spaceCost` contiguous open slots in the same row for a Massive
+ * creature (DESIGN.md §5) — null if there isn't enough contiguous space
+ * anywhere. `spaceCost` 1 is the common case and just wraps findOpenSlot.
+ */
+function findOpenContiguousSlots(row: (CardInstance | null)[], spaceCost: number, preferred?: number): number[] | null {
+  if (spaceCost <= 1) {
+    const idx = findOpenSlot(row, preferred);
+    return idx === -1 ? null : [idx];
+  }
+  const fitsAt = (start: number): number[] | null => {
+    if (start < 0 || start + spaceCost > row.length) return null;
+    for (let i = start; i < start + spaceCost; i++) {
+      if (row[i] !== null) return null;
+    }
+    return Array.from({ length: spaceCost }, (_, k) => start + k);
+  };
+  if (preferred !== undefined) {
+    const atPreferred = fitsAt(preferred);
+    if (atPreferred) return atPreferred;
+  }
+  for (let start = 0; start + spaceCost <= row.length; start++) {
+    const fit = fitsAt(start);
+    if (fit) return fit;
+  }
+  return null;
+}
+
+/** Dedupes a row by instanceId — a Massive creature (DESIGN.md §5) occupies more than one slot with the same instance. */
+function uniqueCards(row: (CardInstance | null)[]): CardInstance[] {
+  const seen = new Set<string>();
+  const result: CardInstance[] = [];
+  for (const c of row) {
+    if (c && !seen.has(c.instanceId)) {
+      seen.add(c.instanceId);
+      result.push(c);
+    }
+  }
+  return result;
+}
+
 function processEndOfTurnStatuses(state: GameState, owner: PlayerId): void {
   const player = state.players[owner];
   for (const row of ["vanguard", "support", "buildings"] as const) {
-    for (const card of player.board[row]) {
-      if (!card) continue;
+    for (const card of uniqueCards(player.board[row])) {
       const dmg = tickStatuses(card);
       if (dmg > 0 && card.currentHp !== undefined) {
         card.currentHp -= dmg;
@@ -75,8 +115,7 @@ export function startTurn(state: GameState): void {
   }
 
   for (const row of ["vanguard", "support", "buildings"] as const) {
-    for (const card of player.board[row]) {
-      if (!card) continue;
+    for (const card of uniqueCards(player.board[row])) {
       const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition | BuildingDefinition;
       for (const trigger of def.triggers) {
         if (trigger.on === "startOfTurn") {
@@ -142,12 +181,23 @@ export function playCardFromHand(
   }
 
   let slot = -1;
+  let creatureSlots: number[] = [];
   const creatureRow = options.row ?? "vanguard";
   if (def.archetype === "creature") {
-    slot = findOpenSlot(player.board[creatureRow], options.slotIndex);
-    if (slot === -1) {
-      return { ok: false, reason: creatureRow === "vanguard" ? "Vanguard is full." : "Support is full." };
+    const spaceCost = def.spaceCost ?? 1;
+    const fit = findOpenContiguousSlots(player.board[creatureRow], spaceCost, options.slotIndex);
+    if (!fit) {
+      return {
+        ok: false,
+        reason:
+          spaceCost > 1
+            ? `Needs ${spaceCost} contiguous open slots in ${creatureRow === "vanguard" ? "Vanguard" : "Support"}.`
+            : creatureRow === "vanguard"
+              ? "Vanguard is full."
+              : "Support is full.",
+      };
     }
+    creatureSlots = fit;
   } else if (def.archetype === "building") {
     slot = findOpenSlot(player.board.buildings, options.slotIndex);
     if (slot === -1) return { ok: false, reason: "No open Building slot." };
@@ -161,7 +211,10 @@ export function playCardFromHand(
 
   if (def.archetype === "creature") {
     card.summonedTurn = state.turnNumber;
-    player.board[creatureRow][slot] = card;
+    // Massive creatures occupy every slot they span with the same instance
+    // (DESIGN.md §5) — damage/HP mutate the one shared object regardless of
+    // which slot is looked up; death cleanup clears every occupied slot.
+    for (const s of creatureSlots) player.board[creatureRow][s] = card;
     for (const trigger of def.triggers) {
       if (trigger.on === "onPlay") resolveEffect(state, owner, trigger.effect, options.target ?? null);
     }

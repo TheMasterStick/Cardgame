@@ -10,6 +10,8 @@ interface CardViewProps {
   highlighted?: boolean;
   /** Renders this definition instead of looking `instance.defId` up in CARD_DEFINITIONS — for previewing a card that hasn't been saved yet (e.g. the admin form). */
   defOverride?: CardDefinition;
+  /** Live Attack including Flank/Formation bonuses (DESIGN.md §5) — pass this for creatures actually sitting on a board row. Falls back to the plain attack+attackDelta when omitted (hand/collection/off-board previews, where positional bonuses don't apply). */
+  attackOverride?: number;
 }
 
 const ZOOM_WIDTH = 240;
@@ -37,7 +39,7 @@ function computeZoomPosition(rect: DOMRect): { top: number; left: number } {
   return { top, left };
 }
 
-export function CardView({ instance, onClick, highlighted, defOverride }: CardViewProps) {
+export function CardView({ instance, onClick, highlighted, defOverride, attackOverride }: CardViewProps) {
   const def = defOverride ?? CARD_DEFINITIONS[instance.defId];
   const cardRef = useRef<HTMLDivElement>(null);
   const hoverTimer = useRef<number | null>(null);
@@ -100,7 +102,7 @@ export function CardView({ instance, onClick, highlighted, defOverride }: CardVi
     <div className="card__bottom">
       {def.archetype === "creature" && (
         <>
-          <span className="stat stat--attack">{(def as CreatureDefinition).attack + instance.attackDelta}</span>
+          <span className="stat stat--attack">{attackOverride ?? (def as CreatureDefinition).attack + instance.attackDelta}</span>
           <span className="stat stat--hp">{instance.currentHp}</span>
         </>
       )}

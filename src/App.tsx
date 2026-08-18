@@ -2,7 +2,14 @@ import { useEffect, useReducer, useRef, useState, type CSSProperties } from "rea
 import { CARD_DEFINITIONS, mergeRemoteCards } from "./data/cards";
 import { STARTER_DECKS } from "./data/decks";
 import { BOARD_THEME, cssImage } from "./data/theme";
-import { creatureCanAttack, declareCreatureAttack, declareHeroAttack, heroCanAttack, type AttackTarget } from "./engine/combat";
+import {
+  creatureCanAttack,
+  declareAdvance,
+  declareCreatureAttack,
+  declareHeroAttack,
+  heroCanAttack,
+  type AttackTarget,
+} from "./engine/combat";
 import { awardMatchCoins, canAffordPack, loadCollection, openPack, saveCollection, type Collection } from "./engine/collection";
 import { deckSize, deckToIds, loadCustomDeck, saveCustomDeck, type DeckDraft } from "./engine/customDeck";
 import type { EffectTargetRef } from "./engine/effects";
@@ -254,12 +261,20 @@ export default function App() {
       return;
     }
     if (owner !== "player" || state.activePlayer !== "player" || state.winner) return;
-    const card =
-      state.players.player.board.vanguard.find((c) => c?.instanceId === instanceId) ??
-      state.players.player.board.support.find((c) => c?.instanceId === instanceId);
-    if (card && creatureCanAttack(state, card)) {
-      setPending({ kind: "attack", attackerId: instanceId });
+    const inSupport = state.players.player.board.support.find((c) => c?.instanceId === instanceId);
+    const card = state.players.player.board.vanguard.find((c) => c?.instanceId === instanceId) ?? inSupport;
+    if (!card || !creatureCanAttack(state, card)) return;
+
+    const def = CARD_DEFINITIONS[card.defId];
+    const isRanged = def.archetype === "creature" && def.keywords.includes("ranged");
+    const canAdvance = def.archetype === "creature" && def.keywords.includes("advance");
+    if (inSupport && !isRanged && canAdvance) {
+      const result = declareAdvance(state, "player", instanceId);
+      if (!result.ok) fail(result.reason);
+      commit();
+      return;
     }
+    setPending({ kind: "attack", attackerId: instanceId });
   }
 
   function handleBuildingClick(owner: PlayerId, instanceId: string) {

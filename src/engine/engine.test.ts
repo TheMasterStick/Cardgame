@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { declareCreatureAttack } from "./combat";
+import { declareAdvance, declareCreatureAttack, getEffectiveCreatureAttack } from "./combat";
 import { drawCard } from "./deck";
-import { damageCard, damagePlayer, gainCap } from "./effects";
+import { damageCard, damagePlayer, gainCap, resolveEffect } from "./effects";
 import { createCardInstance, createInitialGameState } from "./factory";
 import { activateSlotCard, playCardFromHand, startTurn } from "./game";
 import { MAX_POOL, STARTING_GUARD, type GameState } from "./types";
@@ -570,5 +570,252 @@ describe("Ranged retaliation", () => {
     declareCreatureAttack(state, "player", attacker.instanceId, { type: "creature", instanceId: archer.instanceId });
     expect(archer.currentHp).toBeLessThanOrEqual(0); // died to the melee attacker's 2 damage
     expect(attacker.currentHp).toBe(1); // still took the archer's 2 retaliation damage on the way out
+  });
+});
+
+describe("Massive", () => {
+  it("occupies spaceCost contiguous slots when played", () => {
+    const state = makeState();
+    state.players.player.energy.current = 10; // Hill Giant costs 6, above the default starting pool
+    const giant = createCardInstance("hill-giant", "player"); // spaceCost 2
+    state.players.player.hand.push(giant);
+
+    const result = playCardFromHand(state, "player", giant.instanceId);
+    expect(result.ok).toBe(true);
+    expect(state.players.player.board.vanguard[0]?.instanceId).toBe(giant.instanceId);
+    expect(state.players.player.board.vanguard[1]?.instanceId).toBe(giant.instanceId);
+  });
+
+  it("fails to play without enough contiguous open space", () => {
+    const state = makeState();
+    state.players.player.energy.current = 10; // rule out "not enough Energy" as the failure reason
+    state.players.player.board.vanguard[0] = createCardInstance("footman", "player");
+    state.players.player.board.vanguard[2] = createCardInstance("footman", "player");
+    state.players.player.board.vanguard[4] = createCardInstance("footman", "player");
+    // Only single isolated gaps remain (slots 1 and 3) — no 2 contiguous slots.
+    const giant = createCardInstance("hill-giant", "player");
+    state.players.player.hand.push(giant);
+
+    const result = playCardFromHand(state, "player", giant.instanceId);
+    expect(result.ok).toBe(false);
+  });
+
+  it("clears every occupied slot on death", () => {
+    const state = makeState();
+    const giant = createCardInstance("hill-giant", "player");
+    state.players.player.board.vanguard[0] = giant;
+    state.players.player.board.vanguard[1] = giant;
+
+    giant.currentHp = 1;
+    damageCard(state, "player", giant.instanceId, 99);
+    expect(state.players.player.board.vanguard[0]).toBeNull();
+    expect(state.players.player.board.vanguard[1]).toBeNull();
+    expect(state.players.player.graveyard).toContain(giant);
+  });
+
+  it("is hit exactly once by an AOE effect, not once per occupied slot", () => {
+    const state = makeState();
+    const giant = createCardInstance("hill-giant", "opponent");
+    giant.currentHp = 9;
+    state.players.opponent.board.vanguard[0] = giant;
+    state.players.opponent.board.vanguard[1] = giant;
+
+    resolveEffect(state, "player", { kind: "damage", amount: 2, target: "allEnemyCreatures" }, null);
+    expect(giant.currentHp).toBe(7); // 9 - 2, not 9 - 4
+  });
+
+  it("protects both of its columns' Buildings, not just one", () => {
+    const state = makeState();
+    const attacker = createCardInstance("footman", "player");
+    attacker.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = attacker;
+    const giant = createCardInstance("hill-giant", "opponent");
+    state.players.opponent.board.vanguard[0] = giant;
+    state.players.opponent.board.vanguard[1] = giant;
+    const building = createCardInstance("gold-mine", "opponent");
+    state.players.opponent.board.buildings[1] = building;
+
+    const result = declareCreatureAttack(state, "player", attacker.instanceId, {
+      type: "building",
+      instanceId: building.instanceId,
+    });
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe("Flank", () => {
+  it("grants its bonus while in column 1 (index 0)", () => {
+    const state = makeState();
+    const scout = createCardInstance("flankguard-outrider", "player"); // base 2 attack, +2 flankBonus
+    state.players.player.board.vanguard[0] = scout;
+    expect(getEffectiveCreatureAttack(state, "player", scout)).toBe(4);
+  });
+
+  it("grants its bonus while in column 5 (index 4)", () => {
+    const state = makeState();
+    const scout = createCardInstance("flankguard-outrider", "player");
+    state.players.player.board.vanguard[4] = scout;
+    expect(getEffectiveCreatureAttack(state, "player", scout)).toBe(4);
+  });
+
+  it("does not grant its bonus in a middle column", () => {
+    const state = makeState();
+    const scout = createCardInstance("flankguard-outrider", "player");
+    state.players.player.board.vanguard[2] = scout;
+    expect(getEffectiveCreatureAttack(state, "player", scout)).toBe(2);
+  });
+});
+
+describe("Formation", () => {
+  it("grants its bonus while an ally occupies an adjacent column", () => {
+    const state = makeState();
+    const veteran = createCardInstance("shieldwall-veteran", "player"); // base 2 attack, +2 formationBonus
+    state.players.player.board.vanguard[1] = veteran;
+    state.players.player.board.vanguard[2] = createCardInstance("footman", "player");
+    expect(getEffectiveCreatureAttack(state, "player", veteran)).toBe(4);
+  });
+
+  it("does not grant its bonus with no adjacent ally", () => {
+    const state = makeState();
+    const veteran = createCardInstance("shieldwall-veteran", "player");
+    state.players.player.board.vanguard[1] = veteran;
+    expect(getEffectiveCreatureAttack(state, "player", veteran)).toBe(2);
+  });
+});
+
+describe("Push", () => {
+  it("shoves a surviving enemy Vanguard defender back into Support when that slot is empty", () => {
+    const state = makeState();
+    const brute = createCardInstance("shieldbreaker-brute", "player"); // push, 4 attack
+    brute.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = brute;
+    const defender = createCardInstance("stone-golem", "opponent"); // 4 attack / 7 HP — survives 4 damage
+    state.players.opponent.board.vanguard[0] = defender;
+
+    declareCreatureAttack(state, "player", brute.instanceId, { type: "creature", instanceId: defender.instanceId });
+    expect(state.players.opponent.board.vanguard[0]).toBeNull();
+    expect(state.players.opponent.board.support[0]?.instanceId).toBe(defender.instanceId);
+  });
+
+  it("does not push if the column's Support slot is already occupied", () => {
+    const state = makeState();
+    const brute = createCardInstance("shieldbreaker-brute", "player");
+    brute.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = brute;
+    const defender = createCardInstance("stone-golem", "opponent");
+    state.players.opponent.board.vanguard[0] = defender;
+    state.players.opponent.board.support[0] = createCardInstance("footman", "opponent");
+
+    declareCreatureAttack(state, "player", brute.instanceId, { type: "creature", instanceId: defender.instanceId });
+    expect(state.players.opponent.board.vanguard[0]?.instanceId).toBe(defender.instanceId);
+  });
+
+  it("does not push a defender that died to the hit", () => {
+    const state = makeState();
+    const brute = createCardInstance("shieldbreaker-brute", "player");
+    brute.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = brute;
+    const defender = createCardInstance("footman", "opponent"); // 3 HP, dies to 4 damage
+    state.players.opponent.board.vanguard[0] = defender;
+
+    declareCreatureAttack(state, "player", brute.instanceId, { type: "creature", instanceId: defender.instanceId });
+    expect(state.players.opponent.board.vanguard[0]).toBeNull();
+    expect(state.players.opponent.board.support[0]).toBeNull();
+    expect(state.players.opponent.graveyard).toContain(defender);
+  });
+});
+
+describe("Advance", () => {
+  it("moves an Advance-keyword Support creature into the same-column empty Vanguard slot", () => {
+    const state = makeState();
+    const scout = createCardInstance("vanguard-scout", "player");
+    scout.summonedTurn = 0;
+    state.players.player.board.support[2] = scout;
+    const energyBefore = state.players.player.energy.current;
+
+    const result = declareAdvance(state, "player", scout.instanceId);
+    expect(result.ok).toBe(true);
+    expect(state.players.player.board.support[2]).toBeNull();
+    expect(state.players.player.board.vanguard[2]?.instanceId).toBe(scout.instanceId);
+    expect(state.players.player.energy.current).toBe(energyBefore - 1);
+    expect(scout.hasAttackedThisTurn).toBe(true);
+  });
+
+  it("fails for a creature without the Advance keyword", () => {
+    const state = makeState();
+    const footman = createCardInstance("footman", "player");
+    footman.summonedTurn = 0;
+    state.players.player.board.support[0] = footman;
+
+    const result = declareAdvance(state, "player", footman.instanceId);
+    expect(result.ok).toBe(false);
+  });
+
+  it("fails when the same-column Vanguard slot is occupied", () => {
+    const state = makeState();
+    const scout = createCardInstance("vanguard-scout", "player");
+    scout.summonedTurn = 0;
+    state.players.player.board.support[0] = scout;
+    state.players.player.board.vanguard[0] = createCardInstance("footman", "player");
+
+    const result = declareAdvance(state, "player", scout.instanceId);
+    expect(result.ok).toBe(false);
+  });
+
+  it("fails for a creature that already acted this turn", () => {
+    const state = makeState();
+    const scout = createCardInstance("vanguard-scout", "player");
+    scout.summonedTurn = 0;
+    scout.hasAttackedThisTurn = true;
+    state.players.player.board.support[0] = scout;
+
+    const result = declareAdvance(state, "player", scout.instanceId);
+    expect(result.ok).toBe(false);
+  });
+});
+
+describe("Protector", () => {
+  it("redirects a lethal attack onto a same-row Protector instead of the original target", () => {
+    const state = makeState();
+    const attacker = createCardInstance("footman", "player"); // 2 attack
+    attacker.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = attacker;
+    const weakling = createCardInstance("apprentice-mage", "opponent"); // 1/3 — dies to 2 damage? no, 3 HP survives 2. Use lower HP.
+    weakling.currentHp = 1; // force it to die to a 2-damage hit
+    const protector = createCardInstance("shield-sister", "opponent"); // protector, 6 HP
+    state.players.opponent.board.vanguard[1] = weakling;
+    state.players.opponent.board.vanguard[2] = protector;
+
+    declareCreatureAttack(state, "player", attacker.instanceId, { type: "creature", instanceId: weakling.instanceId });
+    expect(weakling.currentHp).toBe(1); // untouched — the hit was redirected
+    expect(protector.currentHp).toBeLessThan(6); // took the damage instead
+  });
+
+  it("does not redirect when the original target would survive the hit anyway", () => {
+    const state = makeState();
+    const attacker = createCardInstance("footman", "player"); // 2 attack
+    attacker.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = attacker;
+    const sturdy = createCardInstance("stone-golem", "opponent"); // 7 HP, survives 2 damage easily
+    const protector = createCardInstance("shield-sister", "opponent");
+    state.players.opponent.board.vanguard[1] = sturdy;
+    state.players.opponent.board.vanguard[2] = protector;
+
+    declareCreatureAttack(state, "player", attacker.instanceId, { type: "creature", instanceId: sturdy.instanceId });
+    expect(sturdy.currentHp).toBeLessThan(7); // took the damage itself
+    expect(protector.currentHp).toBe(6); // untouched
+  });
+
+  it("does not redirect when there is no Protector in the row", () => {
+    const state = makeState();
+    const attacker = createCardInstance("footman", "player");
+    attacker.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = attacker;
+    const weakling = createCardInstance("apprentice-mage", "opponent");
+    weakling.currentHp = 1;
+    state.players.opponent.board.vanguard[1] = weakling;
+
+    declareCreatureAttack(state, "player", attacker.instanceId, { type: "creature", instanceId: weakling.instanceId });
+    expect(weakling.currentHp).toBeLessThanOrEqual(0);
   });
 });

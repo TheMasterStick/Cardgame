@@ -137,13 +137,32 @@ Only meaningful on Creature cards (`keywords: Keyword[]`). See DESIGN.md
 | `frenzy` | Every time this creature takes damage and survives, its Attack permanently increases by the damage amount taken. Built into the engine — no trigger needed, just the keyword. |
 | `immune` | Blocks Spell-archetype activated effects from targeting this creature (see Spell note above). Does not block Ability effects or other creatures' triggers. |
 | `poison` | When this creature attacks, it applies a Poison damage-over-time status to whatever it hit, in addition to its normal combat damage. Built into the engine — no trigger needed, just the keyword. |
+| `protector` | When an attack targets an allied creature in the same row, the engine may automatically redirect it onto this creature instead — a heuristic stand-in for the "defender's manual choice" DESIGN.md §5 describes; it only fires when the original target would otherwise die to the hit. No `triggers` entry needed. |
+| `flank` | Pair with `flankBonus: { attackDelta: N }` on the card. Grants +N Attack while this creature occupies column 1 or 5 (0-indexed 0 or 4) of its row — live, re-evaluated on every Attack read, not a stored delta. |
+| `formation` | Pair with `formationBonus: { attackDelta: N }`. Grants +N Attack while an allied creature occupies an adjacent column, same row — also live. |
+| `advance` | Lets a Support creature spend 1 Energy to move into the same-column Vanguard slot instead of attacking (`declareAdvance` in `combat.ts`). Uses the same Ready/summoning-sickness gate as attacking, and exhausts the creature the same way. No `triggers` entry needed — it's a player action, not a trigger. |
+| `push` | When this creature's attack damages an enemy Vanguard creature and it survives, and that column's Support slot is empty, the defender gets moved there automatically. Doesn't apply to Massive defenders (they don't fit in one Support slot). No `triggers` entry needed. |
 
 `battlecry`, `counter`, and `revenge` are labels that pair with a
 matching `triggers` entry (`onPlay`, `onDefend`, `onDeath`
 respectively) — the keyword itself doesn't do anything without the
-trigger. `taunt`, `frenzy`, `immune`, and `poison` are fully handled by
-the engine from the keyword alone. `ranged`, `reach`, `infiltrate`, and
-`charge` are also engine-handled, no trigger needed.
+trigger. `taunt`, `frenzy`, `immune`, `poison`, `protector`, and `push`
+are fully handled by the engine from the keyword alone. `ranged`,
+`reach`, `infiltrate`, and `charge` are also engine-handled, no trigger
+needed. `flank`/`formation` need their matching `flankBonus`/
+`formationBonus` field to actually do anything. `advance` is invoked as
+a player action (`declareAdvance`), not through a trigger or effect.
+
+**Massive creatures** (`spaceCost: N` on a `CreatureDefinition`, no
+keyword needed — it's a numeric field since it needs a magnitude, per
+DESIGN.md §5) occupy `N` contiguous same-row slots instead of the
+default 1. The engine stores the same `CardInstance` object in every
+slot it occupies — damage/buffs/status mutate the one shared instance
+regardless of which slot is looked up, and death/AOE-effect code
+already dedupes by `instanceId` so a Massive creature isn't hit twice.
+`playCardFromHand` fails if there isn't `N` contiguous open slots in
+the target row. A Massive creature protects every Building column it
+spans (DESIGN.md §11).
 
 **Reach-tier targeting chain** (full writeup: DESIGN.md §5): Base (no
 reach keyword) can only target enemy Vanguard, subject to Taunt; Reach
@@ -295,9 +314,12 @@ drop its JSON output straight into the array in
 > `attack`, `hp`. Creatures additionally need `attack`, `hp`,
 > `keywords` (array, any of `ranged`, `reach`, `infiltrate`, `charge`,
 > `battlecry`, `taunt`, `counter`, `revenge`, `frenzy`, `immune`,
-> `poison`), `triggers`
-> (array of `{on, effect}`, `on` one of
+> `poison`, `protector`, `flank`, `formation`, `advance`, `push`),
+> `triggers` (array of `{on, effect}`, `on` one of
 > `onPlay`/`onAttack`/`onDeath`/`onDefend`/`startOfTurn`/`endOfTurn`).
+> Creatures can optionally add `spaceCost` (number, Massive — default
+> 1), `flankBonus`/`formationBonus` (`{ attackDelta: number }`, paired
+> with the `flank`/`formation` keywords).
 > Buildings need `hp` and `triggers`. Spells/abilities need
 > `activateCost` (number), `charges` (number or `"unlimited"`), and a
 > single `effect`. Equipment needs `attackBonus` and `damageReduction`.

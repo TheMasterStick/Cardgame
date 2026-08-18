@@ -16,13 +16,22 @@ Ranged/Infiltrate (§5) — deliberate Vanguard-vs-Support placement when
 playing a creature, Support creatures attacking if they have Ranged,
 column-based Building protection (§11), and the enemy Hero being
 always attackable (no board-population gate — only a reachable Taunt
-creature, or a card's own Creature-only restriction, narrows it). Wave
-B2 of Phase B (Protector, Flank, Formation, Advance, Push, Massive) is
-still spec only. Everything else below (Hero Passive/Power/Signature,
-Allegiance, Spell forms, the fuller keyword pool beyond what's listed
-above, Buildings-as-objects, the Equipment rework) is also still spec
-only. CARDS.md/BACKEND.md describe what's live today; check them (not
-just this doc) for current schema.
+creature, or a card's own Creature-only restriction, narrows it).
+**Phase B2 is also live**: Massive (`spaceCost`, multi-slot placement/
+death/AOE-dedup), Flank/Formation (live, continuously re-evaluated
+Attack bonuses — Attack only, not HP, see §5), Push (post-combat
+reposition into Support), Advance (Support→Vanguard tactical action),
+and Protector — with one deliberate simplification: DESIGN.md frames
+Protector's redirect as a live, manual, reactive choice for the
+defending player; the engine instead applies it automatically via a
+heuristic (redirect only when the original target would otherwise die
+to the hit) rather than a real-time prompt, symmetrically for both the
+human and the AI. A genuine interactive prompt for the human's own
+Protector decisions is a possible follow-up, not yet built. Everything
+else below (Hero Passive/Power/Signature, Allegiance, Spell forms, the
+fuller keyword pool beyond what's listed above, Buildings-as-objects,
+the Equipment rework) is still spec only. CARDS.md/BACKEND.md describe
+what's live today; check them (not just this doc) for current schema.
 
 Sections marked **Open default** are judgment calls made to keep the
 spec internally consistent and buildable; flag any of them if they
@@ -201,15 +210,27 @@ see §7): when an enemy attack is declared against an allied creature,
 if you control a Protector creature in the same row, you may redirect
 the attack onto the Protector instead, before damage resolves. Reactive
 and optional (defender's choice), unlike Taunt's mandatory
-attacker-side restriction.
+attacker-side restriction. **Implementation note:** the live engine
+applies this automatically via a heuristic (redirects only when the
+original target would otherwise die to the hit, picking whichever
+eligible Protector survives it) rather than a real-time prompt to the
+defending player — see the implementation-status note at the top of
+this document.
 
 **Positional keywords:**
 - **Flank** — this card's printed bonus is active only while it
   occupies column 1 or column 5 (either row). Continuously
   re-evaluated as the board changes, not a one-shot trigger.
+  **Implementation note:** the live engine's bonus is Attack-only
+  (`flankBonus.attackDelta` on the card definition) — an HP component
+  isn't implemented, since a toggling max-HP bonus raises awkward
+  questions (does it also heal current HP on gain? un-heal on loss?)
+  that no card has needed answered yet. Revisit if a card design
+  actually calls for one.
 - **Formation** — this card's printed bonus is active only while at
   least one allied creature occupies an adjacent column, same row.
-  Also continuously re-evaluated.
+  Also continuously re-evaluated. Same Attack-only implementation note
+  as Flank applies (`formationBonus.attackDelta`).
 - **Advance** — a Support creature may spend 1 Energy to move into an
   empty Vanguard slot **in the same column**, instead of attacking
   this turn. Exhausts it, same as attacking.
@@ -504,7 +525,7 @@ Suggested build order, each phase individually shippable/testable:
 |---|---|
 | **A — Foundation** ✅ *(live)* | Board reshape (Vanguard+Support+columns), the 3-pool resource-by-archetype split, Ready/Exhausted, Guard rename (+ faction display labels), base reach-tier targeting (no Reach/Ranged/Infiltrate yet — just Vanguard-first, matches v1's existing chain shape). |
 | **B1 — Reach & position, wave 1** ✅ *(live)* | Reach, Ranged, Infiltrate keywords and the full targeting chain they unlock (§5). Deliberate Vanguard-vs-Support placement on play. Support creatures can attack if Ranged. Column-based Building protection (§11). Hero-targeting has no board-population gate — every attacker can always reach the Hero, gated only by a reachable Taunt creature (Infiltrate bypasses that too). Target-restricted Warcries/Spells with no legal target just fizzle instead of making the card unplayable. |
-| **B2 — Reach & position, wave 2** | Protector, Flank, Formation, Advance, Push, Massive. |
+| **B2 — Reach & position, wave 2** ✅ *(live)* | Protector, Flank, Formation, Advance, Push, Massive. Protector's redirect is heuristic-automatic rather than a live prompt (see the implementation-status note above); everything else matches this section as written. |
 | **C — Spell forms & Hero rework** | Instant/Ritual/Charged split for Spells. Hero Passive/Power/Signature. Allegiance deckbuilding validation. |
 | **D — Keyword expansion** | Stealth, Ward, Cleave, Drain, Bloodied, Summon (+ the `summonCreature` effect kind), Warcry rename. |
 | **E — Buildings as objects** | Durability/attackability, activated abilities, On Construction triggers, enemy interaction (Siege/Sabotage). |

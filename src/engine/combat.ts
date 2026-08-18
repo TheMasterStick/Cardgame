@@ -19,6 +19,55 @@ export function getCreatureAttack(card: CardInstance): number {
   return def.attack + card.attackDelta;
 }
 
+/** Where a creature currently sits on its owner's board — its row and every column it occupies (>1 for Massive). Null if it's not on a board row at all. */
+function locateOnBoard(
+  state: GameState,
+  owner: PlayerId,
+  instanceId: string,
+): { row: (CardInstance | null)[]; columns: number[] } | null {
+  const board = state.players[owner].board;
+  for (const row of [board.vanguard, board.support]) {
+    const columns: number[] = [];
+    row.forEach((c, i) => {
+      if (c?.instanceId === instanceId) columns.push(i);
+    });
+    if (columns.length > 0) return { row, columns };
+  }
+  return null;
+}
+
+function isFlanking(row: (CardInstance | null)[], columns: number[]): boolean {
+  return columns.some((i) => i === 0 || i === row.length - 1);
+}
+
+function hasFormationAlly(row: (CardInstance | null)[], columns: number[], instanceId: string): boolean {
+  const left = row[Math.min(...columns) - 1];
+  const right = row[Math.max(...columns) + 1];
+  return (left !== null && left.instanceId !== instanceId) || (right !== null && right.instanceId !== instanceId);
+}
+
+/**
+ * Live Attack including Flank/Formation bonuses (DESIGN.md §5). Those
+ * bonuses are continuously re-evaluated from current board position, never
+ * stored on the CardInstance — this is the function anything actually
+ * dealing or previewing combat damage should call instead of the bare
+ * getCreatureAttack. Falls back to the base value if the creature isn't
+ * currently on a board row at all.
+ */
+export function getEffectiveCreatureAttack(state: GameState, owner: PlayerId, card: CardInstance): number {
+  const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
+  let attack = def.attack + card.attackDelta;
+  const located = locateOnBoard(state, owner, card.instanceId);
+  if (!located) return attack;
+  if (def.flankBonus && def.keywords.includes("flank") && isFlanking(located.row, located.columns)) {
+    attack += def.flankBonus.attackDelta;
+  }
+  if (def.formationBonus && def.keywords.includes("formation") && hasFormationAlly(located.row, located.columns, card.instanceId)) {
+    attack += def.formationBonus.attackDelta;
+  }
+  return attack;
+}
+
 export function creatureCanAttack(state: GameState, card: CardInstance): boolean {
   const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
   if (card.hasAttackedThisTurn) return false;
@@ -153,6 +202,36 @@ function fireOnDefendTrigger(
 }
 
 /**
+ * Protector (DESIGN.md §5): when a creature-target attack is declared
+ * against an allied creature, the defending player may redirect it onto a
+ * same-row Protector before damage resolves. DESIGN.md frames this as a
+ * live, manual, reactive choice for the defender; this engine applies it
+ * automatically as a heuristic instead of a real-time prompt (see the
+ * implementation-status note) — it only fires when the original target
+ * would otherwise die to this hit, redirecting to whichever eligible
+ * Protector survives the hit (or, failing that, the healthiest one).
+ */
+function pickProtectorRedirect(
+  state: GameState,
+  defenderOwner: PlayerId,
+  originalTargetInstanceId: string,
+  incomingDamage: number,
+): CardInstance | null {
+  const board = state.players[defenderOwner].board;
+  const row = board.vanguard.some((c) => c?.instanceId === originalTargetInstanceId) ? board.vanguard : board.support;
+  const originalTarget = row.find((c) => c?.instanceId === originalTargetInstanceId);
+  if (!originalTarget || (originalTarget.currentHp ?? 0) > incomingDamage) return null;
+
+  const protectors = row.filter(
+    (c): c is CardInstance => c !== null && c.instanceId !== originalTargetInstanceId && hasKeyword(c, "protector"),
+  );
+  if (protectors.length === 0) return null;
+  const survivors = protectors.filter((p) => (p.currentHp ?? 0) > incomingDamage);
+  const pool = survivors.length > 0 ? survivors : protectors;
+  return pool.reduce((a, b) => ((a.currentHp ?? 0) >= (b.currentHp ?? 0) ? a : b));
+}
+
+/**
  * Attacker deals damage to a creature target; the defending creature trades
  * damage back — unless the attacker is Ranged. A Ranged attacker fires from
  * outside melee range, so it never takes retaliation damage regardless of
@@ -166,16 +245,23 @@ function resolveCreatureTrade(
   attackerInstanceId: string | "hero",
   attackerAttack: number,
   attackerIsRanged: boolean,
+  attackerHasPush: boolean,
   defenderOwner: PlayerId,
   defenderInstanceId: string,
 ): void {
   const defenderBoard = state.players[defenderOwner].board;
+
+  const redirect = pickProtectorRedirect(state, defenderOwner, defenderInstanceId, attackerAttack);
+  if (redirect) state.log.push(`${redirect.defId} (${defenderOwner}) steps in as Protector.`);
+  const actualDefenderId = redirect ? redirect.instanceId : defenderInstanceId;
+
+  const vanguardColumn = defenderBoard.vanguard.findIndex((c) => c?.instanceId === actualDefenderId);
   const defender =
-    defenderBoard.vanguard.find((c) => c?.instanceId === defenderInstanceId) ??
-    defenderBoard.support.find((c) => c?.instanceId === defenderInstanceId) ??
+    (vanguardColumn !== -1 ? defenderBoard.vanguard[vanguardColumn] : null) ??
+    defenderBoard.support.find((c) => c?.instanceId === actualDefenderId) ??
     null;
   if (!defender) return;
-  const defenderAttack = getCreatureAttack(defender);
+  const defenderAttack = getEffectiveCreatureAttack(state, defenderOwner, defender);
 
   const attackerTarget: EffectTargetRef =
     attackerInstanceId === "hero"
@@ -183,7 +269,20 @@ function resolveCreatureTrade(
       : { kind: "card", owner: attackerOwner, instanceId: attackerInstanceId };
   fireOnDefendTrigger(state, defenderOwner, defender, attackerTarget);
 
-  damageCard(state, defenderOwner, defenderInstanceId, attackerAttack);
+  damageCard(state, defenderOwner, actualDefenderId, attackerAttack);
+
+  // Push (DESIGN.md §5): if the defender was in Vanguard and survives, and
+  // its column's Support slot is open, it gets shoved back there. Only
+  // applies to single-slot defenders — a Massive creature doesn't fit into
+  // one Support slot.
+  if (attackerHasPush && vanguardColumn !== -1 && (defender.currentHp ?? 0) > 0 && defenderBoard.support[vanguardColumn] === null) {
+    const defenderDef = CARD_DEFINITIONS[defender.defId] as CreatureDefinition;
+    if ((defenderDef.spaceCost ?? 1) === 1) {
+      defenderBoard.vanguard[vanguardColumn] = null;
+      defenderBoard.support[vanguardColumn] = defender;
+      state.log.push(`${defender.defId} (${defenderOwner}) is pushed back into Support.`);
+    }
+  }
 
   if (attackerIsRanged || defenderAttack <= 0) return;
 
@@ -243,11 +342,20 @@ export function declareCreatureAttack(
   const validation = validateTarget(state, attackerOwner, reach, target);
   if (!validation.ok) return validation;
 
-  const attackerAttack = getCreatureAttack(attacker);
+  const attackerAttack = getEffectiveCreatureAttack(state, attackerOwner, attacker);
   const defenderOwner = otherPlayer(attackerOwner);
 
   if (target.type === "creature") {
-    resolveCreatureTrade(state, attackerOwner, attackerInstanceId, attackerAttack, reach.ranged, defenderOwner, target.instanceId);
+    resolveCreatureTrade(
+      state,
+      attackerOwner,
+      attackerInstanceId,
+      attackerAttack,
+      reach.ranged,
+      def.keywords.includes("push"),
+      defenderOwner,
+      target.instanceId,
+    );
   } else if (target.type === "building") {
     damageCard(state, defenderOwner, target.instanceId, attackerAttack);
   } else {
@@ -273,8 +381,8 @@ export function declareHeroAttack(
   const defenderOwner = otherPlayer(attackerOwner);
 
   if (target.type === "creature") {
-    // Heroes have no Ranged weapon flag yet (Equipment has no `ranged` field) — always a melee trade for now.
-    resolveCreatureTrade(state, attackerOwner, "hero", attackerAttack, false, defenderOwner, target.instanceId);
+    // Heroes have no Ranged/Push weapon flags yet (Equipment has no such fields) — always a plain melee trade for now.
+    resolveCreatureTrade(state, attackerOwner, "hero", attackerAttack, false, false, defenderOwner, target.instanceId);
   } else if (target.type === "building") {
     damageCard(state, defenderOwner, target.instanceId, attackerAttack);
   } else {
@@ -282,6 +390,40 @@ export function declareHeroAttack(
   }
 
   state.players[attackerOwner].hero.hasAttackedThisTurn = true;
+  return { ok: true };
+}
+
+/**
+ * Advance (DESIGN.md §5): a Support creature with this keyword may spend 1
+ * Energy to move into the same-column Vanguard slot(s) instead of
+ * attacking this turn. Uses the same Ready/summoning-sickness gate as
+ * attacking (creatureCanAttack) since it's an alternative to attacking, and
+ * exhausts the creature the same way.
+ */
+export function declareAdvance(state: GameState, owner: PlayerId, instanceId: string): ValidationResult {
+  const player = state.players[owner];
+  const board = player.board;
+  const columns: number[] = [];
+  board.support.forEach((c, i) => {
+    if (c?.instanceId === instanceId) columns.push(i);
+  });
+  if (columns.length === 0) return { ok: false, reason: "This creature isn't in Support." };
+  const card = board.support[columns[0]]!;
+  const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
+  if (!def.keywords.includes("advance")) return { ok: false, reason: "This creature can't Advance." };
+  if (!creatureCanAttack(state, card)) return { ok: false, reason: "This creature can't act right now." };
+  if (player.energy.current < 1) return { ok: false, reason: "Not enough Energy." };
+  if (columns.some((i) => board.vanguard[i] !== null)) {
+    return { ok: false, reason: "The Vanguard slot in its column isn't empty." };
+  }
+
+  player.energy.current -= 1;
+  for (const i of columns) {
+    board.support[i] = null;
+    board.vanguard[i] = card;
+  }
+  card.hasAttackedThisTurn = true;
+  state.log.push(`${card.defId} (${owner}) advances into Vanguard.`);
   return { ok: true };
 }
 

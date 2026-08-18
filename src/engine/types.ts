@@ -26,7 +26,12 @@ export type Keyword =
   | "frenzy"
   | "immune"
   | "poison"
-  | "taunt";
+  | "taunt"
+  | "protector"
+  | "flank"
+  | "formation"
+  | "advance"
+  | "push";
 
 export type Element =
   | "frost"
@@ -197,12 +202,23 @@ export interface HeroCardDefinition extends CardDefinitionBase {
   hp: number;
 }
 
+/** A conditional stat bump from a positional keyword — Attack only (DESIGN.md §5). Re-evaluated live, never stored on the CardInstance. */
+export interface PositionalBonus {
+  attackDelta: number;
+}
+
 export interface CreatureDefinition extends CardDefinitionBase {
   archetype: "creature";
   attack: number;
   hp: number;
   keywords: Keyword[];
   triggers: Trigger[];
+  /** Massive: how many contiguous same-row slots this creature occupies. Omit for the default of 1. */
+  spaceCost?: number;
+  /** Requires the `flank` keyword. Active only while occupying column 1 or 5 of its row (DESIGN.md §5). */
+  flankBonus?: PositionalBonus;
+  /** Requires the `formation` keyword. Active only while an allied creature occupies an adjacent column, same row (DESIGN.md §5). */
+  formationBonus?: PositionalBonus;
 }
 
 export interface BuildingDefinition extends CardDefinitionBase {

@@ -205,6 +205,21 @@ body {
   font-weight: bold;
 }
 
+/*
+ * A Massive creature's second (and further) occupied slot (DESIGN.md §5) —
+ * the card itself renders once, at its first slot; this just marks the
+ * continuation so the column count/alignment across rows stays intact.
+ */
+.slot--massive-continuation {
+  width: 100%;
+  min-height: 24px;
+  border: 1px solid var(--border);
+  border-left: none;
+  border-radius: 8px;
+  background: repeating-linear-gradient(135deg, var(--panel-light) 0px, var(--panel-light) 6px, transparent 6px, transparent 12px);
+  opacity: 0.6;
+}
+
 .portrait {
   position: relative;
   width: 100px;

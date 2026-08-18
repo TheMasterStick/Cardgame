@@ -1,11 +1,16 @@
 import type { CSSProperties, ReactNode } from "react";
 import { CARD_DEFINITIONS } from "../../data/cards";
 import { guardLabel } from "../../data/taxonomy";
-import { canAttack, creatureCanAttack, heroCanAttack } from "../../engine/combat";
+import { canAttack, creatureCanAttack, getEffectiveCreatureAttack, heroCanAttack } from "../../engine/combat";
 import type { CardInstance, CreatureDefinition, GameState, HeroCardDefinition, PlayerId } from "../../engine/types";
 import { BOARD_THEME, cssImage } from "../../data/theme";
 import { getPendingEffect, isEffectTargetable, type PendingAction } from "../targeting";
 import { CardView } from "./CardView";
+
+/** The first slot index a creature occupies in this row — a Massive creature (DESIGN.md §5) spans more than one. */
+function firstOccupiedIndex(row: (CardInstance | null)[], instanceId: string): number {
+  return row.findIndex((c) => c?.instanceId === instanceId);
+}
 
 interface PlayerBoardProps {
   state: GameState;
@@ -139,10 +144,13 @@ export function PlayerBoard({
         ))}
       </div>
 
-      <div className="row row--support" title="Support: backline. Only Ranged creatures can attack from here.">
+      <div className="row row--support" title="Support: backline. Only Ranged creatures can attack from here — a creature with Advance can move into Vanguard instead.">
         {playerState.board.support.map((card, i) => {
           if (!card) {
             return <Slot key={i}>{canPlaceHere && <PlaceableSlot onClick={() => onPlaceCreature(owner, "support", i)} />}</Slot>;
+          }
+          if (firstOccupiedIndex(playerState.board.support, card.instanceId) !== i) {
+            return <Slot key={i}><div className="slot--massive-continuation" aria-hidden="true" /></Slot>;
           }
           let clickable = false;
           if (pending?.kind === "attack") {
@@ -152,8 +160,10 @@ export function PlayerBoard({
           } else if (pending && pendingEffect) {
             clickable = isEffectTargetable(pendingEffect, "creature", owner);
           } else if (canInitiate) {
-            const isRanged = (CARD_DEFINITIONS[card.defId] as CreatureDefinition).keywords.includes("ranged");
-            clickable = isRanged && creatureCanAttack(state, card);
+            const keywords = (CARD_DEFINITIONS[card.defId] as CreatureDefinition).keywords;
+            const isRanged = keywords.includes("ranged");
+            const canAdvance = !isRanged && keywords.includes("advance");
+            clickable = (isRanged || canAdvance) && creatureCanAttack(state, card);
           }
           return (
             <Slot key={i}>
@@ -161,6 +171,7 @@ export function PlayerBoard({
                 instance={card}
                 highlighted={clickable}
                 onClick={clickable ? () => onCreatureClick(owner, card.instanceId) : undefined}
+                attackOverride={getEffectiveCreatureAttack(state, owner, card)}
               />
             </Slot>
           );
@@ -171,6 +182,9 @@ export function PlayerBoard({
         {playerState.board.vanguard.map((card, i) => {
           if (!card) {
             return <Slot key={i}>{canPlaceHere && <PlaceableSlot onClick={() => onPlaceCreature(owner, "vanguard", i)} />}</Slot>;
+          }
+          if (firstOccupiedIndex(playerState.board.vanguard, card.instanceId) !== i) {
+            return <Slot key={i}><div className="slot--massive-continuation" aria-hidden="true" /></Slot>;
           }
           let clickable = false;
           if (pending?.kind === "attack") {
@@ -188,6 +202,7 @@ export function PlayerBoard({
                 instance={card}
                 highlighted={clickable}
                 onClick={clickable ? () => onCreatureClick(owner, card.instanceId) : undefined}
+                attackOverride={getEffectiveCreatureAttack(state, owner, card)}
               />
             </Slot>
           );
