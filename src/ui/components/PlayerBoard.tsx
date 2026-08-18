@@ -49,9 +49,12 @@ export function PlayerBoard({
   const canInitiate = !pending && owner === "player" && state.activePlayer === "player" && !state.winner;
   const canPlaceHere = pending?.kind === "placeCreature" && owner === "player";
 
+  // All pending attacks are human-initiated, so the attacker's owner is always
+  // "player" here — `owner` is which board is being rendered (the *defender*
+  // when pending.kind === "attack"), not who's attacking.
   let portraitClickable = false;
   if (pending?.kind === "attack") {
-    portraitClickable = owner === "opponent" && canAttack(state, owner, pending.attackerId, { type: "player" });
+    portraitClickable = owner === "opponent" && canAttack(state, "player", pending.attackerId, { type: "player" });
   } else if (pending && pendingEffect) {
     portraitClickable = isEffectTargetable(pendingEffect, "portrait", owner);
   } else if (canInitiate) {
@@ -74,7 +77,7 @@ export function PlayerBoard({
             if (pending?.kind === "attack") {
               clickable =
                 owner === "opponent" &&
-                canAttack(state, owner, pending.attackerId, { type: "building", instanceId: card.instanceId });
+                canAttack(state, "player", pending.attackerId, { type: "building", instanceId: card.instanceId });
             } else if (pending && pendingEffect) {
               clickable = isEffectTargetable(pendingEffect, "building", owner);
             }
@@ -145,7 +148,7 @@ export function PlayerBoard({
           if (pending?.kind === "attack") {
             clickable =
               owner === "opponent" &&
-              canAttack(state, owner, pending.attackerId, { type: "creature", instanceId: card.instanceId });
+              canAttack(state, "player", pending.attackerId, { type: "creature", instanceId: card.instanceId });
           } else if (pending && pendingEffect) {
             clickable = isEffectTargetable(pendingEffect, "creature", owner);
           } else if (canInitiate) {
@@ -173,7 +176,7 @@ export function PlayerBoard({
           if (pending?.kind === "attack") {
             clickable =
               owner === "opponent" &&
-              canAttack(state, owner, pending.attackerId, { type: "creature", instanceId: card.instanceId });
+              canAttack(state, "player", pending.attackerId, { type: "creature", instanceId: card.instanceId });
           } else if (pending && pendingEffect) {
             clickable = isEffectTargetable(pendingEffect, "creature", owner);
           } else if (canInitiate) {
