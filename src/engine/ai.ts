@@ -169,14 +169,20 @@ function playMainPhase(state: GameState): void {
 
 const NO_REACH: ReachProfile = { reach: false, ranged: false, infiltrate: false };
 
-/** Enemy creatures this reach tier can actually target, gated by Taunt per row (DESIGN.md §5). */
+/**
+ * Enemy creatures this reach tier can actually target, gated by Taunt per
+ * row (DESIGN.md §5). Base attackers reach Support too once enemy Vanguard
+ * is completely empty (the basic combat ladder — Vanguard, then Support);
+ * Reach/Ranged can already reach Support even while Vanguard is populated.
+ */
 function reachableCreatures(enemyBoard: BoardState, reach: ReachProfile): CardInstance[] {
   const gateByTaunt = (row: CardInstance[]): CardInstance[] => {
     const taunts = row.filter((c) => hasKeyword(c, "taunt"));
     return taunts.length > 0 ? taunts : row;
   };
   const vanguard = gateByTaunt(alive(enemyBoard.vanguard));
-  if (!reach.reach && !reach.ranged) return vanguard;
+  const canReachSupport = reach.reach || reach.ranged || vanguard.length === 0;
+  if (!canReachSupport) return vanguard;
   return [...vanguard, ...gateByTaunt(alive(enemyBoard.support))];
 }
 
@@ -214,12 +220,14 @@ function chooseAttackTarget(state: GameState, reach: ReachProfile, attackerAttac
         : reachable.reduce((a, b) =>
             getEffectiveCreatureAttack(state, enemy, a) <= getEffectiveCreatureAttack(state, enemy, b) ? a : b,
           );
-    // A Ranged attacker never takes retaliation damage, so it always trades.
-    const willSurvive = reach.ranged || attackerHp > getEffectiveCreatureAttack(state, enemy, target);
+    // A Ranged attacker escapes retaliation only against a non-Ranged target — two Ranged creatures trade normally.
+    const attackerEscapesRetaliation = reach.ranged && !hasKeyword(target, "ranged");
+    const willSurvive = attackerEscapesRetaliation || attackerHp > getEffectiveCreatureAttack(state, enemy, target);
     if (killable.length > 0 || willSurvive) {
       return { type: "creature", instanceId: target.instanceId };
     }
-    const tauntForcesIt = !reach.infiltrate && (rowHasTaunt(enemyBoard.vanguard) || ((reach.reach || reach.ranged) && rowHasTaunt(enemyBoard.support)));
+    const canReachSupportForTaunt = reach.reach || reach.ranged || alive(enemyBoard.vanguard).length === 0;
+    const tauntForcesIt = !reach.infiltrate && (rowHasTaunt(enemyBoard.vanguard) || (canReachSupportForTaunt && rowHasTaunt(enemyBoard.support)));
     if (tauntForcesIt) {
       return { type: "creature", instanceId: target.instanceId };
     }

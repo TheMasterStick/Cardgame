@@ -122,21 +122,31 @@ function checkTaunt(row: (CardInstance | null)[], targetInstanceId: string, rowL
 }
 
 /**
- * Reach-tier targeting (DESIGN.md §5): Base can only hit enemy Vanguard
- * (subject to Taunt); Reach/Ranged can also hit enemy Support directly, even
- * while Vanguard is populated (subject to Support's own Taunt); Infiltrate
- * bypasses straight to enemy Buildings regardless of row state. Buildings
- * are gated per-column (both rows in that column must be empty) rather than
- * needing the whole board cleared.
+ * Reach-tier targeting (DESIGN.md §5) — the basic combat ladder is
+ * Vanguard, then Support, then Buildings/Hero:
+ * - Base (no reach keyword) can hit enemy Vanguard freely (subject to
+ *   Taunt); once enemy Vanguard is completely empty, Support becomes the
+ *   next rung of the ladder and is fair game too (subject to Support's own
+ *   Taunt) — so a board of nothing-but-Support creatures is never
+ *   untouchable just because the attacker lacks a keyword.
+ * - Reach/Ranged skip straight to the Support rung: they can hit enemy
+ *   Support directly even while Vanguard is still populated, on top of
+ *   everything Base can already do.
+ * - Infiltrate bypasses straight to enemy Buildings regardless of row
+ *   state. Buildings are gated per-column (both rows in that column must
+ *   be empty) rather than needing the whole board cleared.
  *
  * The enemy Guard/Hero has no *board-population* gate — a full enemy
  * Vanguard/Support no longer walls it off by itself, every attacker can
  * still reach past ordinary creatures straight to the Hero. Taunt is the
  * one thing that still stops it: a Taunt creature in a row this attacker
- * can actually reach (Vanguard always; Support too with Reach/Ranged) must
- * be dealt with first, exactly like it gates ordinary creature-targeting.
- * Infiltrate bypasses Taunt for Hero-targeting the same way it bypasses
- * everything else about enemy row state.
+ * can actually reach (Vanguard always; Support too with Reach/Ranged, or
+ * with Base once Vanguard is empty) must be dealt with first, exactly like
+ * it gates ordinary creature-targeting. Infiltrate bypasses Taunt for
+ * Hero-targeting the same way it bypasses everything else about enemy row
+ * state. Spells/Abilities aren't part of this ladder at all — they can
+ * always target any creature in either row directly and ignore Taunt
+ * entirely (see targeting.ts).
  */
 function validateTarget(
   state: GameState,
@@ -153,8 +163,12 @@ function validateTarget(
 
     const onSupport = defenderBoard.support.some((c) => c?.instanceId === target.instanceId);
     if (onSupport) {
-      if (!reach.reach && !reach.ranged) {
-        return { ok: false, reason: "Can only reach enemy Support with Reach or Ranged." };
+      const vanguardEmpty = defenderBoard.vanguard.every((c) => c === null);
+      if (!reach.reach && !reach.ranged && !vanguardEmpty) {
+        return {
+          ok: false,
+          reason: "Enemy Vanguard must be cleared first to reach Support, or the attacker needs Reach/Ranged.",
+        };
       }
       return checkTaunt(defenderBoard.support, target.instanceId, "Support");
     }
@@ -167,7 +181,11 @@ function validateTarget(
     if (rowHasTaunt(defenderBoard.vanguard)) {
       return { ok: false, reason: "An enemy Taunt creature in Vanguard must be attacked first." };
     }
-    if ((reach.reach || reach.ranged) && rowHasTaunt(defenderBoard.support)) {
+    // Support Taunt only matters for an attacker that can actually reach
+    // Support — Reach/Ranged always can; a Base attacker only once
+    // Vanguard is empty (the same ladder rule as creature-targeting above).
+    const canReachSupport = reach.reach || reach.ranged || defenderBoard.vanguard.every((c) => c === null);
+    if (canReachSupport && rowHasTaunt(defenderBoard.support)) {
       return { ok: false, reason: "An enemy Taunt creature in Support must be attacked first." };
     }
     return { ok: true };
@@ -233,11 +251,12 @@ function pickProtectorRedirect(
 
 /**
  * Attacker deals damage to a creature target; the defending creature trades
- * damage back — unless the attacker is Ranged. A Ranged attacker fires from
- * outside melee range, so it never takes retaliation damage regardless of
- * what it's attacking. Ranged has no effect on defense: a Ranged creature
- * that gets attacked (by anyone) trades damage back exactly like melee vs
- * melee — Ranged is an attacker-side privilege, not a defensive one.
+ * damage back — unless the attacker is Ranged *and* the defender isn't. A
+ * Ranged attacker fires from outside melee range, so a melee defender can't
+ * hit back at all — but a Ranged defender just shoots back the same way,
+ * so two Ranged creatures trade normally. Ranged has no effect on defense
+ * by itself: a Ranged creature being attacked by a melee attacker still
+ * trades damage back exactly like melee vs melee.
  */
 function resolveCreatureTrade(
   state: GameState,
@@ -284,7 +303,8 @@ function resolveCreatureTrade(
     }
   }
 
-  if (attackerIsRanged || defenderAttack <= 0) return;
+  const attackerEscapesRetaliation = attackerIsRanged && !hasKeyword(defender, "ranged");
+  if (attackerEscapesRetaliation || defenderAttack <= 0) return;
 
   if (attackerInstanceId === "hero") {
     damagePlayer(state, attackerOwner, defenderAttack);

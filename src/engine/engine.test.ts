@@ -106,11 +106,12 @@ describe("reach tiers: attacking from Support", () => {
 });
 
 describe("reach tiers: targeting enemy Support", () => {
-  it("a Base (no reach keyword) attacker cannot target an enemy Support creature", () => {
+  it("a Base (no reach keyword) attacker CANNOT target an enemy Support creature while enemy Vanguard is still populated", () => {
     const state = makeState();
     const attacker = createCardInstance("footman", "player");
     attacker.summonedTurn = 0;
     state.players.player.board.vanguard[0] = attacker;
+    state.players.opponent.board.vanguard[0] = createCardInstance("footman", "opponent");
     const hiding = createCardInstance("footman", "opponent");
     state.players.opponent.board.support[0] = hiding;
 
@@ -119,6 +120,21 @@ describe("reach tiers: targeting enemy Support", () => {
       instanceId: hiding.instanceId,
     });
     expect(result.ok).toBe(false);
+  });
+
+  it("a Base (no reach keyword) attacker CAN target an enemy Support creature once enemy Vanguard is empty (the basic combat ladder)", () => {
+    const state = makeState();
+    const attacker = createCardInstance("footman", "player");
+    attacker.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = attacker;
+    const archer = createCardInstance("arrow-archer", "opponent");
+    state.players.opponent.board.support[0] = archer;
+
+    const result = declareCreatureAttack(state, "player", attacker.instanceId, {
+      type: "creature",
+      instanceId: archer.instanceId,
+    });
+    expect(result.ok).toBe(true);
   });
 
   it("a Reach attacker can target an enemy Support creature directly, even through a full enemy Vanguard", () => {
@@ -308,11 +324,23 @@ describe("Taunt blocks Hero-targeting", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("does NOT block a base attacker from hitting the player over a Support-only Taunt (it can't reach Support at all)", () => {
+  it("blocks a base attacker from hitting the player over a Support-only Taunt once enemy Vanguard is empty (it can now reach that rung)", () => {
     const state = makeState();
     const attacker = createCardInstance("footman", "player"); // no reach keywords
     attacker.summonedTurn = 0;
     state.players.player.board.vanguard[0] = attacker;
+    state.players.opponent.board.support[0] = createCardInstance("stonewall-guardian", "opponent");
+
+    const result = declareCreatureAttack(state, "player", attacker.instanceId, { type: "player" });
+    expect(result.ok).toBe(false);
+  });
+
+  it("does NOT block a base attacker from hitting the player over a Support-only Taunt while enemy Vanguard is still populated by a non-Taunt creature (can't reach that far, and mere population isn't a gate)", () => {
+    const state = makeState();
+    const attacker = createCardInstance("footman", "player"); // no reach keywords
+    attacker.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = attacker;
+    state.players.opponent.board.vanguard[0] = createCardInstance("footman", "opponent"); // populated, but no Taunt
     state.players.opponent.board.support[0] = createCardInstance("stonewall-guardian", "opponent");
 
     const result = declareCreatureAttack(state, "player", attacker.instanceId, { type: "player" });
@@ -559,7 +587,7 @@ describe("Ranged retaliation", () => {
     expect(archer.currentHp).toBe(1); // took no retaliation despite the defender surviving with Attack
   });
 
-  it("a Ranged creature on defense still trades damage back normally", () => {
+  it("a Ranged creature on defense still trades damage back normally against a melee attacker", () => {
     const state = makeState();
     const attacker = createCardInstance("footman", "player"); // melee, 2 attack / 3 HP
     attacker.summonedTurn = 0;
@@ -570,6 +598,19 @@ describe("Ranged retaliation", () => {
     declareCreatureAttack(state, "player", attacker.instanceId, { type: "creature", instanceId: archer.instanceId });
     expect(archer.currentHp).toBeLessThanOrEqual(0); // died to the melee attacker's 2 damage
     expect(attacker.currentHp).toBe(1); // still took the archer's 2 retaliation damage on the way out
+  });
+
+  it("two Ranged creatures trade damage back and forth normally — Ranged-vs-Ranged is not immune", () => {
+    const state = makeState();
+    const archer = createCardInstance("arrow-archer", "player"); // 2 attack / 1 HP, ranged
+    archer.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = archer;
+    const sniper = createCardInstance("longbow-sniper", "opponent"); // 3 attack / 3 HP, ranged
+    state.players.opponent.board.vanguard[0] = sniper;
+
+    declareCreatureAttack(state, "player", archer.instanceId, { type: "creature", instanceId: sniper.instanceId });
+    expect(sniper.currentHp).toBe(1); // took the archer's 2 damage, survived
+    expect(archer.currentHp).toBeLessThanOrEqual(0); // took the sniper's 3 retaliation damage and died — Ranged didn't save it
   });
 });
 
