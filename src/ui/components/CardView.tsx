@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cardFrameUrl } from "../../data/cardFrames";
 import { CARD_DEFINITIONS } from "../../data/cards";
@@ -90,43 +90,70 @@ export function CardView({ instance, onClick, highlighted, defOverride, attackOv
     setZoomPos(null);
   }
 
+  // The detailed frame layout (name/cost/art window/rarity bar/rules text)
+  // only ever appears in the hover-zoom popup now — see below. The compact
+  // face (board/hand/collection/etc.) is deliberately minimal: art plus
+  // attack/health, Hearthstone-minion-style, so a full row of cards stays
+  // readable at a glance instead of needing to hover each one.
   const frameUrl = cardFrameUrl(def.archetype);
 
-  const classes = ["card", `card--${def.archetype}`, `card--rarity-${def.rarity}`];
-  if (highlighted) classes.push("card--highlight");
-  if (onClick) classes.push("card--clickable");
-  if (def.art) classes.push("card--has-art");
-  if (acting) classes.push(`card--ai-${acting}`);
-  if (frameUrl) classes.push("card--framed");
+  const baseClasses = ["card", `card--${def.archetype}`, `card--rarity-${def.rarity}`];
+  if (highlighted) baseClasses.push("card--highlight");
+  if (onClick) baseClasses.push("card--clickable");
+  if (def.art) baseClasses.push("card--has-art");
+  if (acting) baseClasses.push(`card--ai-${acting}`);
+
+  const zoomClasses = [...baseClasses, "card--zoom"];
+  if (frameUrl) zoomClasses.push("card--framed");
 
   const keywords: Keyword[] = def.archetype === "creature" ? def.keywords : [];
+  const art = def.art && (
+    <div className="card__art" style={{ backgroundImage: `url("${def.art}")` }} aria-hidden="true" />
+  );
+  const rarityDot = <span className="card__rarity-dot" aria-hidden="true" />;
+
+  const compactAttack =
+    def.archetype === "creature"
+      ? attackOverride ?? (def as CreatureDefinition).attack + instance.attackDelta
+      : def.archetype === "hero"
+        ? (def as HeroCardDefinition).attack
+        : null;
+  const compactRightKind: "hp" | "charges" | null =
+    def.archetype === "creature" || def.archetype === "building" || def.archetype === "hero"
+      ? "hp"
+      : def.archetype === "spell" || def.archetype === "ability"
+        ? "charges"
+        : null;
+  const compactRightStat =
+    compactRightKind === "hp"
+      ? def.archetype === "hero"
+        ? (def as HeroCardDefinition).hp
+        : instance.currentHp
+      : compactRightKind === "charges"
+        ? instance.chargesRemaining === "unlimited"
+          ? "∞"
+          : instance.chargesRemaining
+        : null;
+
   const statuses = instance.statuses.length > 0 && (
-    <div className="card__statuses">
+    <>
       {instance.statuses.map((s, i) => (
         <span key={i} className={`status status--${s.type}`}>
           {s.type === "burn" ? "🔥" : "☠"}
           {s.amount}
         </span>
       ))}
-    </div>
+    </>
   );
 
+  let zoomContent: ReactNode;
   if (frameUrl) {
     const cost = "cost" in def ? def.cost : null;
     const metaBarParts = [RARITY_LABELS[def.rarity]];
     if (def.faction) metaBarParts.push(FACTION_LABELS[def.faction]);
     metaBarParts.push(def.race ? RACE_LABELS[def.race] : ARCHETYPE_LABELS[def.archetype]);
 
-    const attackValue =
-      def.archetype === "creature" ? attackOverride ?? (def as CreatureDefinition).attack + instance.attackDelta : null;
-    const rightStat =
-      def.archetype === "creature" || def.archetype === "building"
-        ? instance.currentHp
-        : instance.chargesRemaining === "unlimited"
-          ? "∞"
-          : instance.chargesRemaining;
-
-    const framedContent = (
+    zoomContent = (
       <>
         <div className="frame__name">{def.name}</div>
         {cost !== null && <div className="frame__cost">{cost}</div>}
@@ -147,77 +174,50 @@ export function CardView({ instance, onClick, highlighted, defOverride, attackOv
           )}
           {def.text}
         </div>
-        {attackValue !== null && <div className="frame__stat frame__stat--left">{attackValue}</div>}
-        <div className="frame__stat frame__stat--right">{rightStat}</div>
-        {statuses}
+        {compactAttack !== null && <div className="frame__stat frame__stat--left">{compactAttack}</div>}
+        {compactRightStat !== null && <div className="frame__stat frame__stat--right">{compactRightStat}</div>}
+        {statuses && <div className="card__statuses">{statuses}</div>}
       </>
     );
+  } else {
+    const metaParts: string[] = [];
+    if (def.race) metaParts.push(RACE_LABELS[def.race]);
+    if (def.element) metaParts.push(ELEMENT_LABELS[def.element]);
+    const topRow = (
+      <div className="card__top">
+        {"cost" in def && def.archetype !== "hero" && <div className="card__cost">{def.cost}</div>}
+        <div className="card__name">{def.name}</div>
+      </div>
+    );
 
-    return (
+    // Only Hero and Equipment ever reach this plain layout (cardFrameUrl
+    // covers every other archetype) — Equipment has no stats surfaced here today.
+    zoomContent = (
       <>
-        <div
-          ref={cardRef}
-          className={classes.join(" ")}
-          style={{ backgroundImage: `url("${frameUrl}")` }}
-          onClick={onClick}
-          onMouseEnter={handleMouseEnter}
-          onMouseLeave={handleMouseLeave}
-          aria-label={def.name}
-        >
-          {framedContent}
-        </div>
-        {zoomPos &&
-          createPortal(
-            <div
-              className={[...classes, "card--zoom"].join(" ")}
-              style={{
-                position: "fixed",
-                top: zoomPos.top,
-                left: zoomPos.left,
-                width: ZOOM_WIDTH,
-                backgroundImage: `url("${frameUrl}")`,
-              }}
-            >
-              {framedContent}
-            </div>,
-            document.body,
+        {art}
+        {rarityDot}
+        {topRow}
+        {metaParts.length > 0 && <div className="card__meta">{metaParts.join(" · ")}</div>}
+        {def.text && <div className="card__text">{def.text}</div>}
+        <div className="card__spacer" />
+        <div className="card__bottom">
+          {def.archetype === "hero" && (
+            <>
+              <span className="stat stat--attack">{(def as HeroCardDefinition).attack}</span>
+              <span className="stat stat--hp">{(def as HeroCardDefinition).hp}</span>
+            </>
           )}
+        </div>
+        {statuses && <div className="card__statuses">{statuses}</div>}
       </>
     );
   }
-
-  const metaParts: string[] = [];
-  if (def.race) metaParts.push(RACE_LABELS[def.race]);
-  if (def.element) metaParts.push(ELEMENT_LABELS[def.element]);
-
-  const art = def.art && (
-    <div className="card__art" style={{ backgroundImage: `url("${def.art}")` }} aria-hidden="true" />
-  );
-  const rarityDot = <span className="card__rarity-dot" aria-hidden="true" />;
-  const topRow = (
-    <div className="card__top">
-      {"cost" in def && def.archetype !== "hero" && <div className="card__cost">{def.cost}</div>}
-      <div className="card__name">{def.name}</div>
-    </div>
-  );
-  // Only Hero and Equipment ever reach this plain layout (cardFrameUrl covers
-  // every other archetype) — Equipment has no stats surfaced here today.
-  const statsRow = (
-    <div className="card__bottom">
-      {def.archetype === "hero" && (
-        <>
-          <span className="stat stat--attack">{(def as HeroCardDefinition).attack}</span>
-          <span className="stat stat--hp">{(def as HeroCardDefinition).hp}</span>
-        </>
-      )}
-    </div>
-  );
 
   return (
     <>
       <div
         ref={cardRef}
-        className={classes.join(" ")}
+        className={baseClasses.join(" ")}
         onClick={onClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -225,25 +225,27 @@ export function CardView({ instance, onClick, highlighted, defOverride, attackOv
       >
         {art}
         {rarityDot}
-        {topRow}
-        <div className="card__spacer" />
-        {statsRow}
-        {statuses}
+        {compactAttack !== null && <span className="card__corner-stat card__corner-stat--left">{compactAttack}</span>}
+        {compactRightStat !== null && (
+          <span className={`card__corner-stat card__corner-stat--right card__corner-stat--${compactRightKind}`}>
+            {compactRightStat}
+          </span>
+        )}
+        {statuses && <div className="card__statuses card__statuses--compact">{statuses}</div>}
       </div>
       {zoomPos &&
         createPortal(
           <div
-            className={[...classes, "card--zoom"].join(" ")}
-            style={{ position: "fixed", top: zoomPos.top, left: zoomPos.left, width: ZOOM_WIDTH }}
+            className={zoomClasses.join(" ")}
+            style={{
+              position: "fixed",
+              top: zoomPos.top,
+              left: zoomPos.left,
+              width: ZOOM_WIDTH,
+              ...(frameUrl ? { backgroundImage: `url("${frameUrl}")` } : {}),
+            }}
           >
-            {art}
-            {rarityDot}
-            {topRow}
-            {metaParts.length > 0 && <div className="card__meta">{metaParts.join(" · ")}</div>}
-            {def.text && <div className="card__text">{def.text}</div>}
-            <div className="card__spacer" />
-            {statsRow}
-            {statuses}
+            {zoomContent}
           </div>,
           document.body,
         )}

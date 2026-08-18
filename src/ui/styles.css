@@ -698,6 +698,54 @@ body {
   background: rgba(10, 10, 14, 0.65);
 }
 
+/*
+ * Compact card face (board/hand/collection/etc.): art fills the whole tile,
+ * Hearthstone-minion-style, with just attack (bottom-left) and
+ * health-or-charges (bottom-right) as small circular badges overlaid on it —
+ * no name/cost/text, so a full row of cards stays readable without hovering
+ * each one. The detailed layout (name, rarity/type, rules text) only shows
+ * in the hover-zoom popup.
+ */
+.card__corner-stat {
+  position: absolute;
+  bottom: 3px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.68rem;
+  font-weight: bold;
+  background: rgba(10, 10, 14, 0.85);
+  border: 1.5px solid rgba(0, 0, 0, 0.5);
+  z-index: 2;
+}
+
+.card__corner-stat--left {
+  left: 3px;
+  color: var(--attack);
+}
+
+.card__corner-stat--right {
+  right: 3px;
+  color: var(--hp);
+}
+
+.card__corner-stat--charges {
+  color: var(--text-dim);
+}
+
+.card__statuses--compact {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 2;
+}
+
 .stat--attack {
   color: var(--attack);
   font-weight: bold;
