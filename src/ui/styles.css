@@ -32,7 +32,7 @@ body {
 
 .app {
   --app-bg-image: none;
-  max-width: 1200px;
+  max-width: 1680px;
   width: 100%;
   margin: 0 auto;
   padding: 8px 14px 12px;
@@ -43,6 +43,41 @@ body {
   background-size: cover;
   background-position: center;
   background-attachment: fixed;
+}
+
+/* Playing screen: a tall log sidebar on the left (so match history doesn't
+   get pushed off the bottom of the page) beside the boards/hand column,
+   using the extra horizontal room a fixed-width centered layout otherwise
+   leaves empty on wide screens. */
+.app__layout {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+}
+
+.app__log-panel {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+}
+
+.app__board-column {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app__board-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.app__board-row .player-board {
+  flex: 1;
+  min-width: 0;
 }
 
 .app__header {
@@ -113,6 +148,28 @@ body {
   margin-left: auto;
   color: var(--text-dim);
   font-size: 0.8rem;
+}
+
+/* Vertical: a narrow side panel next to a board (App.tsx's board-row) instead of a full-width strip above/below it. */
+.resource-bar--vertical {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: 118px;
+  flex-shrink: 0;
+}
+
+.resource-bar--vertical .resource-bar__label {
+  min-width: 0;
+}
+
+.resource-bar--vertical .pip {
+  flex-direction: column;
+  gap: 0;
+}
+
+.resource-bar--vertical .resource-bar__deck {
+  margin-left: 0;
 }
 
 /* Board */
@@ -855,7 +912,9 @@ body {
   font-size: 0.75rem;
 }
 
-/* Log */
+/* Log — a tall sidebar (App.tsx's .app__log-panel) that stretches to match
+   the board column's height and scrolls internally past that, rather than
+   a short strip that pushes the page taller and needs scrolling to reach. */
 .game-log {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -863,7 +922,8 @@ body {
   padding: 6px 10px;
   font-size: 0.72rem;
   color: var(--text-dim);
-  max-height: 90px;
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 

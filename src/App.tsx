@@ -486,57 +486,67 @@ export default function App() {
         {message && <div className="app__message">{message}</div>}
       </header>
 
-      <ResourceBar playerState={state.players.opponent} label="Opponent" />
-      <PlayerBoard
-        state={state}
-        owner="opponent"
-        isEnemy
-        pending={pending}
-        aiHighlight={aiHighlight}
-        onCreatureClick={handleCreatureClick}
-        onBuildingClick={handleBuildingClick}
-        onSlotClick={handleSlotClick}
-        onPortraitClick={handlePortraitClick}
-        onPlaceCreature={handlePlaceCreature}
-      />
+      <div className="app__layout">
+        <aside className="app__log-panel">
+          <GameLog log={state.log} />
+        </aside>
 
-      <PlayerBoard
-        state={state}
-        owner="player"
-        isEnemy={false}
-        pending={pending}
-        aiHighlight={aiHighlight}
-        onCreatureClick={handleCreatureClick}
-        onBuildingClick={handleBuildingClick}
-        onSlotClick={handleSlotClick}
-        onPortraitClick={handlePortraitClick}
-        onPlaceCreature={handlePlaceCreature}
-      />
-      <ResourceBar playerState={state.players.player} label="You" />
+        <div className="app__board-column">
+          <div className="app__board-row">
+            <PlayerBoard
+              state={state}
+              owner="opponent"
+              isEnemy
+              pending={pending}
+              aiHighlight={aiHighlight}
+              onCreatureClick={handleCreatureClick}
+              onBuildingClick={handleBuildingClick}
+              onSlotClick={handleSlotClick}
+              onPortraitClick={handlePortraitClick}
+              onPlaceCreature={handlePlaceCreature}
+            />
+            <ResourceBar playerState={state.players.opponent} label="Opponent" layout="vertical" />
+          </div>
 
-      <div className="app__controls">
-        <HandView
-          playerState={state.players.player}
-          interactive={state.activePlayer === "player" && !pending && !state.winner}
-          onCardClick={handleHandCardClick}
-        />
-        <div className="app__actions">
-          {pending && (
-            <button className="btn btn--cancel" onClick={() => setPending(null)}>
-              Cancel
-            </button>
-          )}
-          <button
-            className="btn btn--end-turn"
-            onClick={handleEndTurn}
-            disabled={state.activePlayer !== "player" || !!state.winner}
-          >
-            End Turn
-          </button>
+          <div className="app__board-row">
+            <PlayerBoard
+              state={state}
+              owner="player"
+              isEnemy={false}
+              pending={pending}
+              aiHighlight={aiHighlight}
+              onCreatureClick={handleCreatureClick}
+              onBuildingClick={handleBuildingClick}
+              onSlotClick={handleSlotClick}
+              onPortraitClick={handlePortraitClick}
+              onPlaceCreature={handlePlaceCreature}
+            />
+            <ResourceBar playerState={state.players.player} label="You" layout="vertical" />
+          </div>
+
+          <div className="app__controls">
+            <HandView
+              playerState={state.players.player}
+              interactive={state.activePlayer === "player" && !pending && !state.winner}
+              onCardClick={handleHandCardClick}
+            />
+            <div className="app__actions">
+              {pending && (
+                <button className="btn btn--cancel" onClick={() => setPending(null)}>
+                  Cancel
+                </button>
+              )}
+              <button
+                className="btn btn--end-turn"
+                onClick={handleEndTurn}
+                disabled={state.activePlayer !== "player" || !!state.winner}
+              >
+                End Turn
+              </button>
+            </div>
+          </div>
         </div>
       </div>
-
-      <GameLog log={state.log} />
 
       {state.winner && (
         <div className="winner-overlay">
