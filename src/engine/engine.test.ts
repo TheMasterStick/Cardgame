@@ -722,6 +722,29 @@ describe("Formation", () => {
     state.players.player.board.vanguard[1] = veteran;
     expect(getEffectiveCreatureAttack(state, "player", veteran)).toBe(2);
   });
+
+  it("does not crash when sitting in the leftmost column (no left neighbor to read)", () => {
+    const state = makeState();
+    const veteran = createCardInstance("shieldwall-veteran", "player");
+    state.players.player.board.vanguard[0] = veteran;
+    expect(getEffectiveCreatureAttack(state, "player", veteran)).toBe(2);
+  });
+
+  it("does not crash when sitting in the rightmost column (no right neighbor to read)", () => {
+    const state = makeState();
+    const veteran = createCardInstance("shieldwall-veteran", "player");
+    const lastColumn = state.players.player.board.vanguard.length - 1;
+    state.players.player.board.vanguard[lastColumn] = veteran;
+    expect(getEffectiveCreatureAttack(state, "player", veteran)).toBe(2);
+  });
+
+  it("still grants its bonus from a same-row ally when sitting in the leftmost column", () => {
+    const state = makeState();
+    const veteran = createCardInstance("shieldwall-veteran", "player");
+    state.players.player.board.vanguard[0] = veteran;
+    state.players.player.board.vanguard[1] = createCardInstance("footman", "player");
+    expect(getEffectiveCreatureAttack(state, "player", veteran)).toBe(4);
+  });
 });
 
 describe("Push", () => {

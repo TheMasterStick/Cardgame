@@ -41,8 +41,13 @@ function isFlanking(row: (CardInstance | null)[], columns: number[]): boolean {
 }
 
 function hasFormationAlly(row: (CardInstance | null)[], columns: number[], instanceId: string): boolean {
-  const left = row[Math.min(...columns) - 1];
-  const right = row[Math.max(...columns) + 1];
+  // Out-of-bounds neighbors (a creature sitting in the edge column) must
+  // read as "no neighbor" — a plain `row[-1]`/`row[row.length]` array access
+  // returns undefined rather than null, which would otherwise crash below.
+  const leftIndex = Math.min(...columns) - 1;
+  const rightIndex = Math.max(...columns) + 1;
+  const left = leftIndex >= 0 ? row[leftIndex] : null;
+  const right = rightIndex < row.length ? row[rightIndex] : null;
   return (left !== null && left.instanceId !== instanceId) || (right !== null && right.instanceId !== instanceId);
 }
 
