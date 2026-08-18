@@ -59,7 +59,7 @@ function pickActivationTarget(state: GameState, effect: CardEffect): EffectTarge
         const weakest = enemyFront.reduce((a, b) => ((a.currentHp ?? Infinity) <= (b.currentHp ?? Infinity) ? a : b));
         return { kind: "card", owner: enemy, instanceId: weakest.instanceId };
       }
-      if (effect.target === "targetBuilding" || effect.target === "targetCreatureOrBuilding") {
+      if (effect.target === "targetBuilding" || effect.target === "targetCreatureOrBuilding" || effect.target === "targetAny") {
         const enemyBuildings = alive(state.players[enemy].board.buildings);
         if (enemyBuildings.length > 0) return { kind: "card", owner: enemy, instanceId: enemyBuildings[0].instanceId };
       }

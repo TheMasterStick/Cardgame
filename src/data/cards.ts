@@ -389,8 +389,8 @@ const spells: SpellDefinition[] = [
     rarity: "rare",
     activateCost: 4,
     charges: 3,
-    text: "Activate (4 Mana): deal 4 damage to a creature or building.",
-    effect: { kind: "damage", amount: 4, target: "targetCreatureOrBuilding" },
+    text: "Activate (4 Mana): deal 4 damage to a creature, a building, or the enemy Hero.",
+    effect: { kind: "damage", amount: 4, target: "targetAny" },
   },
   {
     id: "lightning-bolt",
@@ -400,8 +400,8 @@ const spells: SpellDefinition[] = [
     rarity: "common",
     activateCost: 2,
     charges: 2,
-    text: "Activate (2 Mana): deal 3 damage to a creature.",
-    effect: { kind: "damage", amount: 3, target: "targetCreature" },
+    text: "Activate (2 Mana): deal 3 damage to a creature or the enemy Hero.",
+    effect: { kind: "damage", amount: 3, target: "targetAny" },
   },
   {
     id: "frost-nova",
@@ -422,8 +422,8 @@ const spells: SpellDefinition[] = [
     rarity: "common",
     activateCost: 1,
     charges: "unlimited",
-    text: "Activate (1 Mana): deal 1 damage to a creature or building.",
-    effect: { kind: "damage", amount: 1, target: "targetCreatureOrBuilding" },
+    text: "Activate (1 Mana): deal 1 damage to a creature, a building, or the enemy Hero.",
+    effect: { kind: "damage", amount: 1, target: "targetAny" },
   },
   {
     id: "renewal",
@@ -444,8 +444,8 @@ const spells: SpellDefinition[] = [
     rarity: "rare",
     activateCost: 3,
     charges: 2,
-    text: "Activate (3 Mana): poison a creature for 2.",
-    effect: { kind: "applyStatus", status: "poison", amount: 2, target: "targetCreature" },
+    text: "Activate (3 Mana): poison a creature or the enemy Hero for 2.",
+    effect: { kind: "applyStatus", status: "poison", amount: 2, target: "targetAny" },
   },
 ];
 
