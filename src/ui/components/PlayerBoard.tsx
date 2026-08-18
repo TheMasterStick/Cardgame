@@ -4,7 +4,7 @@ import { guardLabel } from "../../data/taxonomy";
 import { canAttack, creatureCanAttack, getEffectiveCreatureAttack, heroCanAttack } from "../../engine/combat";
 import type { CardInstance, CreatureDefinition, GameState, HeroCardDefinition, PlayerId } from "../../engine/types";
 import { BOARD_THEME, cssImage } from "../../data/theme";
-import { getPendingEffect, isEffectTargetable, type PendingAction } from "../targeting";
+import { getPendingEffect, isEffectTargetable, type AiHighlight, type PendingAction } from "../targeting";
 import { CardView } from "./CardView";
 
 /** The first slot index a creature occupies in this row — a Massive creature (DESIGN.md §5) spans more than one. */
@@ -17,6 +17,7 @@ interface PlayerBoardProps {
   owner: PlayerId;
   isEnemy: boolean;
   pending: PendingAction | null;
+  aiHighlight: AiHighlight;
   onCreatureClick: (owner: PlayerId, instanceId: string) => void;
   onBuildingClick: (owner: PlayerId, instanceId: string) => void;
   onSlotClick: (owner: PlayerId, slotIndex: number) => void;
@@ -41,6 +42,7 @@ export function PlayerBoard({
   owner,
   isEnemy,
   pending,
+  aiHighlight,
   onCreatureClick,
   onBuildingClick,
   onSlotClick,
@@ -50,6 +52,15 @@ export function PlayerBoard({
   const playerState = state.players[owner];
   const pendingEffect = getPendingEffect(state, pending);
   const heroDef = CARD_DEFINITIONS[playerState.hero.defId] as HeroCardDefinition | undefined;
+
+  /** "actor" if this card is the one the AI is currently acting with, "target" if it's on the receiving end. */
+  function aiActing(instanceId: string): "actor" | "target" | undefined {
+    if (aiHighlight.actorId === instanceId) return "actor";
+    if (aiHighlight.targetId === instanceId) return "target";
+    return undefined;
+  }
+  const portraitActing: "actor" | "target" | undefined =
+    aiHighlight.actorPortrait === owner ? "actor" : aiHighlight.targetPortrait === owner ? "target" : undefined;
 
   const canInitiate = !pending && owner === "player" && state.activePlayer === "player" && !state.winner;
   const canPlaceHere = pending?.kind === "placeCreature" && owner === "player";
@@ -94,6 +105,7 @@ export function PlayerBoard({
                   instance={card}
                   highlighted={clickable}
                   onClick={clickable ? () => onBuildingClick(owner, card.instanceId) : undefined}
+                  acting={aiActing(card.instanceId)}
                 />
               )}
             </Slot>
@@ -103,12 +115,20 @@ export function PlayerBoard({
 
       <div className="row row--hero">
         {playerState.board.spellAbilitySlots.slice(0, 2).map((card, i) => (
-          <SlotAbility key={i} card={card} owner={owner} index={i} state={state} onSlotClick={onSlotClick} />
+          <SlotAbility
+            key={i}
+            card={card}
+            owner={owner}
+            index={i}
+            state={state}
+            onSlotClick={onSlotClick}
+            acting={card ? aiActing(card.instanceId) : undefined}
+          />
         ))}
 
         <div className="hero-column">
           <div
-            className={`portrait ${portraitClickable ? "portrait--clickable" : ""} ${heroDef?.art ? "portrait--has-art" : ""}`}
+            className={`portrait ${portraitClickable ? "portrait--clickable" : ""} ${heroDef?.art ? "portrait--has-art" : ""} ${portraitActing ? `portrait--ai-${portraitActing}` : ""}`}
             onClick={portraitClickable ? () => onPortraitClick(owner) : undefined}
             style={heroDef?.art ? { backgroundImage: `url("${heroDef.art}")` } : undefined}
           >
@@ -140,7 +160,15 @@ export function PlayerBoard({
         </div>
 
         {playerState.board.spellAbilitySlots.slice(2, 4).map((card, i) => (
-          <SlotAbility key={i + 2} card={card} owner={owner} index={i + 2} state={state} onSlotClick={onSlotClick} />
+          <SlotAbility
+            key={i + 2}
+            card={card}
+            owner={owner}
+            index={i + 2}
+            state={state}
+            onSlotClick={onSlotClick}
+            acting={card ? aiActing(card.instanceId) : undefined}
+          />
         ))}
       </div>
 
@@ -172,6 +200,7 @@ export function PlayerBoard({
                 highlighted={clickable}
                 onClick={clickable ? () => onCreatureClick(owner, card.instanceId) : undefined}
                 attackOverride={getEffectiveCreatureAttack(state, owner, card)}
+                acting={aiActing(card.instanceId)}
               />
             </Slot>
           );
@@ -203,6 +232,7 @@ export function PlayerBoard({
                 highlighted={clickable}
                 onClick={clickable ? () => onCreatureClick(owner, card.instanceId) : undefined}
                 attackOverride={getEffectiveCreatureAttack(state, owner, card)}
+                acting={aiActing(card.instanceId)}
               />
             </Slot>
           );
@@ -218,12 +248,14 @@ function SlotAbility({
   index,
   state,
   onSlotClick,
+  acting,
 }: {
   card: CardInstance | null;
   owner: PlayerId;
   index: number;
   state: GameState;
   onSlotClick: (owner: PlayerId, slotIndex: number) => void;
+  acting?: "actor" | "target";
 }) {
   let clickable = false;
   if (card && owner === "player" && state.activePlayer === "player" && !state.winner) {
@@ -236,7 +268,12 @@ function SlotAbility({
   return (
     <Slot>
       {card && (
-        <CardView instance={card} highlighted={clickable} onClick={clickable ? () => onSlotClick(owner, index) : undefined} />
+        <CardView
+          instance={card}
+          highlighted={clickable}
+          onClick={clickable ? () => onSlotClick(owner, index) : undefined}
+          acting={acting}
+        />
       )}
     </Slot>
   );

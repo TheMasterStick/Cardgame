@@ -14,7 +14,7 @@ import { awardMatchCoins, canAffordPack, loadCollection, openPack, saveCollectio
 import { deckSize, deckToIds, loadCustomDeck, saveCustomDeck, type DeckDraft } from "./engine/customDeck";
 import type { EffectTargetRef } from "./engine/effects";
 import { createInitialGameState } from "./engine/factory";
-import { runAiTurn } from "./engine/ai";
+import { runAiTurnSteps } from "./engine/ai";
 import { activateSlotCard, endTurn, playCardFromHand, startGame } from "./engine/game";
 import { DECK_SIZE, type GameState, type PlayerId } from "./engine/types";
 import { fetchRemoteCards } from "./lib/adminCards";
@@ -31,9 +31,18 @@ import { MainMenu } from "./ui/components/MainMenu";
 import { PackOpening } from "./ui/components/PackOpening";
 import { PlayerBoard } from "./ui/components/PlayerBoard";
 import { ResourceBar } from "./ui/components/ResourceBar";
-import { effectHasLegalTarget, effectNeedsExplicitTarget, type PendingAction } from "./ui/targeting";
+import {
+  effectHasLegalTarget,
+  effectNeedsExplicitTarget,
+  highlightForStep,
+  NO_AI_HIGHLIGHT,
+  type AiHighlight,
+  type PendingAction,
+} from "./ui/targeting";
 
 type Screen = "menu" | "heroSelect" | "collection" | "packs" | "deckBuilder" | "admin" | "playing";
+
+const AI_STEP_DELAY_MS = 700;
 
 const appStyle = { "--app-bg-image": cssImage(BOARD_THEME.appBackground) } as CSSProperties;
 
@@ -42,6 +51,7 @@ export default function App() {
   const matchRewardGivenRef = useRef(false);
   const [, forceRender] = useReducer((x: number) => x + 1, 0);
   const [pending, setPending] = useState<PendingAction | null>(null);
+  const [aiHighlight, setAiHighlight] = useState<AiHighlight>(NO_AI_HIGHLIGHT);
   const [message, setMessage] = useState<string>("");
   const [screen, setScreen] = useState<Screen>("menu");
   const [collection, setCollection] = useState<Collection>(() => loadCollection());
@@ -117,6 +127,7 @@ export default function App() {
     gameRef.current = state;
     matchRewardGivenRef.current = false;
     setPending(null);
+    setAiHighlight(NO_AI_HIGHLIGHT);
     setMessage("");
     setScreen("playing");
     commit();
@@ -173,14 +184,27 @@ export default function App() {
 
   function runAiIfNeeded() {
     const state = gameRef.current;
-    if (state && state.activePlayer === "opponent" && !state.winner) {
-      setTimeout(() => {
-        if (gameRef.current) {
-          runAiTurn(gameRef.current);
-          commit();
-        }
-      }, 700);
+    if (!state || state.activePlayer !== "opponent" || state.winner) return;
+
+    const steps = runAiTurnSteps(state);
+
+    function advance() {
+      // gameRef.current changes identity if the match ended/reset while this
+      // turn was still replaying (e.g. the player backed out to the menu) —
+      // bail out rather than keep animating a match that's no longer live.
+      if (gameRef.current !== state) return;
+      const result = steps.next();
+      if (result.done) {
+        setAiHighlight(NO_AI_HIGHLIGHT);
+        commit();
+        return;
+      }
+      setAiHighlight(highlightForStep(result.value));
+      commit();
+      setTimeout(advance, AI_STEP_DELAY_MS);
     }
+
+    setTimeout(advance, AI_STEP_DELAY_MS);
   }
 
   function handleEndTurn() {
@@ -468,6 +492,7 @@ export default function App() {
         owner="opponent"
         isEnemy
         pending={pending}
+        aiHighlight={aiHighlight}
         onCreatureClick={handleCreatureClick}
         onBuildingClick={handleBuildingClick}
         onSlotClick={handleSlotClick}
@@ -480,6 +505,7 @@ export default function App() {
         owner="player"
         isEnemy={false}
         pending={pending}
+        aiHighlight={aiHighlight}
         onCreatureClick={handleCreatureClick}
         onBuildingClick={handleBuildingClick}
         onSlotClick={handleSlotClick}

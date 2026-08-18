@@ -301,6 +301,29 @@ body {
   box-shadow: 0 0 0 2px var(--accent);
 }
 
+/* AI turn replay (App.tsx `runAiIfNeeded`): flashes the card the AI is
+   currently acting with (gold) or hitting (red) as its turn plays out step
+   by step, instead of the whole turn resolving in one blink. */
+.card--ai-actor,
+.portrait--ai-actor {
+  animation: ai-pulse-actor 0.7s ease-in-out infinite;
+}
+
+.card--ai-target,
+.portrait--ai-target {
+  animation: ai-pulse-target 0.7s ease-in-out infinite;
+}
+
+@keyframes ai-pulse-actor {
+  0%, 100% { box-shadow: 0 0 0 2px var(--gold); }
+  50% { box-shadow: 0 0 12px 4px var(--gold); }
+}
+
+@keyframes ai-pulse-target {
+  0%, 100% { box-shadow: 0 0 0 2px var(--danger); }
+  50% { box-shadow: 0 0 12px 4px var(--danger); }
+}
+
 /* Hover zoom: a larger copy of the same card, positioned near the cursor's target
    in viewport coordinates so it always renders above scrollable board/grid panels. */
 .card--zoom {

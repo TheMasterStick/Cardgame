@@ -105,66 +105,58 @@ function pickActivationTarget(state: GameState, effect: CardEffect): EffectTarge
   }
 }
 
-function playMainPhase(state: GameState): void {
+/** Plays one affordable card from hand, or returns null if nothing more can be played right now. */
+function playOneCard(state: GameState): string | null {
   const player = state.players[AI];
+  for (const card of [...player.hand]) {
+    const def = CARD_DEFINITIONS[card.defId];
+    if (costPoolFor(player, def.archetype).pool.current < def.cost) continue;
 
-  let playedSomething = true;
-  while (playedSomething) {
-    playedSomething = false;
-    for (const card of [...player.hand]) {
-      const def = CARD_DEFINITIONS[card.defId];
-      if (costPoolFor(player, def.archetype).pool.current < def.cost) continue;
-
-      // Ranged creatures prefer Support (safe from base-tier attacks, still
-      // able to fight); everything else wants Vanguard. Fall back to
-      // whichever row still has room (DESIGN.md §4 — any Creature may
-      // occupy either row structurally).
-      let row: "vanguard" | "support" = "vanguard";
-      if (def.archetype === "creature") {
-        const isRanged = (def as CreatureDefinition).keywords.includes("ranged");
-        const preferred = isRanged ? "support" : "vanguard";
-        const fallback = preferred === "vanguard" ? "support" : "vanguard";
-        if (!player.board[preferred].every((c) => c !== null)) row = preferred;
-        else if (!player.board[fallback].every((c) => c !== null)) row = fallback;
-        else continue;
-      }
-      if (def.archetype === "building" && player.board.buildings.every((c) => c !== null)) continue;
-      if (
-        (def.archetype === "spell" || def.archetype === "ability") &&
-        player.board.spellAbilitySlots.every((c) => c !== null)
-      ) {
-        continue;
-      }
-
-      const target = def.archetype === "creature" ? pickOnPlayTarget(state, AI) : null;
-      const result = playCardFromHand(state, AI, card.instanceId, { target, row });
-      if (result.ok) {
-        playedSomething = true;
-        break;
-      }
+    // Ranged creatures prefer Support (safe from base-tier attacks, still
+    // able to fight); everything else wants Vanguard. Fall back to
+    // whichever row still has room (DESIGN.md §4 — any Creature may
+    // occupy either row structurally).
+    let row: "vanguard" | "support" = "vanguard";
+    if (def.archetype === "creature") {
+      const isRanged = (def as CreatureDefinition).keywords.includes("ranged");
+      const preferred = isRanged ? "support" : "vanguard";
+      const fallback = preferred === "vanguard" ? "support" : "vanguard";
+      if (!player.board[preferred].every((c) => c !== null)) row = preferred;
+      else if (!player.board[fallback].every((c) => c !== null)) row = fallback;
+      else continue;
     }
-  }
-
-  let activatedSomething = true;
-  while (activatedSomething) {
-    activatedSomething = false;
-    for (let i = 0; i < player.board.spellAbilitySlots.length; i++) {
-      const card = player.board.spellAbilitySlots[i];
-      if (!card) continue;
-      const def = CARD_DEFINITIONS[card.defId];
-      if (def.archetype !== "spell" && def.archetype !== "ability") continue;
-      const pool = def.archetype === "spell" ? player.mana : player.energy;
-      if (pool.current < def.activateCost) continue;
-
-      const target = pickActivationTarget(state, def.effect);
-      if (target === "skip") continue;
-      const result = activateSlotCard(state, AI, i, target);
-      if (result.ok) {
-        activatedSomething = true;
-        break;
-      }
+    if (def.archetype === "building" && player.board.buildings.every((c) => c !== null)) continue;
+    if (
+      (def.archetype === "spell" || def.archetype === "ability") &&
+      player.board.spellAbilitySlots.every((c) => c !== null)
+    ) {
+      continue;
     }
+
+    const target = def.archetype === "creature" ? pickOnPlayTarget(state, AI) : null;
+    const result = playCardFromHand(state, AI, card.instanceId, { target, row });
+    if (result.ok) return card.instanceId;
   }
+  return null;
+}
+
+/** Activates one affordable Spell/Ability already on the field, or returns null if nothing more to activate. */
+function activateOneSlotCard(state: GameState): string | null {
+  const player = state.players[AI];
+  for (let i = 0; i < player.board.spellAbilitySlots.length; i++) {
+    const card = player.board.spellAbilitySlots[i];
+    if (!card) continue;
+    const def = CARD_DEFINITIONS[card.defId];
+    if (def.archetype !== "spell" && def.archetype !== "ability") continue;
+    const pool = def.archetype === "spell" ? player.mana : player.energy;
+    if (pool.current < def.activateCost) continue;
+
+    const target = pickActivationTarget(state, def.effect);
+    if (target === "skip") continue;
+    const result = activateSlotCard(state, AI, i, target);
+    if (result.ok) return card.instanceId;
+  }
+  return null;
 }
 
 const NO_REACH: ReachProfile = { reach: false, ranged: false, infiltrate: false };
@@ -244,7 +236,38 @@ function chooseAttackTarget(state: GameState, reach: ReachProfile, attackerAttac
   return { type: "player" };
 }
 
-function playCombatPhase(state: GameState): void {
+/** One atomic action the AI took, for step-by-step replay/animation in the UI. */
+export type AiTurnStep =
+  | { kind: "playCard"; instanceId: string }
+  | { kind: "activateCard"; instanceId: string }
+  | { kind: "advance"; instanceId: string }
+  | { kind: "attack"; attackerId: string; target: AttackTarget }
+  | { kind: "heroAttack"; target: AttackTarget }
+  | { kind: "endTurn" };
+
+/**
+ * Plays a full turn for the "opponent" seat — main phase, combat phase, end
+ * turn — yielding one {@link AiTurnStep} after each atomic action so the UI
+ * can replay the turn at a human-followable pace instead of resolving it
+ * instantly (see App.tsx's `runAiIfNeeded`).
+ */
+export function* runAiTurnSteps(state: GameState): Generator<AiTurnStep, void, void> {
+  if (state.activePlayer !== AI || state.winner) return;
+
+  for (;;) {
+    const instanceId = playOneCard(state);
+    if (!instanceId) break;
+    yield { kind: "playCard", instanceId };
+    if (state.winner) return;
+  }
+  for (;;) {
+    const instanceId = activateOneSlotCard(state);
+    if (!instanceId) break;
+    yield { kind: "activateCard", instanceId };
+    if (state.winner) return;
+  }
+
+  state.phase = "combat";
   const player = state.players[AI];
 
   // Advance (DESIGN.md §5): a non-Ranged Support creature that has Advance
@@ -255,6 +278,8 @@ function playCombatPhase(state: GameState): void {
     if (!def.keywords.includes("advance") || def.keywords.includes("ranged")) continue;
     if (!creatureCanAttack(state, card)) continue;
     declareAdvance(state, AI, card.instanceId);
+    yield { kind: "advance", instanceId: card.instanceId };
+    if (state.winner) return;
   }
 
   const vanguardAttackers = alive(player.board.vanguard);
@@ -268,20 +293,25 @@ function playCombatPhase(state: GameState): void {
     const reach = reachProfileOf(def);
     const target = chooseAttackTarget(state, reach, getEffectiveCreatureAttack(state, AI, card), card.currentHp ?? 0);
     declareCreatureAttack(state, AI, card.instanceId, target);
+    yield { kind: "attack", attackerId: card.instanceId, target };
+    if (state.winner) return;
   }
 
   if (heroCanAttack(state, AI)) {
     const hero = player.hero;
     const target = chooseAttackTarget(state, NO_REACH, getHeroAttack(state, AI), hero.currentHp);
     declareHeroAttack(state, AI, target);
+    yield { kind: "heroAttack", target };
+    if (state.winner) return;
   }
+
+  endTurn(state);
+  yield { kind: "endTurn" };
 }
 
-/** Plays a full turn for the "opponent" seat: main phase, combat phase, end turn. */
+/** Synchronous full-turn wrapper for callers that don't animate — drains {@link runAiTurnSteps} immediately. */
 export function runAiTurn(state: GameState): void {
-  if (state.activePlayer !== AI || state.winner) return;
-  playMainPhase(state);
-  state.phase = "combat";
-  playCombatPhase(state);
-  endTurn(state);
+  const steps = runAiTurnSteps(state);
+  let step = steps.next();
+  while (!step.done) step = steps.next();
 }

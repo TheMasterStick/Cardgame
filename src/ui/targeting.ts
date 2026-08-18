@@ -1,4 +1,5 @@
 import { CARD_DEFINITIONS } from "../data/cards";
+import type { AiTurnStep } from "../engine/ai";
 import type { CardEffect, EffectTarget, GameState, PlayerId } from "../engine/types";
 
 const EXPLICIT_TARGET_CATEGORIES: EffectTarget[] = [
@@ -97,4 +98,40 @@ export function isEffectTargetable(
   if (side === "building" && !effectAllowsBuildingTarget(effect)) return false;
   if (side === "portrait" && !effectAllowsPortraitTarget(effect)) return false;
   return true;
+}
+
+/** Which card(s)/portrait(s) the currently-replaying AI step involves, for a highlight/flash effect. */
+export interface AiHighlight {
+  actorId: string | null;
+  actorPortrait: PlayerId | null;
+  targetId: string | null;
+  targetPortrait: PlayerId | null;
+}
+
+export const NO_AI_HIGHLIGHT: AiHighlight = { actorId: null, actorPortrait: null, targetId: null, targetPortrait: null };
+
+/** Maps one AI turn step to what should flash — the acting card/hero and, for attacks, the target. */
+export function highlightForStep(step: AiTurnStep): AiHighlight {
+  switch (step.kind) {
+    case "playCard":
+    case "activateCard":
+    case "advance":
+      return { ...NO_AI_HIGHLIGHT, actorId: step.instanceId };
+    case "attack":
+      return {
+        ...NO_AI_HIGHLIGHT,
+        actorId: step.attackerId,
+        targetId: step.target.type === "player" ? null : step.target.instanceId,
+        targetPortrait: step.target.type === "player" ? "player" : null,
+      };
+    case "heroAttack":
+      return {
+        ...NO_AI_HIGHLIGHT,
+        actorPortrait: "opponent",
+        targetId: step.target.type === "player" ? null : step.target.instanceId,
+        targetPortrait: step.target.type === "player" ? "player" : null,
+      };
+    case "endTurn":
+      return NO_AI_HIGHLIGHT;
+  }
 }

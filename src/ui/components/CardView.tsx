@@ -12,6 +12,8 @@ interface CardViewProps {
   defOverride?: CardDefinition;
   /** Live Attack including Flank/Formation bonuses (DESIGN.md §5) — pass this for creatures actually sitting on a board row. Falls back to the plain attack+attackDelta when omitted (hand/collection/off-board previews, where positional bonuses don't apply). */
   attackOverride?: number;
+  /** Set while the AI's turn is replaying and this card is the one acting, or the one being acted on — drives a highlight/flash effect. */
+  acting?: "actor" | "target";
 }
 
 const ZOOM_WIDTH = 240;
@@ -39,7 +41,7 @@ function computeZoomPosition(rect: DOMRect): { top: number; left: number } {
   return { top, left };
 }
 
-export function CardView({ instance, onClick, highlighted, defOverride, attackOverride }: CardViewProps) {
+export function CardView({ instance, onClick, highlighted, defOverride, attackOverride, acting }: CardViewProps) {
   const def = defOverride ?? CARD_DEFINITIONS[instance.defId];
   const cardRef = useRef<HTMLDivElement>(null);
   const hoverTimer = useRef<number | null>(null);
@@ -82,6 +84,7 @@ export function CardView({ instance, onClick, highlighted, defOverride, attackOv
   if (highlighted) classes.push("card--highlight");
   if (onClick) classes.push("card--clickable");
   if (def.art) classes.push("card--has-art");
+  if (acting) classes.push(`card--ai-${acting}`);
 
   const metaParts: string[] = [];
   if (def.race) metaParts.push(RACE_LABELS[def.race]);
