@@ -48,10 +48,13 @@ body {
 /* Playing screen: a tall log sidebar on the left (so match history doesn't
    get pushed off the bottom of the page) beside the boards/hand column,
    using the extra horizontal room a fixed-width centered layout otherwise
-   leaves empty on wide screens. */
+   leaves empty on wide screens. The two columns size independently
+   (align-items: flex-start) — the log panel is capped to a constant,
+   viewport-relative height and scrolls internally rather than stretching
+   to match (and drag along) however tall the board column's content is. */
 .app__layout {
   display: flex;
-  align-items: stretch;
+  align-items: flex-start;
   gap: 10px;
 }
 
@@ -59,6 +62,8 @@ body {
   width: 260px;
   flex-shrink: 0;
   display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - 90px);
 }
 
 .app__board-column {
