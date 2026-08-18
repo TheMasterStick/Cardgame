@@ -324,6 +324,17 @@ body {
   50% { box-shadow: 0 0 12px 4px var(--danger); }
 }
 
+/* Full variant (HandView): the detailed layout rendered inline instead of
+   on hover, sized wide enough that name/cost/rules text stay legible
+   without needing to hover each card in hand. */
+.card--full {
+  width: 128px;
+  min-height: 0;
+  padding: 8px;
+  font-size: 0.68rem;
+  gap: 4px;
+}
+
 /* Hover zoom: a larger copy of the same card, positioned near the cursor's target
    in viewport coordinates so it always renders above scrollable board/grid panels. */
 .card--zoom {

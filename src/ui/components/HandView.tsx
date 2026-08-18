@@ -16,6 +16,7 @@ export function HandView({ playerState, interactive, onCardClick }: HandViewProp
           instance={card}
           highlighted={interactive}
           onClick={interactive ? () => onCardClick(card.instanceId) : undefined}
+          variant="full"
         />
       ))}
       {playerState.hand.length === 0 && <div className="hand__empty">Hand is empty</div>}

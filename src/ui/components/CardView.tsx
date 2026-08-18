@@ -24,6 +24,15 @@ interface CardViewProps {
   attackOverride?: number;
   /** Set while the AI's turn is replaying and this card is the one acting, or the one being acted on — drives a highlight/flash effect. */
   acting?: "actor" | "target";
+  /**
+   * "compact" (default): art plus attack/health only, Hearthstone-minion
+   * style — used on the board, collection, deck builder, and packs, where a
+   * whole row of cards needs to stay readable at a glance. "full": the same
+   * detailed layout the hover-zoom popup uses, rendered inline instead of
+   * on hover — used for the hand, where you need to read cost/text/keywords
+   * before deciding whether to play a card.
+   */
+  variant?: "compact" | "full";
 }
 
 const ZOOM_WIDTH = 240;
@@ -51,7 +60,15 @@ function computeZoomPosition(rect: DOMRect): { top: number; left: number } {
   return { top, left };
 }
 
-export function CardView({ instance, onClick, highlighted, defOverride, attackOverride, acting }: CardViewProps) {
+export function CardView({
+  instance,
+  onClick,
+  highlighted,
+  defOverride,
+  attackOverride,
+  acting,
+  variant = "compact",
+}: CardViewProps) {
   const def = defOverride ?? CARD_DEFINITIONS[instance.defId];
   const cardRef = useRef<HTMLDivElement>(null);
   const hoverTimer = useRef<number | null>(null);
@@ -76,6 +93,7 @@ export function CardView({ instance, onClick, highlighted, defOverride, attackOv
   }, [zoomPos]);
 
   function handleMouseEnter() {
+    if (variant === "full") return; // already showing everything inline — nothing more to reveal on hover
     hoverTimer.current = window.setTimeout(() => {
       const rect = cardRef.current?.getBoundingClientRect();
       if (rect) setZoomPos(computeZoomPosition(rect));
@@ -103,8 +121,15 @@ export function CardView({ instance, onClick, highlighted, defOverride, attackOv
   if (def.art) baseClasses.push("card--has-art");
   if (acting) baseClasses.push(`card--ai-${acting}`);
 
-  const zoomClasses = [...baseClasses, "card--zoom"];
-  if (frameUrl) zoomClasses.push("card--framed");
+  // "full" variant reuses the exact same detailed layout the hover-zoom
+  // popup renders (see detailedContent below) — inline instead of on hover.
+  if (variant === "full") {
+    baseClasses.push("card--full");
+    if (frameUrl) baseClasses.push("card--framed");
+  }
+
+  const zoomClasses = [...baseClasses.filter((c) => c !== "card--full"), "card--zoom"];
+  if (frameUrl && !zoomClasses.includes("card--framed")) zoomClasses.push("card--framed");
 
   const keywords: Keyword[] = def.archetype === "creature" ? def.keywords : [];
   const art = def.art && (
@@ -146,14 +171,14 @@ export function CardView({ instance, onClick, highlighted, defOverride, attackOv
     </>
   );
 
-  let zoomContent: ReactNode;
+  let detailedContent: ReactNode;
   if (frameUrl) {
     const cost = "cost" in def ? def.cost : null;
     const metaBarParts = [RARITY_LABELS[def.rarity]];
     if (def.faction) metaBarParts.push(FACTION_LABELS[def.faction]);
     metaBarParts.push(def.race ? RACE_LABELS[def.race] : ARCHETYPE_LABELS[def.archetype]);
 
-    zoomContent = (
+    detailedContent = (
       <>
         <div className="frame__name">{def.name}</div>
         {cost !== null && <div className="frame__cost">{cost}</div>}
@@ -192,7 +217,7 @@ export function CardView({ instance, onClick, highlighted, defOverride, attackOv
 
     // Only Hero and Equipment ever reach this plain layout (cardFrameUrl
     // covers every other archetype) — Equipment has no stats surfaced here today.
-    zoomContent = (
+    detailedContent = (
       <>
         {art}
         {rarityDot}
@@ -213,27 +238,36 @@ export function CardView({ instance, onClick, highlighted, defOverride, attackOv
     );
   }
 
+  const compactContent = (
+    <>
+      {art}
+      {rarityDot}
+      {compactAttack !== null && <span className="card__corner-stat card__corner-stat--left">{compactAttack}</span>}
+      {compactRightStat !== null && (
+        <span className={`card__corner-stat card__corner-stat--right card__corner-stat--${compactRightKind}`}>
+          {compactRightStat}
+        </span>
+      )}
+      {statuses && <div className="card__statuses card__statuses--compact">{statuses}</div>}
+    </>
+  );
+
   return (
     <>
       <div
         ref={cardRef}
         className={baseClasses.join(" ")}
+        style={variant === "full" && frameUrl ? { backgroundImage: `url("${frameUrl}")` } : undefined}
         onClick={onClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         aria-label={def.name}
       >
-        {art}
-        {rarityDot}
-        {compactAttack !== null && <span className="card__corner-stat card__corner-stat--left">{compactAttack}</span>}
-        {compactRightStat !== null && (
-          <span className={`card__corner-stat card__corner-stat--right card__corner-stat--${compactRightKind}`}>
-            {compactRightStat}
-          </span>
-        )}
-        {statuses && <div className="card__statuses card__statuses--compact">{statuses}</div>}
+        {variant === "full" ? detailedContent : compactContent}
       </div>
-      {zoomPos &&
+      {/* "full" cards already show everything inline — no extra zoom popup needed on top of them. */}
+      {variant === "compact" &&
+        zoomPos &&
         createPortal(
           <div
             className={zoomClasses.join(" ")}
@@ -245,7 +279,7 @@ export function CardView({ instance, onClick, highlighted, defOverride, attackOv
               ...(frameUrl ? { backgroundImage: `url("${frameUrl}")` } : {}),
             }}
           >
-            {zoomContent}
+            {detailedContent}
           </div>,
           document.body,
         )}
