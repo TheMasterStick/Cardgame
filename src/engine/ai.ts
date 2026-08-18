@@ -19,6 +19,7 @@ import {
   type CardEffect,
   type CardInstance,
   type CreatureDefinition,
+  type EquipmentDefinition,
   type GameState,
   type PlayerId,
 } from "./types";
@@ -43,12 +44,24 @@ function creatureMaxHp(card: CardInstance): number {
   return def.hp + card.hpDelta;
 }
 
-/** Picks a reasonable target for an onPlay battlecry-style effect: the weakest enemy creature. */
+/** Every creature on a board, Vanguard and Support alike — Spells/Abilities bypass the reach ladder and can hit either row (DESIGN.md §5), unlike a creature's own attack. */
+function boardCreatures(board: BoardState): CardInstance[] {
+  return alive([...board.vanguard, ...board.support]);
+}
+
+/** How much a targetPlayer/targetAny hit against this player would be reduced by their equipped weapon, if any. */
+function equipmentDamageReduction(state: GameState, owner: PlayerId): number {
+  const equipment = state.players[owner].board.equipment;
+  if (!equipment) return 0;
+  return (CARD_DEFINITIONS[equipment.defId] as EquipmentDefinition).damageReduction;
+}
+
+/** Picks a reasonable target for an onPlay battlecry-style effect: the weakest enemy creature, from either row. */
 function pickOnPlayTarget(state: GameState, owner: PlayerId): EffectTargetRef {
   const enemy = otherPlayer(owner);
-  const enemyFront = alive(state.players[enemy].board.vanguard);
-  if (enemyFront.length === 0) return null;
-  const weakest = enemyFront.reduce((a, b) => ((a.currentHp ?? Infinity) <= (b.currentHp ?? Infinity) ? a : b));
+  const enemyCreatures = boardCreatures(state.players[enemy].board);
+  if (enemyCreatures.length === 0) return null;
+  const weakest = enemyCreatures.reduce((a, b) => ((a.currentHp ?? Infinity) <= (b.currentHp ?? Infinity) ? a : b));
   return { kind: "card", owner: enemy, instanceId: weakest.instanceId };
 }
 
@@ -62,41 +75,41 @@ function pickActivationTarget(state: GameState, effect: CardEffect): EffectTarge
         return null;
       }
       if (effect.target === "targetPlayer") {
-        return { kind: "player", owner: enemy }; // the Hero is always a legal target (DESIGN.md §5)
+        // The Hero is always a legal target (DESIGN.md §5), but not worth
+        // burning the activation on if their weapon reduces it to nothing.
+        return effect.amount > equipmentDamageReduction(state, enemy) ? { kind: "player", owner: enemy } : "skip";
       }
-      const enemyFront = alive(state.players[enemy].board.vanguard);
-      if (enemyFront.length > 0) {
-        const weakest = enemyFront.reduce((a, b) => ((a.currentHp ?? Infinity) <= (b.currentHp ?? Infinity) ? a : b));
+      const enemyCreatures = boardCreatures(state.players[enemy].board);
+      if (enemyCreatures.length > 0) {
+        const weakest = enemyCreatures.reduce((a, b) => ((a.currentHp ?? Infinity) <= (b.currentHp ?? Infinity) ? a : b));
         return { kind: "card", owner: enemy, instanceId: weakest.instanceId };
       }
       if (effect.target === "targetBuilding" || effect.target === "targetCreatureOrBuilding" || effect.target === "targetAny") {
         const enemyBuildings = alive(state.players[enemy].board.buildings);
         if (enemyBuildings.length > 0) return { kind: "card", owner: enemy, instanceId: enemyBuildings[0].instanceId };
       }
-      if (effect.target === "targetAny") {
-        return { kind: "player", owner: enemy }; // nothing else to hit — go face
+      if (effect.target === "targetAny" && effect.amount > equipmentDamageReduction(state, enemy)) {
+        return { kind: "player", owner: enemy }; // nothing else to hit — go face, but only if it'd actually land
       }
-      return "skip"; // Creature-only with no enemy creature out — not worth burning the activation on a no-op
+      return "skip"; // Creature-only with no enemy creature out (or a face hit their weapon would fully absorb) — not worth burning the activation on a no-op
     }
     case "applyStatus": {
-      const enemyFront = alive(state.players[enemy].board.vanguard);
-      if (enemyFront.length === 0) return "skip";
-      return { kind: "card", owner: enemy, instanceId: enemyFront[0].instanceId };
+      const enemyCreatures = boardCreatures(state.players[enemy].board);
+      if (enemyCreatures.length === 0) return "skip";
+      return { kind: "card", owner: enemy, instanceId: enemyCreatures[0].instanceId };
     }
     case "heal": {
       if (effect.target === "selfHero") {
         const hero = state.players[AI].hero;
         return hero.currentHp >= hero.maxHp ? "skip" : null;
       }
-      const damaged = alive(state.players[AI].board.vanguard).find(
-        (c) => (c.currentHp ?? 0) < creatureMaxHp(c),
-      );
+      const damaged = boardCreatures(state.players[AI].board).find((c) => (c.currentHp ?? 0) < creatureMaxHp(c));
       return damaged ? { kind: "card", owner: AI, instanceId: damaged.instanceId } : "skip";
     }
     case "buff": {
       if (effect.target === "allFriendlyCreatures") return null;
-      const ownFront = alive(state.players[AI].board.vanguard);
-      return ownFront.length > 0 ? { kind: "card", owner: AI, instanceId: ownFront[0].instanceId } : "skip";
+      const ownCreatures = boardCreatures(state.players[AI].board);
+      return ownCreatures.length > 0 ? { kind: "card", owner: AI, instanceId: ownCreatures[0].instanceId } : "skip";
     }
     case "drawCard":
     case "gainGuard":

@@ -93,7 +93,6 @@ export function CardView({
   }, [zoomPos]);
 
   function handleMouseEnter() {
-    if (variant === "full") return; // already showing everything inline — nothing more to reveal on hover
     hoverTimer.current = window.setTimeout(() => {
       const rect = cardRef.current?.getBoundingClientRect();
       if (rect) setZoomPos(computeZoomPosition(rect));
@@ -265,9 +264,8 @@ export function CardView({
       >
         {variant === "full" ? detailedContent : compactContent}
       </div>
-      {/* "full" cards already show everything inline — no extra zoom popup needed on top of them. */}
-      {variant === "compact" &&
-        zoomPos &&
+      {/* Even "full" hand cards are too small to read comfortably at their inline width, so hovering still zooms further. */}
+      {zoomPos &&
         createPortal(
           <div
             className={zoomClasses.join(" ")}
