@@ -1,7 +1,17 @@
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { cardFrameUrl } from "../../data/cardFrames";
 import { CARD_DEFINITIONS } from "../../data/cards";
-import { ELEMENT_LABELS, KEYWORD_ICONS, KEYWORD_LABELS, RACE_LABELS } from "../../data/taxonomy";
+import {
+  ARCHETYPE_LABELS,
+  costPoolIcon,
+  ELEMENT_LABELS,
+  FACTION_LABELS,
+  KEYWORD_ICONS,
+  KEYWORD_LABELS,
+  RACE_LABELS,
+  RARITY_LABELS,
+} from "../../data/taxonomy";
 import type { CardDefinition, CardInstance, CreatureDefinition, HeroCardDefinition, Keyword } from "../../engine/types";
 
 interface CardViewProps {
@@ -80,16 +90,105 @@ export function CardView({ instance, onClick, highlighted, defOverride, attackOv
     setZoomPos(null);
   }
 
+  const frameUrl = cardFrameUrl(def.archetype);
+
   const classes = ["card", `card--${def.archetype}`, `card--rarity-${def.rarity}`];
   if (highlighted) classes.push("card--highlight");
   if (onClick) classes.push("card--clickable");
   if (def.art) classes.push("card--has-art");
   if (acting) classes.push(`card--ai-${acting}`);
+  if (frameUrl) classes.push("card--framed");
+
+  const keywords: Keyword[] = def.archetype === "creature" ? def.keywords : [];
+  const statuses = instance.statuses.length > 0 && (
+    <div className="card__statuses">
+      {instance.statuses.map((s, i) => (
+        <span key={i} className={`status status--${s.type}`}>
+          {s.type === "burn" ? "🔥" : "☠"}
+          {s.amount}
+        </span>
+      ))}
+    </div>
+  );
+
+  if (frameUrl) {
+    const cost = "cost" in def ? def.cost : null;
+    const metaBarParts = [RARITY_LABELS[def.rarity]];
+    if (def.faction) metaBarParts.push(FACTION_LABELS[def.faction]);
+    metaBarParts.push(def.race ? RACE_LABELS[def.race] : ARCHETYPE_LABELS[def.archetype]);
+
+    const attackValue =
+      def.archetype === "creature" ? attackOverride ?? (def as CreatureDefinition).attack + instance.attackDelta : null;
+    const rightStat =
+      def.archetype === "creature" || def.archetype === "building"
+        ? instance.currentHp
+        : instance.chargesRemaining === "unlimited"
+          ? "∞"
+          : instance.chargesRemaining;
+
+    const framedContent = (
+      <>
+        <div className="frame__name">{def.name}</div>
+        {cost !== null && <div className="frame__cost">{cost}</div>}
+        <div className="frame__pool-icon" aria-hidden="true">
+          {costPoolIcon(def.archetype)}
+        </div>
+        {def.art && <div className="frame__art" style={{ backgroundImage: `url("${def.art}")` }} aria-hidden="true" />}
+        <div className="frame__meta-bar">{metaBarParts.join(" ◆ ")}</div>
+        <div className="frame__text">
+          {keywords.length > 0 && (
+            <div className="card__keyword-icons">
+              {keywords.map((k) => (
+                <span key={k} className="card__keyword-icon" title={KEYWORD_LABELS[k]}>
+                  {KEYWORD_ICONS[k]}
+                </span>
+              ))}
+            </div>
+          )}
+          {def.text}
+        </div>
+        {attackValue !== null && <div className="frame__stat frame__stat--left">{attackValue}</div>}
+        <div className="frame__stat frame__stat--right">{rightStat}</div>
+        {statuses}
+      </>
+    );
+
+    return (
+      <>
+        <div
+          ref={cardRef}
+          className={classes.join(" ")}
+          style={{ backgroundImage: `url("${frameUrl}")` }}
+          onClick={onClick}
+          onMouseEnter={handleMouseEnter}
+          onMouseLeave={handleMouseLeave}
+          aria-label={def.name}
+        >
+          {framedContent}
+        </div>
+        {zoomPos &&
+          createPortal(
+            <div
+              className={[...classes, "card--zoom"].join(" ")}
+              style={{
+                position: "fixed",
+                top: zoomPos.top,
+                left: zoomPos.left,
+                width: ZOOM_WIDTH,
+                backgroundImage: `url("${frameUrl}")`,
+              }}
+            >
+              {framedContent}
+            </div>,
+            document.body,
+          )}
+      </>
+    );
+  }
 
   const metaParts: string[] = [];
   if (def.race) metaParts.push(RACE_LABELS[def.race]);
   if (def.element) metaParts.push(ELEMENT_LABELS[def.element]);
-  const keywords: Keyword[] = def.archetype === "creature" ? def.keywords : [];
 
   const art = def.art && (
     <div className="card__art" style={{ backgroundImage: `url("${def.art}")` }} aria-hidden="true" />
@@ -101,36 +200,16 @@ export function CardView({ instance, onClick, highlighted, defOverride, attackOv
       <div className="card__name">{def.name}</div>
     </div>
   );
+  // Only Hero and Equipment ever reach this plain layout (cardFrameUrl covers
+  // every other archetype) — Equipment has no stats surfaced here today.
   const statsRow = (
     <div className="card__bottom">
-      {def.archetype === "creature" && (
-        <>
-          <span className="stat stat--attack">{attackOverride ?? (def as CreatureDefinition).attack + instance.attackDelta}</span>
-          <span className="stat stat--hp">{instance.currentHp}</span>
-        </>
-      )}
       {def.archetype === "hero" && (
         <>
           <span className="stat stat--attack">{(def as HeroCardDefinition).attack}</span>
           <span className="stat stat--hp">{(def as HeroCardDefinition).hp}</span>
         </>
       )}
-      {def.archetype === "building" && <span className="stat stat--hp">{instance.currentHp}</span>}
-      {(def.archetype === "spell" || def.archetype === "ability") && (
-        <span className="stat stat--charges">
-          {instance.chargesRemaining === "unlimited" ? "∞" : `${instance.chargesRemaining}x`}
-        </span>
-      )}
-    </div>
-  );
-  const statuses = instance.statuses.length > 0 && (
-    <div className="card__statuses">
-      {instance.statuses.map((s, i) => (
-        <span key={i} className={`status status--${s.type}`}>
-          {s.type === "burn" ? "🔥" : "☠"}
-          {s.amount}
-        </span>
-      ))}
     </div>
   );
 
@@ -147,15 +226,6 @@ export function CardView({ instance, onClick, highlighted, defOverride, attackOv
         {art}
         {rarityDot}
         {topRow}
-        {keywords.length > 0 && (
-          <div className="card__keyword-icons">
-            {keywords.map((k) => (
-              <span key={k} className="card__keyword-icon" title={KEYWORD_LABELS[k]}>
-                {KEYWORD_ICONS[k]}
-              </span>
-            ))}
-          </div>
-        )}
         <div className="card__spacer" />
         {statsRow}
         {statuses}
@@ -170,15 +240,6 @@ export function CardView({ instance, onClick, highlighted, defOverride, attackOv
             {rarityDot}
             {topRow}
             {metaParts.length > 0 && <div className="card__meta">{metaParts.join(" · ")}</div>}
-            {keywords.length > 0 && (
-              <div className="card__keywords">
-                {keywords.map((k) => (
-                  <span key={k} className="card__keyword-tag">
-                    {KEYWORD_ICONS[k]} {KEYWORD_LABELS[k]}
-                  </span>
-                ))}
-              </div>
-            )}
             {def.text && <div className="card__text">{def.text}</div>}
             <div className="card__spacer" />
             {statsRow}

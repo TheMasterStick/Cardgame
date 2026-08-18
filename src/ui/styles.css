@@ -384,6 +384,142 @@ body {
   height: 9px;
 }
 
+/*
+ * Framed cards (public/cardframes/): the frame art supplies the whole card
+ * face — border, art window, stat-circle art — so these archetypes (every
+ * archetype cardFrameUrl() covers, currently creature/building/spell/ability)
+ * get an absolutely-positioned text/stat overlay instead of the flat
+ * panel-and-border look above, which stays in use for Hero/Equipment.
+ * container-type + cqw font sizing means the exact same layout renders
+ * correctly at both the tiny board-card size and the large hover-zoom popup.
+ */
+.card--framed {
+  --frame-ink: #2b2117;
+  background: none;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  display: block;
+  aspect-ratio: 512 / 776;
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
+  container-type: inline-size;
+  color: var(--frame-ink);
+}
+
+.card--framed.card--zoom {
+  padding: 0;
+  border-width: 0;
+}
+
+.frame__name {
+  position: absolute;
+  top: 5%;
+  left: 12%;
+  width: 62%;
+  height: 6.5%;
+  display: flex;
+  align-items: center;
+  font-weight: bold;
+  font-size: 7cqw;
+  line-height: 1.05;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.frame__cost,
+.frame__pool-icon,
+.frame__stat {
+  position: absolute;
+  width: 17%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+}
+
+.frame__cost {
+  top: 3.5%;
+  left: 78.5%;
+  font-size: 8cqw;
+}
+
+.frame__pool-icon {
+  top: 15.5%;
+  left: 82.5%;
+  width: 14.5%;
+  font-size: 6cqw;
+}
+
+.frame__art {
+  position: absolute;
+  top: 14.5%;
+  left: 10.5%;
+  width: 79%;
+  height: 38.5%;
+  background-size: cover;
+  background-position: center;
+  border-radius: 6%;
+}
+
+.frame__meta-bar {
+  position: absolute;
+  top: 55.5%;
+  left: 19%;
+  width: 62%;
+  height: 5.5%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 4.2cqw;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.frame__text {
+  position: absolute;
+  top: 63.5%;
+  left: 13%;
+  width: 74%;
+  height: 15.5%;
+  font-size: 4.4cqw;
+  line-height: 1.25;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.frame__text .card__keyword-icons {
+  font-size: 5cqw;
+}
+
+.frame__stat {
+  top: 85%;
+  font-size: 8cqw;
+}
+
+.frame__stat--left {
+  left: 8%;
+}
+
+.frame__stat--right {
+  left: 75%;
+}
+
+.card--framed .card__statuses {
+  position: absolute;
+  top: 50%;
+  left: 13%;
+  z-index: 2;
+}
+
 .card--creature {
   border-color: #6a7a4a;
 }

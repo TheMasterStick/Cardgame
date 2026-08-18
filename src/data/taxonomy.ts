@@ -1,4 +1,4 @@
-import type { Element, Faction, Keyword, Race, Rarity } from "../engine/types";
+import type { CardArchetype, Element, Faction, Keyword, Race, Rarity } from "../engine/types";
 
 export const ELEMENT_LABELS: Record<Element, string> = {
   frost: "Frost",
@@ -57,6 +57,22 @@ export const RARITY_LABELS: Record<Rarity, string> = {
   epic: "Epic",
   legendary: "Legendary",
 };
+
+export const ARCHETYPE_LABELS: Record<CardArchetype, string> = {
+  hero: "Hero",
+  creature: "Creature",
+  building: "Building",
+  spell: "Spell",
+  ability: "Ability",
+  equipment: "Equipment",
+};
+
+/** Which resource pool an archetype costs from (mirrors game.ts's costPoolFor) — just the icon shown on the card face, not the payment logic itself. */
+export function costPoolIcon(archetype: CardArchetype): string {
+  if (archetype === "spell") return "🔮"; // Mana
+  if (archetype === "creature" || archetype === "ability") return "⚡"; // Energy
+  return "🪙"; // Resources (building, equipment, hero)
+}
 
 export const KEYWORD_LABELS: Record<Keyword, string> = {
   ranged: "Ranged",
