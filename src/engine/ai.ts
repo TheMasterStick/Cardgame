@@ -13,6 +13,7 @@ import {
 } from "./combat";
 import { hasKeyword, type EffectTargetRef } from "./effects";
 import { activateSlotCard, costPoolFor, endTurn, playCardFromHand } from "./game";
+import { activateHeroPower, activateHeroSignature, peekSpellDiscount } from "./hero";
 import {
   otherPlayer,
   type BoardState,
@@ -21,6 +22,7 @@ import {
   type CreatureDefinition,
   type EquipmentDefinition,
   type GameState,
+  type HeroCardDefinition,
   type PlayerId,
 } from "./types";
 
@@ -123,7 +125,11 @@ function playOneCard(state: GameState): string | null {
   const player = state.players[AI];
   for (const card of [...player.hand]) {
     const def = CARD_DEFINITIONS[card.defId];
-    if (costPoolFor(player, def.archetype).pool.current < def.cost) continue;
+    // Instant Spells (DESIGN.md §1a) never occupy a slot and pay a
+    // possibly-discounted Mana cost — everything else pays its flat cost.
+    const isInstantSpell = def.archetype === "spell" && def.spellForm === "instant";
+    const cost = isInstantSpell ? peekSpellDiscount(state, AI, def.cost) : def.cost;
+    if (costPoolFor(player, def.archetype).pool.current < cost) continue;
 
     // Ranged creatures prefer Support (safe from base-tier attacks, still
     // able to fight); everything else wants Vanguard. Fall back to
@@ -140,13 +146,21 @@ function playOneCard(state: GameState): string | null {
     }
     if (def.archetype === "building" && player.board.buildings.every((c) => c !== null)) continue;
     if (
+      !isInstantSpell &&
       (def.archetype === "spell" || def.archetype === "ability") &&
       player.board.spellAbilitySlots.every((c) => c !== null)
     ) {
       continue;
     }
 
-    const target = def.archetype === "creature" ? pickOnPlayTarget(state, AI) : null;
+    let target: EffectTargetRef | null = null;
+    if (def.archetype === "creature") {
+      target = pickOnPlayTarget(state, AI);
+    } else if (isInstantSpell) {
+      const picked = pickActivationTarget(state, def.effect);
+      if (picked === "skip") continue;
+      target = picked;
+    }
     const result = playCardFromHand(state, AI, card.instanceId, { target, row });
     if (result.ok) return card.instanceId;
   }
@@ -161,8 +175,10 @@ function activateOneSlotCard(state: GameState): string | null {
     if (!card) continue;
     const def = CARD_DEFINITIONS[card.defId];
     if (def.archetype !== "spell" && def.archetype !== "ability") continue;
+    if (def.activateCost === undefined) continue; // Instant spells never reach a slot
     const pool = def.archetype === "spell" ? player.mana : player.energy;
-    if (pool.current < def.activateCost) continue;
+    const cost = def.archetype === "spell" ? peekSpellDiscount(state, AI, def.activateCost) : def.activateCost;
+    if (pool.current < cost) continue;
 
     const target = pickActivationTarget(state, def.effect);
     if (target === "skip") continue;
@@ -170,6 +186,31 @@ function activateOneSlotCard(state: GameState): string | null {
     if (result.ok) return card.instanceId;
   }
   return null;
+}
+
+/** Uses the AI's Hero Power once, if affordable and there's a worthwhile target. */
+function tryHeroPower(state: GameState): boolean {
+  const player = state.players[AI];
+  const heroDef = CARD_DEFINITIONS[player.hero.defId] as HeroCardDefinition;
+  const power = heroDef.heroPower;
+  if (!power || player.hero.heroPowerUsedThisTurn) return false;
+  if (player.energy.current < power.activateCost) return false;
+  const target = pickActivationTarget(state, power.effect);
+  if (target === "skip") return false;
+  return activateHeroPower(state, AI, target).ok;
+}
+
+/** Uses the AI's Signature Ability, if affordable, uses remain, and there's a worthwhile target. */
+function trySignature(state: GameState): boolean {
+  const player = state.players[AI];
+  const heroDef = CARD_DEFINITIONS[player.hero.defId] as HeroCardDefinition;
+  const signature = heroDef.signature;
+  if (!signature) return false;
+  if (!player.hero.signatureUsesRemaining || player.hero.signatureUsesRemaining <= 0) return false;
+  if (player.energy.current < signature.activateCost) return false;
+  const target = pickActivationTarget(state, signature.effect);
+  if (target === "skip") return false;
+  return activateHeroSignature(state, AI, target).ok;
 }
 
 const NO_REACH: ReachProfile = { reach: false, ranged: false, infiltrate: false };
@@ -256,6 +297,8 @@ export type AiTurnStep =
   | { kind: "advance"; instanceId: string }
   | { kind: "attack"; attackerId: string; target: AttackTarget }
   | { kind: "heroAttack"; target: AttackTarget }
+  | { kind: "heroPower" }
+  | { kind: "heroSignature" }
   | { kind: "endTurn" };
 
 /**
@@ -277,6 +320,15 @@ export function* runAiTurnSteps(state: GameState): Generator<AiTurnStep, void, v
     const instanceId = activateOneSlotCard(state);
     if (!instanceId) break;
     yield { kind: "activateCard", instanceId };
+    if (state.winner) return;
+  }
+
+  if (tryHeroPower(state)) {
+    yield { kind: "heroPower" };
+    if (state.winner) return;
+  }
+  if (trySignature(state)) {
+    yield { kind: "heroSignature" };
     if (state.winner) return;
   }
 

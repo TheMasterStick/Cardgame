@@ -16,7 +16,8 @@ import type { EffectTargetRef } from "./engine/effects";
 import { createInitialGameState } from "./engine/factory";
 import { runAiTurnSteps } from "./engine/ai";
 import { activateSlotCard, endTurn, playCardFromHand, startGame } from "./engine/game";
-import { DECK_SIZE, type GameState, type PlayerId } from "./engine/types";
+import { activateHeroPower, activateHeroSignature, peekSpellDiscount } from "./engine/hero";
+import { DECK_SIZE, type GameState, type HeroCardDefinition, type PlayerId } from "./engine/types";
 import { fetchRemoteCards } from "./lib/adminCards";
 import { useAuth } from "./lib/AuthProvider";
 import { loadOrInitializeRemoteCollection, saveRemoteCollection } from "./lib/remoteCollection";
@@ -223,6 +224,19 @@ export default function App() {
     if (!card) return;
     const def = CARD_DEFINITIONS[card.defId];
 
+    if (def.archetype === "spell" && def.spellForm === "instant") {
+      if (effectNeedsExplicitTarget(def.effect) && effectHasLegalTarget(state, def.effect)) {
+        setPending({ kind: "playCard", instanceId });
+        return;
+      }
+      // No legal target for a Creature/Building-restricted effect: the
+      // Spell still casts, the effect just fizzles (DESIGN.md §7).
+      const result = playCardFromHand(state, "player", instanceId);
+      if (!result.ok) fail(result.reason);
+      commit();
+      return;
+    }
+
     if (def.archetype === "creature" || def.archetype === "building") {
       const trigger = def.triggers.find((t) => t.on === "onPlay");
       if (trigger && effectNeedsExplicitTarget(trigger.effect) && effectHasLegalTarget(state, trigger.effect)) {
@@ -263,8 +277,10 @@ export default function App() {
     if (!card) return;
     const def = CARD_DEFINITIONS[card.defId];
     if (def.archetype !== "spell" && def.archetype !== "ability") return;
+    if (def.activateCost === undefined) return; // Instant spells never reach a slot
     const pool = def.archetype === "spell" ? state.players.player.mana : state.players.player.energy;
-    if (pool.current < def.activateCost || card.chargesRemaining === 0) return;
+    const cost = def.archetype === "spell" ? peekSpellDiscount(state, "player", def.activateCost) : def.activateCost;
+    if (pool.current < cost || card.chargesRemaining === 0) return;
 
     if (effectNeedsExplicitTarget(def.effect) && effectHasLegalTarget(state, def.effect)) {
       setPending({ kind: "activate", slotIndex });
@@ -273,6 +289,36 @@ export default function App() {
     // No legal target right now (e.g. a Creature-only Spell with no enemy
     // creature out): still activate it, the effect just fizzles.
     const result = activateSlotCard(state, "player", slotIndex, null);
+    if (!result.ok) fail(result.reason);
+    commit();
+  }
+
+  function handleHeroPowerClick() {
+    const state = gameRef.current;
+    if (!state || pending || state.activePlayer !== "player" || state.winner) return;
+    const heroDef = CARD_DEFINITIONS[state.players.player.hero.defId] as HeroCardDefinition;
+    const power = heroDef.heroPower;
+    if (!power) return;
+    if (effectNeedsExplicitTarget(power.effect) && effectHasLegalTarget(state, power.effect)) {
+      setPending({ kind: "heroPower" });
+      return;
+    }
+    const result = activateHeroPower(state, "player");
+    if (!result.ok) fail(result.reason);
+    commit();
+  }
+
+  function handleSignatureClick() {
+    const state = gameRef.current;
+    if (!state || pending || state.activePlayer !== "player" || state.winner) return;
+    const heroDef = CARD_DEFINITIONS[state.players.player.hero.defId] as HeroCardDefinition;
+    const signature = heroDef.signature;
+    if (!signature) return;
+    if (effectNeedsExplicitTarget(signature.effect) && effectHasLegalTarget(state, signature.effect)) {
+      setPending({ kind: "signature" });
+      return;
+    }
+    const result = activateHeroSignature(state, "player");
     if (!result.ok) fail(result.reason);
     commit();
   }
@@ -343,7 +389,11 @@ export default function App() {
     const result =
       pending.kind === "playCard"
         ? playCardFromHand(state, "player", pending.instanceId, { target: targetRef })
-        : activateSlotCard(state, "player", pending.slotIndex, targetRef);
+        : pending.kind === "activate"
+          ? activateSlotCard(state, "player", pending.slotIndex, targetRef)
+          : pending.kind === "heroPower"
+            ? activateHeroPower(state, "player", targetRef)
+            : activateHeroSignature(state, "player", targetRef);
     if (!result.ok) fail(result.reason);
     setPending(null);
     commit();
@@ -374,7 +424,11 @@ export default function App() {
     const result =
       pending.kind === "playCard"
         ? playCardFromHand(state, "player", pending.instanceId, { target: targetRef })
-        : activateSlotCard(state, "player", pending.slotIndex, targetRef);
+        : pending.kind === "activate"
+          ? activateSlotCard(state, "player", pending.slotIndex, targetRef)
+          : pending.kind === "heroPower"
+            ? activateHeroPower(state, "player", targetRef)
+            : activateHeroSignature(state, "player", targetRef);
     if (!result.ok) fail(result.reason);
     setPending(null);
     commit();
@@ -520,6 +574,8 @@ export default function App() {
               onSlotClick={handleSlotClick}
               onPortraitClick={handlePortraitClick}
               onPlaceCreature={handlePlaceCreature}
+              onHeroPowerClick={handleHeroPowerClick}
+              onSignatureClick={handleSignatureClick}
             />
             <ResourceBar playerState={state.players.player} label="You" layout="vertical" />
           </div>

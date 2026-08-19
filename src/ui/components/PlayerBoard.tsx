@@ -2,6 +2,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { CARD_DEFINITIONS } from "../../data/cards";
 import { guardLabel } from "../../data/taxonomy";
 import { canAttack, creatureCanAttack, getEffectiveCreatureAttack, heroCanAttack } from "../../engine/combat";
+import { peekSpellDiscount } from "../../engine/hero";
 import type { CardInstance, CreatureDefinition, GameState, HeroCardDefinition, PlayerId } from "../../engine/types";
 import { BOARD_THEME, cssImage } from "../../data/theme";
 import { getPendingEffect, isEffectTargetable, type AiHighlight, type PendingAction } from "../targeting";
@@ -23,6 +24,9 @@ interface PlayerBoardProps {
   onSlotClick: (owner: PlayerId, slotIndex: number) => void;
   onPortraitClick: (owner: PlayerId) => void;
   onPlaceCreature: (owner: PlayerId, row: "vanguard" | "support", slotIndex: number) => void;
+  /** Only meaningful for the human "player" board — the AI opponent's Hero Power/Signature are decided in ai.ts, not clicked. */
+  onHeroPowerClick?: () => void;
+  onSignatureClick?: () => void;
 }
 
 function Slot({ children }: { children?: ReactNode }) {
@@ -48,6 +52,8 @@ export function PlayerBoard({
   onSlotClick,
   onPortraitClick,
   onPlaceCreature,
+  onHeroPowerClick,
+  onSignatureClick,
 }: PlayerBoardProps) {
   const playerState = state.players[owner];
   const pendingEffect = getPendingEffect(state, pending);
@@ -64,6 +70,17 @@ export function PlayerBoard({
 
   const canInitiate = !pending && owner === "player" && state.activePlayer === "player" && !state.winner;
   const canPlaceHere = pending?.kind === "placeCreature" && owner === "player";
+
+  const heroPowerClickable =
+    canInitiate &&
+    !!heroDef?.heroPower &&
+    !playerState.hero.heroPowerUsedThisTurn &&
+    playerState.energy.current >= heroDef.heroPower.activateCost;
+  const signatureClickable =
+    canInitiate &&
+    !!heroDef?.signature &&
+    (playerState.hero.signatureUsesRemaining ?? 0) > 0 &&
+    playerState.energy.current >= heroDef.signature.activateCost;
 
   // All pending attacks are human-initiated, so the attacker's owner is always
   // "player" here — `owner` is which board is being rendered (the *defender*
@@ -157,6 +174,30 @@ export function PlayerBoard({
           <Slot>
             {playerState.board.equipment && <CardView instance={playerState.board.equipment} />}
           </Slot>
+          {owner === "player" && (heroDef?.heroPower || heroDef?.signature) && (
+            <div className="hero-column__actions">
+              {heroDef.heroPower && (
+                <button
+                  className="btn btn--small"
+                  disabled={!heroPowerClickable}
+                  onClick={onHeroPowerClick}
+                  title={heroDef.heroPower.text ?? "Hero Power"}
+                >
+                  Power ({heroDef.heroPower.activateCost})
+                </button>
+              )}
+              {heroDef.signature && (
+                <button
+                  className="btn btn--small"
+                  disabled={!signatureClickable}
+                  onClick={onSignatureClick}
+                  title={heroDef.signature.text ?? "Signature Ability"}
+                >
+                  Signature ({heroDef.signature.activateCost}) x{playerState.hero.signatureUsesRemaining ?? 0}
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         {playerState.board.spellAbilitySlots.slice(2, 4).map((card, i) => (
@@ -260,9 +301,10 @@ function SlotAbility({
   let clickable = false;
   if (card && owner === "player" && state.activePlayer === "player" && !state.winner) {
     const def = CARD_DEFINITIONS[card.defId];
-    if (def.archetype === "spell" || def.archetype === "ability") {
+    if ((def.archetype === "spell" || def.archetype === "ability") && def.activateCost !== undefined) {
       const pool = def.archetype === "spell" ? state.players.player.mana : state.players.player.energy;
-      clickable = pool.current >= def.activateCost && card.chargesRemaining !== 0;
+      const cost = def.archetype === "spell" ? peekSpellDiscount(state, "player", def.activateCost) : def.activateCost;
+      clickable = pool.current >= cost && card.chargesRemaining !== 0;
     }
   }
   return (

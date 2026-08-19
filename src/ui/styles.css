@@ -234,6 +234,16 @@ body {
   align-items: center;
 }
 
+.hero-column__actions {
+  display: flex;
+  gap: 4px;
+}
+
+.hero-column__actions .btn {
+  padding: 2px 6px;
+  font-size: 0.62rem;
+}
+
 .slot {
   width: 88px;
   min-height: 100px;
@@ -1230,6 +1240,11 @@ body {
 .deck-builder__owned {
   color: var(--text-dim);
   font-size: 0.78rem;
+}
+
+.deck-builder__allegiance-warning {
+  color: var(--danger);
+  font-size: 0.75rem;
 }
 
 .deck-builder__play {

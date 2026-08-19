@@ -40,19 +40,39 @@ the panel.
 | `text` | string (optional) | Flavor/rules text shown on the card. |
 | `art` | string (optional) | Image URL or a path into `public/` (e.g. `"/cards/lava-hound.png"`). Omit for the plain text layout. See "Adding images" below. |
 | `element` | string (optional) | Magic school/affinity — see "Elements" below. Purely descriptive/flavor unless a card's own effect cares about it. |
-| `faction` | string (optional) | Faction allegiance — see "Factions" below. Purely descriptive/organizational, no mechanical effect. |
+| `faction` | string (optional) | Faction allegiance — see "Factions" below. Drives Allegiance deckbuilding validation on Hero cards; otherwise descriptive unless a card's own effect keys off it. |
 | `race` | string (optional) | Character race/type — see "Races" below. Only meaningful on Creature and Hero cards; mechanically inert unless a card's own effect keys off it. |
 
 ## Archetype-specific fields
 
 **Hero** (`archetype: "hero"`) — the card a player picks at the start
 of a match; its stats become the starting Hero HP/Attack (see DESIGN.md
-§6):
+§9):
 ```json
-{ "id": "fighter", "name": "Fighter", "archetype": "hero", "cost": 0, "rarity": "common",
-  "attack": 10, "hp": 20, "race": "human", "text": "A frontline warrior." }
+{
+  "id": "mage", "name": "Mage", "archetype": "hero", "cost": 0, "rarity": "common",
+  "attack": 20, "hp": 10, "faction": "moonveil-coven", "text": "A supernatural manipulator.",
+  "passive": { "kind": "firstSpellDiscount", "amount": 1 },
+  "heroPower": { "effect": { "kind": "damage", "amount": 2, "target": "targetAny" }, "activateCost": 2, "text": "Deal 2 damage." },
+  "signature": { "effect": { "kind": "damage", "amount": 3, "target": "allEnemyCreatures" }, "activateCost": 4, "usesPerMatch": 1, "text": "Deal 3 damage to all enemy creatures." },
+  "allegiance": { "extraFactions": ["arcane-industries"] }
+}
 ```
 - `attack`, `hp`: the Hero's base stats for the match (before Equipment).
+  Attack only matters once Equipment is assigned — a new Hero's base
+  Attack should be low/0, since the Weapon's `attackBonus` is meant to
+  carry it (the three starter Heroes predate this convention and are a
+  documented exception — see DESIGN.md §9).
+- `passive` *(optional)*: an always-on `PassiveEffect`, from a small
+  curated template set (see DESIGN.md §9) — currently:
+  - `{ "kind": "auraBuff", "filter": "all" | { "race": Race } | { "faction": Faction }, "attackDelta": N }` — live +N Attack to every matching friendly creature, recomputed on every Attack read (same "Attack only, never stored" approach as Flank/Formation).
+  - `{ "kind": "firstSpellDiscount", "amount": N }` — the controller's first Spell *activation* each turn (an Instant cast, or a Ritual/Charged Spell's `activateCost` step — not a Ritual/Charged Spell's initial slot-placement `cost`) costs N less Mana. Resets every `startTurn`.
+- `heroPower` *(optional)*: `{ "effect": CardEffect, "activateCost": N, "text"?: string }` — Energy-costed, usable once per turn (resets every `startTurn`), same `CardEffect` shape and `resolveEffect` machinery as a Spell/Ability.
+- `signature` *(optional)*: same shape as `heroPower` plus `"usesPerMatch": N` — gated to N total uses for the whole match, never resets on `startTurn`.
+- `allegiance` *(optional)*: bends Allegiance deckbuilding (DESIGN.md §10) beyond the default "Hero's own Faction + Neutral cards only" rule:
+  - `extraFactions: Faction[]` — additional Factions allowed alongside the Hero's own.
+  - `neutralRaces: Race[]` — creatures of a listed Race count as in-Faction regardless of their own Faction tag.
+  - `unrestricted: true` — no Faction restriction at all, despite the Hero having a Faction.
 - Any string id works as long as it's referenced by a key in
   `STARTER_DECKS` (`src/data/decks.ts`) if you want it selectable from
   Quick Play with a ready-made deck.
@@ -87,27 +107,46 @@ of a match; its stats become the starting Hero HP/Attack (see DESIGN.md
   "hp": 3, "triggers": [{ "on": "onPlay", "effect": { "kind": "gainCap", "pool": "resource", "amount": 1 } }] }
 ```
 
-**Spell** (`archetype: "spell"`, costs Mana to activate) / **Ability** (`archetype: "ability"`, costs Energy):
-```json
-{
-  "id": "chain-lightning",
-  "name": "Chain Lightning",
-  "archetype": "spell",
-  "cost": 3,
-  "rarity": "epic",
-  "element": "arcane",
-  "activateCost": 3,
-  "charges": 2,
-  "text": "Activate (3 Mana): deal 2 damage to all enemy creatures.",
-  "effect": { "kind": "damage", "amount": 2, "target": "allEnemyCreatures" }
-}
-```
-- `activateCost`: Mana (spell) or Energy (ability) cost per activation.
-- `charges`: a number, or the string `"unlimited"`.
+**Spell** (`archetype: "spell"`, costs Mana) / **Ability** (`archetype: "ability"`, costs Energy):
+
+A Spell also needs a `spellForm` (DESIGN.md §1a) — Abilities don't;
+they're always the Ritual/Charged shape, Energy instead of Mana.
+
+- **Instant** — cast straight from hand for `cost` Mana, resolves
+  immediately, never touches a Spell/Ability slot. No `activateCost`/
+  `charges`.
+  ```json
+  {
+    "id": "fireball", "name": "Fireball", "archetype": "spell", "spellForm": "instant",
+    "cost": 4, "rarity": "rare",
+    "text": "Deal 4 damage to a creature, a building, or the enemy Hero.",
+    "effect": { "kind": "damage", "amount": 4, "target": "targetAny" }
+  }
+  ```
+- **Ritual** — pay `cost` to place it in a Spell/Ability slot, then pay
+  `activateCost` per activation; `charges` is normally `"unlimited"`
+  and it's voluntarily discarded when done with it.
+- **Charged** — same slot placement, but `charges` is a fixed number;
+  it's discarded automatically once activations run it out.
+  ```json
+  {
+    "id": "chain-lightning", "name": "Chain Lightning", "archetype": "spell", "spellForm": "charged",
+    "cost": 3, "rarity": "epic", "element": "arcane",
+    "activateCost": 3, "charges": 2,
+    "text": "Activate (3 Mana): deal 2 damage to all enemy creatures.",
+    "effect": { "kind": "damage", "amount": 2, "target": "allEnemyCreatures" }
+  }
+  ```
+- `activateCost`: Mana (spell) or Energy (ability) cost per activation — omit only for an Instant Spell.
+- `charges`: a number, or the string `"unlimited"` — omit only for an Instant Spell.
 - `effect`: a single `CardEffect` (see below) — the card's one activated effect.
 - A creature with the **Immune** keyword blocks Spell-archetype
   activations that target it (see "Keywords" below) — Ability
   activations and creature/building triggers are unaffected.
+- An Instant cast, or a Ritual/Charged card that fizzles out of
+  charges, goes to `discard` — not the `graveyard`, which is reserved
+  for creature/building deaths (see DESIGN.md §17's Phase C
+  implementation-status note for why).
 
 **Equipment** (`archetype: "equipment"`, fills the Hero's single Equipment slot):
 ```json
@@ -213,19 +252,25 @@ values: `frost`, `fire`, `nature`, `light`, `darkness`, `arcane`,
 
 ## Factions
 
-Purely organizational — a faction allegiance label with no mechanical
-effect. Valid values: `infernal-court`, `roseguard-kingdom`,
+Drives Allegiance deckbuilding (DESIGN.md §10): a deck may contain any
+card whose Faction matches its Hero's Faction, plus any Neutral card
+(Faction field simply omitted). A Faction-less Hero has no
+restriction; a Hero's optional `allegiance` grant (see the Hero fields
+above) can widen this further. Also usable as an `auraBuff` Hero
+Passive filter. Valid values: `infernal-court`, `roseguard-kingdom`,
 `moonveil-coven`, `velvet-syndicate`, `wildheart-tribes`,
 `celestial-academy`, `necropolitan`, `arcane-industries`. Display names
 (e.g. "The Infernal Court") live in `src/data/taxonomy.ts`.
 
 ## Races
 
-A character-type tag for Creature and Hero cards, mechanically inert
-unless a specific card's effect keys off it. Valid values: `beast`,
-`demon`, `dragon`, `elemental`, `mech`, `human`, `undead`, `goblin`,
-`dwarf`, `elf`, `pixie`, `ogre`, `giant`, `dark-elf`, `angel`, `orc`,
-`gnome`, `troll`, `dryad`, `fairy`, `harpy`, `fiend`, `vampire`.
+A character-type tag for Creature and Hero cards. Mechanically inert
+on its own unless a specific card's effect keys off it — but a Hero's
+`allegiance.neutralRaces` or an `auraBuff` Passive can key off it (see
+the Hero fields above). Valid values: `beast`, `demon`, `dragon`,
+`elemental`, `mech`, `human`, `undead`, `goblin`, `dwarf`, `elf`,
+`pixie`, `ogre`, `giant`, `dark-elf`, `angel`, `orc`, `gnome`, `troll`,
+`dryad`, `fairy`, `harpy`, `fiend`, `vampire`.
 
 ---
 
@@ -329,9 +374,15 @@ drop its JSON output straight into the array in
 > Creatures can optionally add `spaceCost` (number, Massive — default
 > 1), `flankBonus`/`formationBonus` (`{ attackDelta: number }`, paired
 > with the `flank`/`formation` keywords).
-> Buildings need `hp` and `triggers`. Spells/abilities need
-> `activateCost` (number), `charges` (number or `"unlimited"`), and a
-> single `effect`. Equipment needs `attackBonus` and `damageReduction`.
+> Buildings need `hp` and `triggers`. Spells additionally need
+> `spellForm` (one of `instant`, `ritual`, `charged`) and a single
+> `effect`; `instant` casts straight from hand and takes no
+> `activateCost`/`charges`, while `ritual`/`charged` also need
+> `activateCost` (number) and `charges` (number, or `"unlimited"` —
+> `ritual` normally uses `"unlimited"`, `charged` a fixed number).
+> Abilities are always the `ritual`/`charged` shape (no `spellForm`
+> field) and need `activateCost`, `charges`, and `effect` the same way.
+> Equipment needs `attackBonus` and `damageReduction`.
 > An `effect` object has a `kind` (`damage`, `heal`, `applyStatus`,
 > `buff`, `drawCard`, `gainGuard`, or `gainCap`) plus kind-specific
 > fields: `damage`/`heal` need `amount` + `target`; `applyStatus` needs

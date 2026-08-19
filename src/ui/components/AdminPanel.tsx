@@ -65,6 +65,7 @@ interface CardDraft {
   attack: number;
   hp: number;
   keywords: Keyword[];
+  spellForm: "instant" | "ritual" | "charged";
   activateCost: number;
   charges: number | "unlimited";
   attackBonus: number;
@@ -95,6 +96,7 @@ function emptyDraft(): CardDraft {
     attack: 1,
     hp: 1,
     keywords: [],
+    spellForm: "ritual",
     activateCost: 1,
     charges: 1,
     attackBonus: 0,
@@ -163,7 +165,12 @@ function draftFromCard(def: CardDefinition): CardDraft {
       draft.triggerOn = def.triggers[0].on;
       loadEffectIntoDraft(draft, def.triggers[0].effect);
     }
-  } else if (def.archetype === "spell" || def.archetype === "ability") {
+  } else if (def.archetype === "spell") {
+    draft.spellForm = def.spellForm;
+    if (typeof def.activateCost === "number") draft.activateCost = def.activateCost;
+    if (def.charges !== undefined) draft.charges = def.charges;
+    loadEffectIntoDraft(draft, def.effect);
+  } else if (def.archetype === "ability") {
     draft.activateCost = def.activateCost;
     draft.charges = def.charges;
     loadEffectIntoDraft(draft, def.effect);
@@ -237,10 +244,18 @@ function buildCardDefinition(draft: CardDraft): CardDefinition | { error: string
     const triggers: Trigger[] = draft.triggerOn !== "none" && effect ? [{ on: draft.triggerOn, effect }] : [];
     return { ...base, archetype: "building", hp: draft.hp, triggers };
   }
-  if (draft.archetype === "spell" || draft.archetype === "ability") {
+  if (draft.archetype === "spell") {
     const effect = buildEffect(draft);
-    if (!effect) return { error: "Choose an effect for this Spell/Ability." };
-    return { ...base, archetype: draft.archetype, activateCost: draft.activateCost, charges: draft.charges, effect };
+    if (!effect) return { error: "Choose an effect for this Spell." };
+    if (draft.spellForm === "instant") {
+      return { ...base, archetype: "spell", spellForm: "instant", effect };
+    }
+    return { ...base, archetype: "spell", spellForm: draft.spellForm, activateCost: draft.activateCost, charges: draft.charges, effect };
+  }
+  if (draft.archetype === "ability") {
+    const effect = buildEffect(draft);
+    if (!effect) return { error: "Choose an effect for this Ability." };
+    return { ...base, archetype: "ability", activateCost: draft.activateCost, charges: draft.charges, effect };
   }
   // equipment
   return { ...base, archetype: "equipment", attackBonus: draft.attackBonus, damageReduction: draft.damageReduction };
@@ -517,7 +532,20 @@ export function AdminPanel({ collection, userId, onSetCoins, onCardsChanged, onB
               </div>
             )}
 
-            {(draft.archetype === "spell" || draft.archetype === "ability") && (
+            {draft.archetype === "spell" && (
+              <label>
+                Spell Form
+                <select
+                  value={draft.spellForm}
+                  onChange={(e) => setDraft((d) => ({ ...d, spellForm: e.target.value as CardDraft["spellForm"] }))}
+                >
+                  <option value="instant">Instant — cast from hand, resolves immediately</option>
+                  <option value="ritual">Ritual — placed in a slot, unlimited activations</option>
+                  <option value="charged">Charged — placed in a slot, fizzles at 0 charges</option>
+                </select>
+              </label>
+            )}
+            {((draft.archetype === "spell" && draft.spellForm !== "instant") || draft.archetype === "ability") && (
               <>
                 <label>
                   Activate Cost ({draft.archetype === "spell" ? "Mana" : "Energy"})

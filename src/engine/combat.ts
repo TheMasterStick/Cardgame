@@ -1,5 +1,6 @@
 import { CARD_DEFINITIONS } from "../data/cards";
 import { damageCard, damagePlayer, hasKeyword, resolveEffect, type EffectTargetRef } from "./effects";
+import { getAuraAttackBonus } from "./hero";
 import {
   otherPlayer,
   type CardInstance,
@@ -52,16 +53,18 @@ function hasFormationAlly(row: (CardInstance | null)[], columns: number[], insta
 }
 
 /**
- * Live Attack including Flank/Formation bonuses (DESIGN.md §5). Those
- * bonuses are continuously re-evaluated from current board position, never
- * stored on the CardInstance — this is the function anything actually
- * dealing or previewing combat damage should call instead of the bare
- * getCreatureAttack. Falls back to the base value if the creature isn't
- * currently on a board row at all.
+ * Live Attack including Flank/Formation bonuses (DESIGN.md §5) and the
+ * controller's Hero auraBuff Passive (§9), if any. All three are
+ * continuously re-evaluated from current board/hero state, never stored on
+ * the CardInstance — this is the function anything actually dealing or
+ * previewing combat damage should call instead of the bare
+ * getCreatureAttack. Falls back to base + aura if the creature isn't
+ * currently on a board row at all (Flank/Formation need row/column context;
+ * the aura bonus doesn't).
  */
 export function getEffectiveCreatureAttack(state: GameState, owner: PlayerId, card: CardInstance): number {
   const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
-  let attack = def.attack + card.attackDelta;
+  let attack = def.attack + card.attackDelta + getAuraAttackBonus(state, owner, card);
   const located = locateOnBoard(state, owner, card.instanceId);
   if (!located) return attack;
   if (def.flankBonus && def.keywords.includes("flank") && isFlanking(located.row, located.columns)) {

@@ -1,6 +1,6 @@
 import { CARD_DEFINITIONS } from "../data/cards";
 import type { AiTurnStep } from "../engine/ai";
-import type { CardEffect, EffectTarget, GameState, PlayerId } from "../engine/types";
+import type { CardEffect, EffectTarget, GameState, HeroCardDefinition, PlayerId } from "../engine/types";
 
 const EXPLICIT_TARGET_CATEGORIES: EffectTarget[] = [
   "targetCreature",
@@ -64,7 +64,9 @@ export type PendingAction =
   | { kind: "playCard"; instanceId: string }
   | { kind: "placeCreature"; instanceId: string }
   | { kind: "activate"; slotIndex: number }
-  | { kind: "attack"; attackerId: string | "hero" };
+  | { kind: "attack"; attackerId: string | "hero" }
+  | { kind: "heroPower" }
+  | { kind: "signature" };
 
 /**
  * All pending actions in this prototype are initiated by the human "player"
@@ -76,8 +78,13 @@ export function getPendingEffect(state: GameState, pending: PendingAction | null
     const card = state.players.player.hand.find((c) => c.instanceId === pending.instanceId);
     if (!card) return null;
     const def = CARD_DEFINITIONS[card.defId];
+    if (def.archetype === "spell" && def.spellForm === "instant") return def.effect;
     if (def.archetype !== "creature" && def.archetype !== "building") return null;
     return def.triggers.find((t) => t.on === "onPlay")?.effect ?? null;
+  }
+  if (pending.kind === "heroPower" || pending.kind === "signature") {
+    const heroDef = CARD_DEFINITIONS[state.players.player.hero.defId] as HeroCardDefinition;
+    return (pending.kind === "heroPower" ? heroDef.heroPower : heroDef.signature)?.effect ?? null;
   }
   const card = state.players.player.board.spellAbilitySlots[pending.slotIndex];
   if (!card) return null;
@@ -117,6 +124,9 @@ export function highlightForStep(step: AiTurnStep): AiHighlight {
     case "activateCard":
     case "advance":
       return { ...NO_AI_HIGHLIGHT, actorId: step.instanceId };
+    case "heroPower":
+    case "heroSignature":
+      return { ...NO_AI_HIGHLIGHT, actorPortrait: "opponent" };
     case "attack":
       return {
         ...NO_AI_HIGHLIGHT,

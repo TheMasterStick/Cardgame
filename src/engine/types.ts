@@ -196,10 +196,54 @@ interface CardDefinitionBase {
   race?: Race;
 }
 
+/**
+ * A Hero Passive (DESIGN.md §9): an always-on effect, built from a small
+ * curated set of templates rather than free-form scripting — matches how
+ * CardEffect is already a fixed set of `kind`s. Grows as new Heroes need
+ * new patterns.
+ */
+export type PassiveEffect =
+  /**
+   * A live, continuously-recalculated Attack bonus to the controller's own
+   * matching creatures — same "recomputed on demand, never stored on the
+   * CardInstance" approach as Flank/Formation (DESIGN.md §5), and for the
+   * same reason: an HP-inclusive version would need a parallel "effective
+   * max HP" overlay threaded through every HP display/comparison, so this
+   * stays Attack-only as a documented simplification, same as Flank/Formation.
+   */
+  | { kind: "auraBuff"; filter: "all" | { race: Race } | { faction: Faction }; attackDelta: number }
+  /** Reduces the Mana cost of the controller's first Spell activation each turn by `amount` (floored at 0). Resets at the start of that player's turn. */
+  | { kind: "firstSpellDiscount"; amount: number };
+
+/** An activated Hero ability — Hero Power or Signature (DESIGN.md §9) — reusing the same CardEffect shape as a Spell/Ability, Energy-costed. */
+export interface HeroActivatedAbility {
+  effect: CardEffect;
+  activateCost: number;
+  text?: string;
+}
+
 export interface HeroCardDefinition extends CardDefinitionBase {
   archetype: "hero";
   attack: number;
   hp: number;
+  passive?: PassiveEffect;
+  /** Usable once per turn (not charge-based) — resets every startTurn. */
+  heroPower?: HeroActivatedAbility;
+  /** A stronger effect gated to a small number of uses per *match* instead of per turn. */
+  signature?: HeroActivatedAbility & { usesPerMatch: number };
+  /**
+   * Allegiance grant (DESIGN.md §10) — bends the default deckbuilding rule
+   * ("your Faction's cards, plus Neutral") for this specific Hero. Omit
+   * entirely for a Hero that just follows the default rule.
+   */
+  allegiance?: {
+    /** Additional Factions allowed alongside this Hero's own (a Diplomat/Cultist-style Hero). */
+    extraFactions?: Faction[];
+    /** Creatures of a listed Race count as in-Faction regardless of their own Faction tag. */
+    neutralRaces?: Race[];
+    /** No Faction restriction at all despite having a Faction (a Mercenary Captain). */
+    unrestricted?: boolean;
+  };
 }
 
 /** A conditional stat bump from a positional keyword — Attack only (DESIGN.md §5). Re-evaluated live, never stored on the CardInstance. */
@@ -227,11 +271,22 @@ export interface BuildingDefinition extends CardDefinitionBase {
   triggers: Trigger[];
 }
 
+/**
+ * Spells come in three forms (DESIGN.md §1a):
+ * - "instant": no slot at all — cast straight from hand for `cost` Mana,
+ *   the effect resolves immediately, then it goes to the discard pile.
+ *   `activateCost`/`charges` don't apply and are omitted.
+ * - "ritual": occupies a Spell/Ability slot, unlimited charges (`charges: "unlimited"`).
+ * - "charged": occupies a slot with a fixed charge count (`charges: number`); Fizzles (discards) at 0.
+ * Abilities only ever come in the ritual/charged shape (no Instant form) — see AbilityDefinition.
+ */
 export interface SpellDefinition extends CardDefinitionBase {
   archetype: "spell";
-  /** Mana cost to activate once on the field. */
-  activateCost: number;
-  charges: number | "unlimited";
+  spellForm: "instant" | "ritual" | "charged";
+  /** Mana cost to activate once already on the field. Omitted for "instant" — there's no separate activation step. */
+  activateCost?: number;
+  /** "unlimited" for Ritual, a fixed number for Charged. Omitted for "instant". */
+  charges?: number | "unlimited";
   effect: CardEffect;
 }
 
@@ -288,6 +343,12 @@ export interface HeroInstance {
   baseAttack: number;
   statuses: StatusEffectInstance[];
   hasAttackedThisTurn: boolean;
+  /** Hero Power is usable once per turn (not charge-based) — resets every startTurn. */
+  heroPowerUsedThisTurn: boolean;
+  /** Signature Ability's remaining uses for the whole match — never resets. Undefined if this Hero has no Signature. */
+  signatureUsesRemaining?: number;
+  /** Whether this player's firstSpellDiscount Passive (if they have one) has already applied this turn. Resets every startTurn; harmless/unused for Heroes without that Passive. */
+  firstSpellDiscountUsedThisTurn: boolean;
 }
 
 export interface BoardState {

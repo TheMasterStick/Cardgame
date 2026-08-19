@@ -4,6 +4,7 @@ import { drawCard } from "./deck";
 import { damageCard, damagePlayer, gainCap, resolveEffect } from "./effects";
 import { createCardInstance, createInitialGameState } from "./factory";
 import { activateSlotCard, playCardFromHand, startTurn } from "./game";
+import { activateHeroPower, activateHeroSignature } from "./hero";
 import { MAX_POOL, STARTING_GUARD, type GameState } from "./types";
 
 function makeState(): GameState {
@@ -580,10 +581,11 @@ describe("Ranged retaliation", () => {
     archer.summonedTurn = 0;
     state.players.player.board.vanguard[0] = archer;
     const defender = createCardInstance("footman", "opponent"); // 2 attack / 3 HP
+    defender.currentHp = 5; // padded so it survives the archer's 3 (2 base + Fighter's +1 aura from makeState()'s player hero)
     state.players.opponent.board.vanguard[0] = defender;
 
     declareCreatureAttack(state, "player", archer.instanceId, { type: "creature", instanceId: defender.instanceId });
-    expect(defender.currentHp).toBe(1); // took the archer's 2 damage, survived
+    expect(defender.currentHp).toBe(2); // took the archer's 3 damage, survived
     expect(archer.currentHp).toBe(1); // took no retaliation despite the defender surviving with Attack
   });
 
@@ -606,10 +608,11 @@ describe("Ranged retaliation", () => {
     archer.summonedTurn = 0;
     state.players.player.board.vanguard[0] = archer;
     const sniper = createCardInstance("longbow-sniper", "opponent"); // 3 attack / 3 HP, ranged
+    sniper.currentHp = 5; // padded so it survives the archer's 3 (2 base + Fighter's +1 aura from makeState()'s player hero)
     state.players.opponent.board.vanguard[0] = sniper;
 
     declareCreatureAttack(state, "player", archer.instanceId, { type: "creature", instanceId: sniper.instanceId });
-    expect(sniper.currentHp).toBe(1); // took the archer's 2 damage, survived
+    expect(sniper.currentHp).toBe(2); // took the archer's 3 damage, survived
     expect(archer.currentHp).toBeLessThanOrEqual(0); // took the sniper's 3 retaliation damage and died — Ranged didn't save it
   });
 });
@@ -684,50 +687,53 @@ describe("Massive", () => {
   });
 });
 
+// makeState()'s player Hero is Fighter, whose Passive gives friendly
+// creatures +1 Attack (DESIGN.md §9) — every expected value below already
+// includes that +1 on top of the mechanic actually under test.
 describe("Flank", () => {
   it("grants its bonus while in column 1 (index 0)", () => {
     const state = makeState();
-    const scout = createCardInstance("flankguard-outrider", "player"); // base 2 attack, +2 flankBonus
+    const scout = createCardInstance("flankguard-outrider", "player"); // base 2 attack, +2 flankBonus, +1 Fighter aura
     state.players.player.board.vanguard[0] = scout;
-    expect(getEffectiveCreatureAttack(state, "player", scout)).toBe(4);
+    expect(getEffectiveCreatureAttack(state, "player", scout)).toBe(5);
   });
 
   it("grants its bonus while in column 5 (index 4)", () => {
     const state = makeState();
     const scout = createCardInstance("flankguard-outrider", "player");
     state.players.player.board.vanguard[4] = scout;
-    expect(getEffectiveCreatureAttack(state, "player", scout)).toBe(4);
+    expect(getEffectiveCreatureAttack(state, "player", scout)).toBe(5);
   });
 
   it("does not grant its bonus in a middle column", () => {
     const state = makeState();
     const scout = createCardInstance("flankguard-outrider", "player");
     state.players.player.board.vanguard[2] = scout;
-    expect(getEffectiveCreatureAttack(state, "player", scout)).toBe(2);
+    expect(getEffectiveCreatureAttack(state, "player", scout)).toBe(3);
   });
 });
 
 describe("Formation", () => {
   it("grants its bonus while an ally occupies an adjacent column", () => {
     const state = makeState();
-    const veteran = createCardInstance("shieldwall-veteran", "player"); // base 2 attack, +2 formationBonus
+    const veteran = createCardInstance("shieldwall-veteran", "player"); // base 2 attack, +2 formationBonus, +1 Fighter aura
     state.players.player.board.vanguard[1] = veteran;
     state.players.player.board.vanguard[2] = createCardInstance("footman", "player");
-    expect(getEffectiveCreatureAttack(state, "player", veteran)).toBe(4);
+    expect(getEffectiveCreatureAttack(state, "player", veteran)).toBe(5);
   });
 
   it("does not grant its bonus with no adjacent ally", () => {
     const state = makeState();
     const veteran = createCardInstance("shieldwall-veteran", "player");
     state.players.player.board.vanguard[1] = veteran;
-    expect(getEffectiveCreatureAttack(state, "player", veteran)).toBe(2);
+    expect(getEffectiveCreatureAttack(state, "player", veteran)).toBe(3);
   });
 
   it("does not crash when sitting in the leftmost column (no left neighbor to read)", () => {
     const state = makeState();
     const veteran = createCardInstance("shieldwall-veteran", "player");
     state.players.player.board.vanguard[0] = veteran;
-    expect(getEffectiveCreatureAttack(state, "player", veteran)).toBe(2);
+    expect(getEffectiveCreatureAttack(state, "player", veteran)).toBe(3);
   });
 
   it("does not crash when sitting in the rightmost column (no right neighbor to read)", () => {
@@ -735,7 +741,7 @@ describe("Formation", () => {
     const veteran = createCardInstance("shieldwall-veteran", "player");
     const lastColumn = state.players.player.board.vanguard.length - 1;
     state.players.player.board.vanguard[lastColumn] = veteran;
-    expect(getEffectiveCreatureAttack(state, "player", veteran)).toBe(2);
+    expect(getEffectiveCreatureAttack(state, "player", veteran)).toBe(3);
   });
 
   it("still grants its bonus from a same-row ally when sitting in the leftmost column", () => {
@@ -743,7 +749,7 @@ describe("Formation", () => {
     const veteran = createCardInstance("shieldwall-veteran", "player");
     state.players.player.board.vanguard[0] = veteran;
     state.players.player.board.vanguard[1] = createCardInstance("footman", "player");
-    expect(getEffectiveCreatureAttack(state, "player", veteran)).toBe(4);
+    expect(getEffectiveCreatureAttack(state, "player", veteran)).toBe(5);
   });
 });
 
@@ -881,5 +887,112 @@ describe("Protector", () => {
 
     declareCreatureAttack(state, "player", attacker.instanceId, { type: "creature", instanceId: weakling.instanceId });
     expect(weakling.currentHp).toBeLessThanOrEqual(0);
+  });
+});
+
+describe("Spell forms (DESIGN.md §1a)", () => {
+  it("an Instant Spell casts straight from hand, resolves immediately, and goes to discard — never a slot, never the graveyard", () => {
+    const state = makeState(); // player = Fighter, no spell discount
+    const fireball = createCardInstance("fireball", "player");
+    state.players.player.hand.push(fireball);
+    const target = createCardInstance("hill-giant", "opponent"); // 9 HP
+    state.players.opponent.board.vanguard[0] = target;
+
+    const result = playCardFromHand(state, "player", fireball.instanceId, {
+      target: { kind: "card", owner: "opponent", instanceId: target.instanceId },
+    });
+    expect(result.ok).toBe(true);
+    expect(state.players.player.mana.current).toBe(1); // 5 - 4 cost
+    expect(state.players.player.board.spellAbilitySlots.every((c) => c === null)).toBe(true);
+    expect(state.players.player.discard).toContain(fireball);
+    expect(state.players.player.graveyard).not.toContain(fireball);
+    expect(target.currentHp).toBe(5); // 9 - 4
+  });
+
+  it("a Ritual/Charged Spell still goes into a slot and is activated separately, unaffected by the Instant path", () => {
+    const state = makeState();
+    const bolt = createCardInstance("lightning-bolt", "player"); // charged, cost 2, activateCost 2, 2 charges
+    state.players.player.hand.push(bolt);
+
+    const playResult = playCardFromHand(state, "player", bolt.instanceId);
+    expect(playResult.ok).toBe(true);
+    expect(state.players.player.board.spellAbilitySlots[0]?.instanceId).toBe(bolt.instanceId);
+    expect(state.players.player.mana.current).toBe(3); // 5 - 2 cost
+
+    const target = createCardInstance("hill-giant", "opponent");
+    state.players.opponent.board.vanguard[0] = target;
+    const activateResult = activateSlotCard(state, "player", 0, { kind: "card", owner: "opponent", instanceId: target.instanceId });
+    expect(activateResult.ok).toBe(true);
+    expect(state.players.player.mana.current).toBe(1); // 3 - 2 activateCost
+    expect(bolt.chargesRemaining).toBe(1);
+    expect(target.currentHp).toBe(6); // 9 - 3
+  });
+});
+
+describe("Hero Passive/Power/Signature (DESIGN.md §9)", () => {
+  it("Fighter's auraBuff Passive gives friendly creatures +1 Attack live, without touching HP", () => {
+    const state = makeState(); // player = Fighter
+    const footman = createCardInstance("footman", "player"); // base 2 attack
+    state.players.player.board.vanguard[0] = footman;
+    expect(getEffectiveCreatureAttack(state, "player", footman)).toBe(3);
+    expect(footman.currentHp).toBe(3); // footman's base HP, untouched by an Attack-only aura
+  });
+
+  it("Mage's firstSpellDiscount Passive discounts only the first Spell activation each turn, then resets next turn", () => {
+    const state = createInitialGameState("mage", [], "fighter", []);
+    const bolt1 = createCardInstance("lightning-bolt", "player");
+    const bolt2 = createCardInstance("lightning-bolt", "player");
+    state.players.player.board.spellAbilitySlots[0] = bolt1;
+    state.players.player.board.spellAbilitySlots[1] = bolt2;
+
+    const first = activateSlotCard(state, "player", 0, null);
+    expect(first.ok).toBe(true);
+    expect(state.players.player.mana.current).toBe(4); // 5 - (2 activateCost - 1 discount)
+
+    const second = activateSlotCard(state, "player", 1, null);
+    expect(second.ok).toBe(true);
+    expect(state.players.player.mana.current).toBe(2); // 4 - 2 — discount already used this turn
+
+    state.turnNumber = 2;
+    startTurn(state);
+    expect(state.players.player.hero.firstSpellDiscountUsedThisTurn).toBe(false);
+  });
+
+  it("Hero Power costs Energy, resolves its effect, and is usable only once per turn — resetting on the next startTurn", () => {
+    const state = makeState(); // Fighter's Hero Power: gain 2 Guard for 2 Energy
+    const startingGuard = state.players.player.guard.current;
+
+    const first = activateHeroPower(state, "player");
+    expect(first.ok).toBe(true);
+    expect(state.players.player.energy.current).toBe(3); // 5 - 2
+    expect(state.players.player.guard.current).toBe(startingGuard + 2);
+
+    const second = activateHeroPower(state, "player");
+    expect(second.ok).toBe(false);
+
+    state.turnNumber = 2;
+    startTurn(state);
+    const third = activateHeroPower(state, "player");
+    expect(third.ok).toBe(true);
+  });
+
+  it("Signature Ability is gated to a limited number of uses for the whole match, and does NOT reset on startTurn", () => {
+    const state = makeState(); // Fighter's Signature: 3 Energy, 2 uses/match
+    expect(state.players.player.hero.signatureUsesRemaining).toBe(2);
+
+    const first = activateHeroSignature(state, "player");
+    expect(first.ok).toBe(true);
+    expect(state.players.player.hero.signatureUsesRemaining).toBe(1);
+
+    state.turnNumber = 2;
+    startTurn(state);
+    expect(state.players.player.hero.signatureUsesRemaining).toBe(1); // unaffected by the turn reset
+
+    const second = activateHeroSignature(state, "player");
+    expect(second.ok).toBe(true);
+    expect(state.players.player.hero.signatureUsesRemaining).toBe(0);
+
+    const third = activateHeroSignature(state, "player");
+    expect(third.ok).toBe(false);
   });
 });

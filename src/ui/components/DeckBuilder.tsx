@@ -3,7 +3,7 @@ import { CARD_DEFINITIONS } from "../../data/cards";
 import type { Collection } from "../../engine/collection";
 import { ownedCount } from "../../engine/collection";
 import type { DeckDraft } from "../../engine/customDeck";
-import { deckSize } from "../../engine/customDeck";
+import { deckAllegianceViolations, deckSize, isCardAllowedForHero } from "../../engine/customDeck";
 import { createCardInstance } from "../../engine/factory";
 import { DECK_SIZE, type HeroCardDefinition } from "../../engine/types";
 import { CardView } from "./CardView";
@@ -22,6 +22,7 @@ export function DeckBuilder({ collection, deck, onAdd, onRemove, onPlay, onBack 
     (def): def is HeroCardDefinition => def.archetype === "hero",
   );
   const [heroDefId, setHeroDefId] = useState<string>(heroCards[0]?.id ?? "");
+  const heroDef = CARD_DEFINITIONS[heroDefId] as HeroCardDefinition | undefined;
   const total = deckSize(deck);
   const allDefs = Object.values(CARD_DEFINITIONS)
     .filter((def) => def.archetype !== "hero")
@@ -29,6 +30,10 @@ export function DeckBuilder({ collection, deck, onAdd, onRemove, onPlay, onBack 
   const deckEntries = Object.entries(deck)
     .filter(([, count]) => count > 0)
     .sort(([a], [b]) => CARD_DEFINITIONS[a].name.localeCompare(CARD_DEFINITIONS[b].name));
+  // DESIGN.md §10 — Allegiance is enforced at save/validate time, not by
+  // silently hiding cards: a card added under a different Hero stays in the
+  // deck (and visibly flagged) until the player removes it themselves.
+  const violations = heroDef ? new Set(deckAllegianceViolations(deck, heroDef).map((c) => c.id)) : new Set<string>();
 
   return (
     <div className="screen">
@@ -49,7 +54,8 @@ export function DeckBuilder({ collection, deck, onAdd, onRemove, onPlay, onBack 
             {allDefs.map((def) => {
               const owned = ownedCount(collection, def.id);
               const inDeck = deck[def.id] ?? 0;
-              const canAdd = inDeck < owned && total < DECK_SIZE;
+              const allowed = !heroDef || isCardAllowedForHero(heroDef, def);
+              const canAdd = inDeck < owned && total < DECK_SIZE && allowed;
               return (
                 <div key={def.id} className="deck-builder__row">
                   <CardView instance={createCardInstance(def.id, "player")} />
@@ -57,6 +63,7 @@ export function DeckBuilder({ collection, deck, onAdd, onRemove, onPlay, onBack 
                     <span className="deck-builder__owned">
                       {inDeck}/{owned} owned
                     </span>
+                    {!allowed && <span className="deck-builder__allegiance-warning">Not {heroDef?.name}'s Faction</span>}
                     <button className="btn btn--small" disabled={!canAdd} onClick={() => onAdd(def.id)}>
                       +
                     </button>
@@ -76,7 +83,10 @@ export function DeckBuilder({ collection, deck, onAdd, onRemove, onPlay, onBack 
             {deckEntries.length === 0 && <p className="screen__blurb">Add cards from your collection.</p>}
             {deckEntries.map(([defId, count]) => (
               <div key={defId} className="deck-builder__row deck-builder__row--compact">
-                <span>{CARD_DEFINITIONS[defId].name}</span>
+                <span>
+                  {CARD_DEFINITIONS[defId].name}
+                  {violations.has(defId) && <span className="deck-builder__allegiance-warning"> ⚠ breaks Allegiance</span>}
+                </span>
                 <span className="deck-builder__owned">×{count}</span>
                 <button className="btn btn--small" onClick={() => onRemove(defId)}>
                   −
@@ -96,9 +106,15 @@ export function DeckBuilder({ collection, deck, onAdd, onRemove, onPlay, onBack 
                 ))}
               </select>
             </label>
+            {violations.size > 0 && (
+              <p className="deck-builder__allegiance-warning">
+                {violations.size} card{violations.size > 1 ? "s" : ""} in this deck don't match {heroDef?.name}'s Faction — remove
+                them before playing.
+              </p>
+            )}
             <button
               className="btn btn--primary"
-              disabled={total !== DECK_SIZE || !heroDefId}
+              disabled={total !== DECK_SIZE || !heroDefId || violations.size > 0}
               onClick={() => onPlay(heroDefId)}
             >
               Play This Deck

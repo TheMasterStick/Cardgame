@@ -32,11 +32,36 @@ defending player; the engine instead applies it automatically via a
 heuristic (redirect only when the original target would otherwise die
 to the hit) rather than a real-time prompt, symmetrically for both the
 human and the AI. A genuine interactive prompt for the human's own
-Protector decisions is a possible follow-up, not yet built. Everything
-else below (Hero Passive/Power/Signature, Allegiance, Spell forms, the
-fuller keyword pool beyond what's listed above, Buildings-as-objects,
-the Equipment rework) is still spec only. CARDS.md/BACKEND.md describe
-what's live today; check them (not just this doc) for current schema.
+Protector decisions is a possible follow-up, not yet built.
+**Phase C is also live**: the Instant/Ritual/Charged Spell split (§1a —
+Instant casts straight from hand and resolves immediately; Ritual/
+Charged still occupy a Spell/Ability slot exactly as before); Hero
+Passive/Power/Signature (§9), with two curated Passive templates
+(`auraBuff`, `firstSpellDiscount`) authored onto the three starter
+Heroes — Fighter (+1 Attack aura, Hero Power gains Guard, Signature
+buffs the whole board), Mage (first-Spell-each-turn Mana discount, Hero
+Power/Signature are direct damage), Rogue (a narrower Goblin-only
+Attack aura, Hero Power poisons, Signature executes); and Allegiance
+deckbuilding validation (§10), enforced in the Deck Builder at
+add-card and Play-This-Deck time. Two deliberate notes: (1) an
+Instant-cast or Charged-fizzled Spell/Ability goes to `discard`, not
+the `graveyard` this section's prose says — the engine's `graveyard`
+array is reserved for creature/building deaths (it's what a future
+Raise Dead-style Signature would recall from, per the §9 example), and
+this already matched the pre-Phase-C charge-exhaustion behavior, so
+Instant/Charged disposal was made consistent with it rather than the
+other way around; (2) Allegiance is correctly built and unit-tested
+but currently inert in play — only one existing card and none of the
+three starter Heroes carry a `faction` tag yet, so no deck is actually
+restricted until real Faction-tagged content exists. The three starter
+Heroes' base Attack numbers (10/20/15) were left exactly as they were
+even though this pass touched their card entries — see §9's
+open-default note; retiring them to the low/0-base convention is a
+separate balance call, not bundled into this rework. Everything else
+below (the fuller keyword pool beyond what's listed above,
+Buildings-as-objects, the Equipment rework) is still spec only.
+CARDS.md/BACKEND.md describe what's live today; check them (not just
+this doc) for current schema.
 
 Sections marked **Open default** are judgment calls made to keep the
 spec internally consistent and buildable; flag any of them if they
@@ -544,7 +569,7 @@ Suggested build order, each phase individually shippable/testable:
 | **A — Foundation** ✅ *(live)* | Board reshape (Vanguard+Support+columns), the 3-pool resource-by-archetype split, Ready/Exhausted, Guard rename (+ faction display labels), base reach-tier targeting (no Reach/Ranged/Infiltrate yet — just Vanguard-first, matches v1's existing chain shape). |
 | **B1 — Reach & position, wave 1** ✅ *(live)* | Reach, Ranged, Infiltrate keywords and the full targeting chain they unlock (§5). Deliberate Vanguard-vs-Support placement on play. Support creatures can attack if Ranged. Column-based Building protection (§11). Hero-targeting has no board-population gate — every attacker can always reach the Hero, gated only by a reachable Taunt creature (Infiltrate bypasses that too). Target-restricted Warcries/Spells with no legal target just fizzle instead of making the card unplayable. |
 | **B2 — Reach & position, wave 2** ✅ *(live)* | Protector, Flank, Formation, Advance, Push, Massive. Protector's redirect is heuristic-automatic rather than a live prompt (see the implementation-status note above); everything else matches this section as written. |
-| **C — Spell forms & Hero rework** | Instant/Ritual/Charged split for Spells. Hero Passive/Power/Signature. Allegiance deckbuilding validation. |
+| **C — Spell forms & Hero rework** ✅ *(live)* | Instant/Ritual/Charged split for Spells. Hero Passive/Power/Signature. Allegiance deckbuilding validation. See the implementation-status note above for the discard-vs-graveyard deviation and Allegiance's currently-inert status. |
 | **D — Keyword expansion** | Stealth, Ward, Cleave, Drain, Bloodied, Summon (+ the `summonCreature` effect kind), Warcry rename. |
 | **E — Buildings as objects** | Durability/attackability, activated abilities, On Construction triggers, enemy interaction (Siege/Sabotage). |
 | **F — Equipment rework** | 4-slot zone, categories, assign/reassign for Energy, survives-death/Unassigned flow. |

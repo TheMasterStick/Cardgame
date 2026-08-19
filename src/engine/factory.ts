@@ -55,6 +55,9 @@ export function createHeroInstance(heroDefId: string): HeroInstance {
     baseAttack: heroDef.attack,
     statuses: [],
     hasAttackedThisTurn: false,
+    heroPowerUsedThisTurn: false,
+    signatureUsesRemaining: heroDef.signature?.usesPerMatch,
+    firstSpellDiscountUsedThisTurn: false,
   };
 }
 

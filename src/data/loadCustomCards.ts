@@ -81,14 +81,24 @@ export function validateCard(raw: unknown): CardDefinition | null {
       if (typeof raw.hp !== "number") return null;
       return { ...base, archetype: "building", hp: raw.hp, triggers: parseTriggers(raw.triggers) };
     }
-    case "spell":
+    case "spell": {
+      const spellForm = raw.spellForm;
+      if (spellForm !== "instant" && spellForm !== "ritual" && spellForm !== "charged") return null;
+      if (!isValidEffect(raw.effect)) return null;
+      if (spellForm === "instant") {
+        return { ...base, archetype: "spell", spellForm, effect: raw.effect };
+      }
+      if (typeof raw.activateCost !== "number") return null;
+      if (raw.charges !== "unlimited" && typeof raw.charges !== "number") return null;
+      return { ...base, archetype: "spell", spellForm, activateCost: raw.activateCost, charges: raw.charges, effect: raw.effect };
+    }
     case "ability": {
       if (typeof raw.activateCost !== "number") return null;
       if (raw.charges !== "unlimited" && typeof raw.charges !== "number") return null;
       if (!isValidEffect(raw.effect)) return null;
       return {
         ...base,
-        archetype,
+        archetype: "ability",
         activateCost: raw.activateCost,
         charges: raw.charges,
         effect: raw.effect,

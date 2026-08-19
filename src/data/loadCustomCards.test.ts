@@ -19,9 +19,38 @@ describe("custom card validation", () => {
     expect(card?.archetype).toBe("creature");
   });
 
-  it("accepts a well-formed spell", () => {
+  it("accepts a well-formed ritual/charged spell", () => {
     const card = validateCard({
       id: "test-spell",
+      name: "Test Spell",
+      archetype: "spell",
+      spellForm: "ritual",
+      cost: 2,
+      rarity: "common",
+      activateCost: 2,
+      charges: "unlimited",
+      effect: { kind: "damage", amount: 2, target: "targetCreature" },
+    });
+    expect(card).not.toBeNull();
+  });
+
+  it("accepts a well-formed instant spell with no activateCost/charges", () => {
+    const card = validateCard({
+      id: "test-instant-spell",
+      name: "Test Instant Spell",
+      archetype: "spell",
+      spellForm: "instant",
+      cost: 3,
+      rarity: "common",
+      effect: { kind: "damage", amount: 4, target: "targetAny" },
+    });
+    expect(card).not.toBeNull();
+    expect(card?.archetype).toBe("spell");
+  });
+
+  it("rejects a spell missing spellForm", () => {
+    const card = validateCard({
+      id: "test-spell-no-form",
       name: "Test Spell",
       archetype: "spell",
       cost: 2,
@@ -30,7 +59,7 @@ describe("custom card validation", () => {
       charges: "unlimited",
       effect: { kind: "damage", amount: 2, target: "targetCreature" },
     });
-    expect(card).not.toBeNull();
+    expect(card).toBeNull();
   });
 
   it("accepts a well-formed equipment card", () => {
@@ -66,6 +95,7 @@ describe("custom card validation", () => {
       id: "x",
       name: "X",
       archetype: "spell",
+      spellForm: "charged",
       cost: 1,
       rarity: "common",
       activateCost: 1,
