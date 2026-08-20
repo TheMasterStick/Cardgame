@@ -1,6 +1,7 @@
 import { CARD_DEFINITIONS } from "../data/cards";
 import {
   BUILDING_SLOTS,
+  EQUIPMENT_ZONE_SIZE,
   SPELL_ABILITY_SLOTS,
   STARTING_GUARD,
   STARTING_POOL,
@@ -67,7 +68,7 @@ function emptyBoard(): BoardState {
     support: Array(SUPPORT_SIZE).fill(null),
     buildings: Array(BUILDING_SLOTS).fill(null),
     spellAbilitySlots: Array(SPELL_ABILITY_SLOTS).fill(null),
-    equipment: null,
+    equipment: Array(EQUIPMENT_ZONE_SIZE).fill(null),
   };
 }
 

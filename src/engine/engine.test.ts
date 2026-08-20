@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { activateBuildingAbility } from "./building";
-import { declareAdvance, declareCreatureAttack, getEffectiveCreatureAttack } from "./combat";
+import { declareAdvance, declareCreatureAttack, getEffectiveCreatureAttack, getHeroAttack, heroCanAttack } from "./combat";
 import { CARD_DEFINITIONS } from "../data/cards";
 import { drawCard } from "./deck";
 import { damageCard, damagePlayer, gainCap, resolveEffect } from "./effects";
+import { assignEquipment } from "./equipment";
 import { createCardInstance, createInitialGameState } from "./factory";
 import { activateSlotCard, playCardFromHand, startTurn } from "./game";
 import { activateHeroPower, activateHeroSignature } from "./hero";
@@ -1286,5 +1287,146 @@ describe("Buildings as objects (Phase E, DESIGN.md §11)", () => {
     const result = activateBuildingAbility(state, "player", 0);
     expect(result.ok).toBe(false);
     expect(result.reason).toMatch(/No Building/i);
+  });
+});
+
+describe("Equipment (DESIGN.md §12)", () => {
+  it("the Hero is always an eligible bearer — assigning a Weapon costs 1 Energy and lets it attack", () => {
+    const state = makeState();
+    const sword = createCardInstance("iron-sword", "player");
+    state.players.player.board.equipment[0] = sword;
+    expect(heroCanAttack(state, "player")).toBe(false);
+
+    const result = assignEquipment(state, "player", 0, { kind: "hero" });
+    expect(result.ok).toBe(true);
+    expect(state.players.player.energy.current).toBe(4); // 5 - 1
+    expect(heroCanAttack(state, "player")).toBe(true);
+  });
+
+  it("Armor alone does not unlock the Hero's attack — only a Weapon-category item does", () => {
+    const state = makeState();
+    const shield = createCardInstance("battle-shield", "player"); // armor, damageReduction only
+    state.players.player.board.equipment[0] = shield;
+
+    const result = assignEquipment(state, "player", 0, { kind: "hero" });
+    expect(result.ok).toBe(true);
+    expect(heroCanAttack(state, "player")).toBe(false);
+  });
+
+  it("rejects a creature bearer that doesn't have the Armiger keyword", () => {
+    const state = makeState();
+    const footman = createCardInstance("footman", "player"); // no Armiger
+    state.players.player.board.vanguard[0] = footman;
+    const sword = createCardInstance("iron-sword", "player");
+    state.players.player.board.equipment[0] = sword;
+
+    const result = assignEquipment(state, "player", 0, { kind: "creature", instanceId: footman.instanceId });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/Armiger/);
+  });
+
+  it("accepts an Armiger creature as a bearer", () => {
+    const state = makeState();
+    const squire = createCardInstance("royal-squire", "player"); // has Armiger
+    state.players.player.board.vanguard[0] = squire;
+    const barding = createCardInstance("steel-barding", "player");
+    state.players.player.board.equipment[0] = barding;
+
+    const result = assignEquipment(state, "player", 0, { kind: "creature", instanceId: squire.instanceId });
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects assignment when Energy can't afford the 1-Energy cost", () => {
+    const state = makeState();
+    state.players.player.energy.current = 0;
+    const sword = createCardInstance("iron-sword", "player");
+    state.players.player.board.equipment[0] = sword;
+
+    const result = assignEquipment(state, "player", 0, { kind: "hero" });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/Energy/);
+  });
+
+  it("auto-bumps whatever a bearer already held back to Unassigned when a different item is assigned to them", () => {
+    const state = makeState();
+    const sword = createCardInstance("iron-sword", "player");
+    const cloak = createCardInstance("cloak-of-shadows", "player");
+    state.players.player.board.equipment[0] = sword;
+    state.players.player.board.equipment[1] = cloak;
+
+    assignEquipment(state, "player", 0, { kind: "hero" });
+    expect(sword.equipmentBearer).toEqual({ kind: "hero" });
+
+    assignEquipment(state, "player", 1, { kind: "hero" });
+    expect(cloak.equipmentBearer).toEqual({ kind: "hero" });
+    expect(sword.equipmentBearer).toBeNull(); // bumped, not destroyed — still sitting in the zone
+    expect(state.players.player.board.equipment[0]).toBe(sword);
+  });
+
+  it("an Armiger creature's equipped Weapon raises its effective Attack", () => {
+    const state = makeState();
+    const squire = createCardInstance("royal-squire", "player");
+    state.players.player.board.vanguard[0] = squire;
+    const before = getEffectiveCreatureAttack(state, "player", squire);
+
+    const cloak = createCardInstance("cloak-of-shadows", "player"); // +3 Attack
+    state.players.player.board.equipment[0] = cloak;
+    assignEquipment(state, "player", 0, { kind: "creature", instanceId: squire.instanceId });
+
+    expect(getEffectiveCreatureAttack(state, "player", squire)).toBe(before + 3);
+  });
+
+  it("an Armiger creature's equipped Armor reduces damage it takes", () => {
+    const state = makeState();
+    const squire = createCardInstance("royal-squire", "player");
+    state.players.player.board.vanguard[0] = squire;
+    const barding = createCardInstance("steel-barding", "player"); // damageReduction 2
+    state.players.player.board.equipment[0] = barding;
+    assignEquipment(state, "player", 0, { kind: "creature", instanceId: squire.instanceId });
+
+    const startingHp = squire.currentHp ?? 0;
+    const dealt = damageCard(state, "player", squire.instanceId, 5);
+    expect(dealt).toBe(3); // 5 - 2
+    expect(squire.currentHp).toBe(startingHp - 3);
+  });
+
+  it("equipment survives its bearer's death, returning to Unassigned rather than being destroyed", () => {
+    const state = makeState();
+    const squire = createCardInstance("royal-squire", "player");
+    squire.currentHp = 1;
+    state.players.player.board.vanguard[0] = squire;
+    const barding = createCardInstance("steel-barding", "player");
+    state.players.player.board.equipment[0] = barding;
+    assignEquipment(state, "player", 0, { kind: "creature", instanceId: squire.instanceId });
+
+    damageCard(state, "player", squire.instanceId, 99);
+    expect(state.players.player.graveyard).toContain(squire);
+    expect(state.players.player.board.equipment[0]).toBe(barding); // still in the zone
+    expect(barding.equipmentBearer).toBeNull(); // Unassigned, not gone
+  });
+
+  it("Drain restores Guard matching the actual post-Armor damage dealt, not the raw attack", () => {
+    const state = makeState();
+    const leech = createCardInstance("blood-leech", "player"); // 2 attack, drain
+    leech.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = leech;
+    state.players.player.guard.current = 50; // below max so restoration is visible
+
+    const barding = createCardInstance("steel-barding", "opponent"); // damageReduction 2, on the target's Hero
+    state.players.opponent.board.equipment[0] = barding;
+    assignEquipment(state, "opponent", 0, { kind: "hero" });
+
+    const attack = getEffectiveCreatureAttack(state, "player", leech); // 3 with Fighter's +1 aura
+    declareCreatureAttack(state, "player", leech.instanceId, { type: "player" });
+    expect(state.players.player.guard.current).toBe(50 + (attack - 2)); // matches the reduced damage, not the raw attack
+  });
+
+  it("getHeroAttack folds in the Hero's equipped Weapon's attackBonus", () => {
+    const state = makeState();
+    const cloak = createCardInstance("cloak-of-shadows", "player"); // +3 Attack
+    state.players.player.board.equipment[0] = cloak;
+    assignEquipment(state, "player", 0, { kind: "hero" });
+
+    expect(getHeroAttack(state, "player")).toBe(state.players.player.hero.baseAttack + 3);
   });
 });

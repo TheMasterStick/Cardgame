@@ -75,14 +75,19 @@ export type PendingAction =
   | { kind: "attack"; attackerId: string | "hero" }
   | { kind: "heroPower" }
   | { kind: "signature" }
-  | { kind: "buildingAbility"; slotIndex: number };
+  | { kind: "buildingAbility"; slotIndex: number }
+  | { kind: "assignEquipment"; slotIndex: number };
 
 /**
  * All pending actions in this prototype are initiated by the human "player"
  * seat, so target-side checks can hardcode player=own, opponent=enemy.
  */
 export function getPendingEffect(state: GameState, pending: PendingAction | null): CardEffect | null {
-  if (!pending || pending.kind === "attack" || pending.kind === "placeCreature") return null;
+  // assignEquipment picks a bearer (Hero or Armiger creature), not a
+  // CardEffect target — PlayerBoard.tsx gates its clickability separately.
+  if (!pending || pending.kind === "attack" || pending.kind === "placeCreature" || pending.kind === "assignEquipment") {
+    return null;
+  }
   if (pending.kind === "playCard") {
     const card = state.players.player.hand.find((c) => c.instanceId === pending.instanceId);
     if (!card) return null;
@@ -171,6 +176,7 @@ export function highlightForStep(step: AiTurnStep): AiHighlight {
     case "playCard":
     case "activateCard":
     case "activateBuilding":
+    case "assignEquipment":
     case "advance":
       return { ...NO_AI_HIGHLIGHT, actorId: step.instanceId };
     case "heroPower":

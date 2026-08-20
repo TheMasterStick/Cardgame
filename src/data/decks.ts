@@ -9,8 +9,9 @@ function expand(list: DeckList): string[] {
 
 const FIGHTER_DECK: DeckList = [
   ["militia-recruit", 1],
-  ["footman", 2],
-  ["shield-bearer", 2],
+  ["footman", 1],
+  ["shield-bearer", 1],
+  ["royal-squire", 1],
   ["berserker", 1],
   ["young-wolf", 1],
   ["stone-golem", 1],
@@ -36,6 +37,7 @@ const FIGHTER_DECK: DeckList = [
   ["executioners-strike", 1],
   ["iron-sword", 1],
   ["battle-shield", 1],
+  ["steel-barding", 1],
 ];
 
 const MAGE_DECK: DeckList = [

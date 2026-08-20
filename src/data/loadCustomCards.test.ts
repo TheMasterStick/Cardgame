@@ -69,10 +69,41 @@ describe("custom card validation", () => {
       archetype: "equipment",
       cost: 2,
       rarity: "common",
+      category: "weapon",
       attackBonus: 1,
       damageReduction: 0,
     });
     expect(card).not.toBeNull();
+    if (card?.archetype === "equipment") {
+      expect(card.category).toBe("weapon");
+    }
+  });
+
+  it("rejects an equipment card missing category", () => {
+    const card = validateCard({
+      id: "test-equipment-no-category",
+      name: "Test Blade",
+      archetype: "equipment",
+      cost: 2,
+      rarity: "common",
+      attackBonus: 1,
+      damageReduction: 0,
+    });
+    expect(card).toBeNull();
+  });
+
+  it("rejects an equipment card with an invalid category", () => {
+    const card = validateCard({
+      id: "test-equipment-bad-category",
+      name: "Test Blade",
+      archetype: "equipment",
+      cost: 2,
+      rarity: "common",
+      category: "shield",
+      attackBonus: 1,
+      damageReduction: 0,
+    });
+    expect(card).toBeNull();
   });
 
   it("rejects a non-object", () => {
@@ -131,11 +162,11 @@ describe("custom card validation", () => {
       rarity: "common",
       attack: 1,
       hp: 1,
-      keywords: ["stealth", "ward", "cleave", "drain", "bloodied", "summon", "warcry", "taunt"],
+      keywords: ["stealth", "ward", "cleave", "drain", "bloodied", "summon", "warcry", "taunt", "armiger"],
     });
     expect(card).not.toBeNull();
     if (card?.archetype === "creature") {
-      expect(card.keywords).toEqual(["stealth", "ward", "cleave", "drain", "bloodied", "summon", "warcry", "taunt"]);
+      expect(card.keywords).toEqual(["stealth", "ward", "cleave", "drain", "bloodied", "summon", "warcry", "taunt", "armiger"]);
     }
   });
 

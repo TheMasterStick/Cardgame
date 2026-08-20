@@ -115,10 +115,47 @@ turn (by the human, or by the AI's own single-pass-per-turn heuristic)
 as long as its owner can afford it, since Buildings are persistent
 battlefield objects rather than a consumed resource. Example cards:
 `beast-den` (a Beast-only Attack aura) and `demon-gate` (Activate: 3
-Mana, summon a Flame Imp). Everything else below (the Equipment
-rework, Board-as-resource) is still spec only. CARDS.md/BACKEND.md
-describe what's live today; check them (not just this doc) for
-current schema.
+Mana, summon a Flame Imp).
+**Phase F is also live**: the Equipment rework (§12) — a real 4-slot
+Equipment zone (`board.equipment: (CardInstance | null)[]`, length 4)
+replaced the old single always-Hero slot, each item either sitting
+Unassigned or equipped to a bearer (the Hero, or a Creature with the
+new **Armiger** keyword). `EquipmentCategory` (`weapon` | `armor` |
+`accessory` | `mount`) landed as a required field on every Equipment
+card — the Hero specifically now needs an assigned **Weapon**
+specifically to attack at all, not just any item (Armor/Accessory/
+Mount alone no longer unlocks it, a real behavior change from pre-
+Phase-F: `battle-shield`, an Armor item, used to say "Your Hero can
+attack" and no longer does). One deliberate simplification: DESIGN.md
+allows a card played from hand to assign to a bearer immediately for
+free as part of the play; that path isn't built — an Equipment card
+always enters the zone Unassigned when played, and the single paid
+1-Energy `assignEquipment` action (`src/engine/equipment.ts`) covers
+both a first assignment and any later reassignment, with no separate
+free fast path. Each bearer holds at most 1 item (the section's own
+"Open default"): assigning a second item to an already-equipped bearer
+auto-bumps the old one back to Unassigned in the zone rather than the
+action being refused — DESIGN.md doesn't specify swap semantics, and a
+refusal seemed like worse UX than a bump for no extra cost. A bearer's
+Equipment survives its death, returning to Unassigned rather than
+being destroyed, matching this section's text exactly. Category-based
+bearer restriction ("a Warhound Armiger: Accessory only") is **not**
+enforced — moot for now since every bearer can only hold 1 item total
+regardless of category, so nothing yet needs the restriction decided.
+`damageCard`/`damagePlayer`/`damageHeroDirect` (in `effects.ts`) were
+generalized in the same pass to look up whichever bearer they're
+hitting (Hero or Armiger creature) instead of only ever checking the
+Hero, and now return the actual post-reduction damage dealt instead of
+`void` — Drain and Frenzy both switched to using that returned value,
+fixing a latent inaccuracy where a Drain attacker or a damaged
+Frenzy creature would react to the raw pre-Armor attack number instead
+of what was actually dealt (harmless before Phase F, since nothing
+could reduce a creature's incoming damage yet). Example cards:
+`royal-squire` (a vanilla Armiger creature) and `steel-barding` (a
+generic Armor item any Armiger bearer — Hero or creature — can wear).
+Everything else below (Board-as-resource) is still spec only.
+CARDS.md/BACKEND.md describe what's live today; check them (not just
+this doc) for current schema.
 
 Sections marked **Open default** are judgment calls made to keep the
 spec internally consistent and buildable; flag any of them if they
@@ -492,6 +529,15 @@ and its bonus is gone for good.
 
 ## 12. Equipment
 
+**Live as of Phase F** — see the implementation-status note near the
+top of this document for exactly what shipped, the one deliberate
+simplification (Equipment always enters the zone Unassigned when
+played; there's no free immediate-assign-at-play path, only the paid
+`assignEquipment` action below), and the auto-bump-on-reassign
+behavior this section doesn't spell out. Bearer category restriction
+(the second bullet below) is the one piece **not** built — moot while
+"Open default" caps every bearer at 1 item total anyway.
+
 Hero-exclusive by default. Ordinary creatures can't hold gear unless a
 card specifically grants that — diluting Equipment down to "any
 creature can hold anything" made it feel less special, not more:
@@ -531,8 +577,11 @@ creature can hold anything" made it feel less special, not more:
   Hero's own base Attack should be low/0, with the equipped Weapon's
   `attackBonus` doing most of the work. Armor/Accessory/Mount pieces
   are expected to mostly grant Health, damage reduction, or utility
-  effects rather than Attack, though nothing in the engine enforces
-  that split yet (categories themselves land in Phase F).
+  effects rather than Attack — the `category` field exists and gates
+  Hero-attack eligibility (only a `weapon` unlocks it), but nothing
+  stops an Armor card from also carrying a nonzero `attackBonus` if a
+  future card wants to bend that convention; it's an authoring
+  guideline, not an engine-enforced rule.
 
 ---
 
@@ -629,7 +678,7 @@ Suggested build order, each phase individually shippable/testable:
 | **C — Spell forms & Hero rework** ✅ *(live)* | Instant/Ritual/Charged split for Spells. Hero Passive/Power/Signature. Allegiance deckbuilding validation. See the implementation-status note above for the discard-vs-graveyard deviation and Allegiance's currently-inert status. |
 | **D — Keyword expansion** ✅ *(live)* | Stealth, Ward, Cleave, Drain, Bloodied, Summon (+ the `summonCreature` effect kind), Warcry rename. See the implementation-status note above for scoping details and the loadCustomCards.ts validator fix. |
 | **E — Buildings as objects** ✅ *(live)* | Durability/attackability, activated abilities, On Construction triggers, enemy interaction (Siege/Sabotage). Durability/column-protection/Graveyard/On Construction were already live from earlier phases; this wave added the passive (auraBuff-only) and activated ability (no usage cap). Siege/Sabotage-style "ignore column protection" effects remain spec-only — no card exercises that escape hatch yet. See the implementation-status note above. |
-| **F — Equipment rework** | 4-slot zone, categories, assign/reassign for Energy, survives-death/Unassigned flow. |
+| **F — Equipment rework** ✅ *(live)* | 4-slot zone, categories, assign/reassign for Energy, survives-death/Unassigned flow. Equipment always enters the zone Unassigned when played (the free immediate-assign-at-play path isn't built); a second item assigned to an already-equipped bearer auto-bumps the old one rather than being refused; bearer category restriction isn't enforced. See the implementation-status note above. |
 | **G — Board-as-resource (§16)** | Swarm/Consume/Garrison/Mount/Transformation, plus Hero Rule-Breaks (§9) once there's enough of the rest in place to make rule-breaking meaningful. |
 
 Each phase gets the same verification pass as prior work: `tsc

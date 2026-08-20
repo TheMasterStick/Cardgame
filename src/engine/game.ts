@@ -198,6 +198,9 @@ export function playCardFromHand(
   } else if (def.archetype === "spell" || def.archetype === "ability") {
     slot = findOpenSlot(player.board.spellAbilitySlots, options.slotIndex);
     if (slot === -1) return { ok: false, reason: "No open Spell/Ability slot." };
+  } else if (def.archetype === "equipment") {
+    slot = findOpenSlot(player.board.equipment, options.slotIndex);
+    if (slot === -1) return { ok: false, reason: "No open Equipment slot." };
   }
 
   pool.current -= def.cost;
@@ -220,8 +223,12 @@ export function playCardFromHand(
   } else if (def.archetype === "spell" || def.archetype === "ability") {
     player.board.spellAbilitySlots[slot] = card;
   } else if (def.archetype === "equipment") {
-    if (player.board.equipment) player.discard.push(player.board.equipment);
-    player.board.equipment = card;
+    // Always enters the zone Unassigned — DESIGN.md §12 also allows
+    // assigning it immediately for free as part of the play, but that
+    // second path isn't built; the always-paid 1-Energy assignEquipment
+    // action (equipment.ts) covers first assignment and reassignment alike.
+    card.equipmentBearer = null;
+    player.board.equipment[slot] = card;
   }
 
   return { ok: true };

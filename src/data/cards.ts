@@ -630,6 +630,18 @@ const creatures: CreatureDefinition[] = [
     text: "Revenge — Summon: when this dies, summon a Militia Recruit.",
     triggers: [{ on: "onDeath", effect: { kind: "summonCreature", creatureId: "militia-recruit" } }],
   },
+  {
+    id: "royal-squire",
+    name: "Royal Squire",
+    archetype: "creature",
+    cost: 2,
+    rarity: "common",
+    attack: 2,
+    hp: 3,
+    keywords: ["armiger"],
+    text: "Armiger — this creature can hold one Equipment item (DESIGN.md §12).",
+    triggers: [],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -795,9 +807,10 @@ const equipment: EquipmentDefinition[] = [
     cost: 2,
     rarity: "common",
     art: "/cards/Iron-Sword.png",
+    category: "weapon",
     attackBonus: 0,
     damageReduction: 0,
-    text: "Your Hero can attack.",
+    text: "Weapon. Assign to your Hero so it can attack.",
   },
   {
     id: "battle-shield",
@@ -806,9 +819,10 @@ const equipment: EquipmentDefinition[] = [
     cost: 3,
     rarity: "rare",
     art: "/cards/Battle-Shield.png",
+    category: "armor",
     attackBonus: 0,
     damageReduction: 2,
-    text: "Your Hero can attack. Your Hero takes 2 less damage from all sources.",
+    text: "Armor. The bearer takes 2 less damage from all sources.",
   },
   {
     id: "cloak-of-shadows",
@@ -817,9 +831,21 @@ const equipment: EquipmentDefinition[] = [
     cost: 2,
     rarity: "rare",
     art: "/cards/Cloak-of-Shadows.png",
+    category: "weapon",
     attackBonus: 3,
     damageReduction: 0,
-    text: "Your Hero can attack, with +3 Attack.",
+    text: "Weapon. Assign to your Hero so it can attack, with +3 Attack.",
+  },
+  {
+    id: "steel-barding",
+    name: "Steel Barding",
+    archetype: "equipment",
+    cost: 2,
+    rarity: "common",
+    category: "armor",
+    attackBonus: 0,
+    damageReduction: 2,
+    text: "Armor. Assign to your Hero or an Armiger creature — the bearer takes 2 less damage from all sources.",
   },
 ];
 

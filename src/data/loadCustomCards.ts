@@ -3,6 +3,7 @@ import type {
   CardArchetype,
   CardDefinition,
   CardEffect,
+  EquipmentCategory,
   Keyword,
   PassiveEffect,
   Rarity,
@@ -40,7 +41,9 @@ const VALID_KEYWORDS: Keyword[] = [
   "drain",
   "bloodied",
   "summon",
+  "armiger",
 ];
+const VALID_EQUIPMENT_CATEGORIES: EquipmentCategory[] = ["weapon", "armor", "accessory", "mount"];
 const VALID_TRIGGER_NAMES: TriggerName[] = ["onPlay", "onAttack", "onDeath", "startOfTurn", "endOfTurn"];
 const EFFECT_KINDS_NEEDING_TARGET = new Set(["damage", "heal", "applyStatus", "buff"]);
 
@@ -167,7 +170,14 @@ export function validateCard(raw: unknown): CardDefinition | null {
     }
     case "equipment": {
       if (typeof raw.attackBonus !== "number" || typeof raw.damageReduction !== "number") return null;
-      return { ...base, archetype: "equipment", attackBonus: raw.attackBonus, damageReduction: raw.damageReduction };
+      if (typeof raw.category !== "string" || !VALID_EQUIPMENT_CATEGORIES.includes(raw.category as EquipmentCategory)) return null;
+      return {
+        ...base,
+        archetype: "equipment",
+        category: raw.category as EquipmentCategory,
+        attackBonus: raw.attackBonus,
+        damageReduction: raw.damageReduction,
+      };
     }
     default:
       return null;

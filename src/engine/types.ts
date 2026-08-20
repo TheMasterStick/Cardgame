@@ -37,7 +37,8 @@ export type Keyword =
   | "cleave"
   | "drain"
   | "bloodied"
-  | "summon";
+  | "summon"
+  | "armiger";
 
 export type Element =
   | "frost"
@@ -343,11 +344,18 @@ export interface AbilityDefinition extends CardDefinitionBase {
   effect: CardEffect;
 }
 
+/** Tags on an Equipment card (DESIGN.md §12) — purely descriptive today; a bearer restricting which categories it can hold is a possible future refinement, not built (moot while every bearer can only hold 1 item total anyway). */
+export type EquipmentCategory = "weapon" | "armor" | "accessory" | "mount";
+
 export interface EquipmentDefinition extends CardDefinitionBase {
   archetype: "equipment";
+  category: EquipmentCategory;
   attackBonus: number;
   damageReduction: number;
 }
+
+/** Who an Equipment card in the zone is currently equipped to — the Hero, or an Armiger creature (DESIGN.md §12). */
+export type EquipmentBearer = { kind: "hero" } | { kind: "creature"; instanceId: string };
 
 export type CardDefinition =
   | HeroCardDefinition
@@ -376,6 +384,8 @@ export interface CardInstance {
   wardConsumed?: boolean;
   // Spell / ability runtime state
   chargesRemaining?: number | "unlimited";
+  /** Equipment only: who this item is currently equipped to. null = sitting Unassigned in the zone (DESIGN.md §12). */
+  equipmentBearer?: EquipmentBearer | null;
 }
 
 export interface ResourcePool {
@@ -412,7 +422,8 @@ export interface BoardState {
   support: (CardInstance | null)[]; // length 5
   buildings: (CardInstance | null)[]; // length 5, one per column
   spellAbilitySlots: (CardInstance | null)[]; // length 4
-  equipment: CardInstance | null;
+  /** The Equipment zone (DESIGN.md §12) — a player-owned inventory, not a board column. Each slot holds one Equipment card, assigned to a bearer or sitting Unassigned. */
+  equipment: (CardInstance | null)[]; // length 4
 }
 
 export interface PlayerState {
@@ -444,6 +455,7 @@ export const VANGUARD_SIZE = 5;
 export const SUPPORT_SIZE = 5;
 export const BUILDING_SLOTS = 5;
 export const SPELL_ABILITY_SLOTS = 4;
+export const EQUIPMENT_ZONE_SIZE = 4;
 export const STARTING_HAND_SIZE = 4;
 export const MAX_HAND_SIZE = 10;
 export const STARTING_POOL = 5;

@@ -1,6 +1,7 @@
 import { CARD_DEFINITIONS } from "../data/cards";
 import { findOpenContiguousSlots } from "./board";
 import { drawCard } from "./deck";
+import { getBearerDamageReduction, unassignEquipmentFrom } from "./equipment";
 import { createCardInstance } from "./factory";
 import { applyStatus } from "./status";
 import {
@@ -111,6 +112,9 @@ export function killCardIfDead(state: GameState, owner: PlayerId, instanceId: st
     }
     player.graveyard.push(found.card);
     state.log.push(`${found.card.defId} (${owner}) was destroyed.`);
+    // Equipment survives its bearer's death — it returns to Unassigned in
+    // the zone rather than being destroyed alongside them (DESIGN.md §12).
+    unassignEquipmentFrom(state, owner, instanceId);
     const def = CARD_DEFINITIONS[found.card.defId] as CreatureDefinition | BuildingDefinition;
     for (const trigger of def.triggers) {
       if (trigger.on === "onDeath") resolveEffect(state, owner, trigger.effect, null);
@@ -118,17 +122,30 @@ export function killCardIfDead(state: GameState, owner: PlayerId, instanceId: st
   }
 }
 
-/** Damages a specific creature/building instance, then cleans it up if it died. */
-export function damageCard(state: GameState, owner: PlayerId, instanceId: string, amount: number): void {
+/**
+ * Damages a specific creature/building instance, then cleans it up if it
+ * died. An Armiger creature's equipped Armor reduces the total, same as the
+ * Hero's own equipped Armor does for damagePlayer/damageHeroDirect (a
+ * Building is never an eligible bearer, so its reduction is always 0).
+ * Returns the actual (post-reduction) damage dealt, so a Drain attacker
+ * restores Guard matching what the defender really took, not the raw
+ * pre-reduction attack value.
+ */
+export function damageCard(state: GameState, owner: PlayerId, instanceId: string, amount: number): number {
   const found = findCard(state, owner, instanceId);
-  if (!found || found.card.currentHp === undefined) return;
-  found.card.currentHp -= amount;
+  if (!found || found.card.currentHp === undefined) return 0;
+  const reduction = getBearerDamageReduction(state, owner, { kind: "creature", instanceId });
+  const reduced = Math.max(0, amount - reduction);
+  found.card.currentHp -= reduced;
   if (found.card.currentHp > 0 && hasKeyword(found.card, "frenzy")) {
-    found.card.attackDelta += amount;
-    state.log.push(`${found.card.defId} (${owner}) Frenzies, gaining +${amount} Attack.`);
+    found.card.attackDelta += reduced;
+    state.log.push(`${found.card.defId} (${owner}) Frenzies, gaining +${reduced} Attack.`);
   }
-  state.log.push(`${found.card.defId} (${owner}) took ${amount} damage.`);
+  state.log.push(
+    `${found.card.defId} (${owner}) took ${reduced} damage${reduction > 0 ? ` (${amount} reduced by ${reduction} Armor)` : ""}.`,
+  );
   killCardIfDead(state, owner, instanceId);
+  return reduced;
 }
 
 export function healCard(state: GameState, owner: PlayerId, instanceId: string, amount: number): void {
@@ -140,13 +157,12 @@ export function healCard(state: GameState, owner: PlayerId, instanceId: string, 
 
 /**
  * Deals damage to a player through the full Guard -> Hero HP chain
- * (DESIGN.md §6). Equipment damage reduction applies to the total.
+ * (DESIGN.md §6). The Hero's equipped Armor reduces the total. Returns the
+ * actual (post-reduction) damage dealt.
  */
-export function damagePlayer(state: GameState, target: PlayerId, amount: number): void {
+export function damagePlayer(state: GameState, target: PlayerId, amount: number): number {
   const player = state.players[target];
-  const equipment = player.board.equipment;
-  const def = equipment ? (CARD_DEFINITIONS[equipment.defId] as { damageReduction: number }) : null;
-  const reduced = Math.max(0, amount - (def?.damageReduction ?? 0));
+  const reduced = Math.max(0, amount - getBearerDamageReduction(state, target, { kind: "hero" }));
 
   const fromGuard = Math.min(player.guard.current, reduced);
   player.guard.current -= fromGuard;
@@ -158,17 +174,17 @@ export function damagePlayer(state: GameState, target: PlayerId, amount: number)
     `${target} took ${reduced} damage (${fromGuard} to Guard${overflow > 0 ? `, ${overflow} to Hero HP` : ""}).`,
   );
   checkWinner(state);
+  return reduced;
 }
 
-/** Damages the Hero's HP directly, bypassing Guard entirely. */
-export function damageHeroDirect(state: GameState, target: PlayerId, amount: number): void {
+/** Damages the Hero's HP directly, bypassing Guard entirely. Returns the actual (post-reduction) damage dealt. */
+export function damageHeroDirect(state: GameState, target: PlayerId, amount: number): number {
   const player = state.players[target];
-  const equipment = player.board.equipment;
-  const def = equipment ? (CARD_DEFINITIONS[equipment.defId] as { damageReduction: number }) : null;
-  const reduced = Math.max(0, amount - (def?.damageReduction ?? 0));
+  const reduced = Math.max(0, amount - getBearerDamageReduction(state, target, { kind: "hero" }));
   player.hero.currentHp -= reduced;
   state.log.push(`${target}'s Hero took ${reduced} direct damage.`);
   checkWinner(state);
+  return reduced;
 }
 
 export function healHero(state: GameState, target: PlayerId, amount: number): void {

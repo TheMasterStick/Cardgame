@@ -2,11 +2,13 @@ import { useState } from "react";
 import { CARD_DEFINITIONS } from "../../data/cards";
 import {
   ELEMENT_OPTIONS,
+  EQUIPMENT_CATEGORY_OPTIONS,
   FACTION_OPTIONS,
   KEYWORD_OPTIONS,
   RACE_OPTIONS,
   RARITY_OPTIONS,
   ELEMENT_LABELS,
+  EQUIPMENT_CATEGORY_LABELS,
   FACTION_LABELS,
   RACE_LABELS,
   RARITY_LABELS,
@@ -21,6 +23,7 @@ import type {
   CardDefinition,
   CardEffect,
   Element,
+  EquipmentCategory,
   Faction,
   Keyword,
   Race,
@@ -80,6 +83,7 @@ interface CardDraft {
   charges: number | "unlimited";
   attackBonus: number;
   damageReduction: number;
+  equipmentCategory: EquipmentCategory;
   triggerOn: TriggerName | "none";
   effectKind: CardEffect["kind"] | "none";
   effectAmount: number;
@@ -117,6 +121,7 @@ function emptyDraft(): CardDraft {
     charges: 1,
     attackBonus: 0,
     damageReduction: 0,
+    equipmentCategory: "weapon",
     triggerOn: "none",
     effectKind: "none",
     effectAmount: 1,
@@ -213,6 +218,7 @@ function draftFromCard(def: CardDefinition): CardDraft {
   } else if (def.archetype === "equipment") {
     draft.attackBonus = def.attackBonus;
     draft.damageReduction = def.damageReduction;
+    draft.equipmentCategory = def.category;
   }
   return draft;
 }
@@ -313,7 +319,13 @@ function buildCardDefinition(draft: CardDraft): CardDefinition | { error: string
     return { ...base, archetype: "ability", activateCost: draft.activateCost, charges: draft.charges, effect };
   }
   // equipment
-  return { ...base, archetype: "equipment", attackBonus: draft.attackBonus, damageReduction: draft.damageReduction };
+  return {
+    ...base,
+    archetype: "equipment",
+    category: draft.equipmentCategory,
+    attackBonus: draft.attackBonus,
+    damageReduction: draft.damageReduction,
+  };
 }
 
 export function AdminPanel({ collection, userId, onSetCoins, onCardsChanged, onBack }: AdminPanelProps) {
@@ -737,6 +749,20 @@ export function AdminPanel({ collection, userId, onSetCoins, onCardsChanged, onB
             )}
             {draft.archetype === "equipment" && (
               <>
+                <label>
+                  Category
+                  <select
+                    value={draft.equipmentCategory}
+                    onChange={(e) => setDraft((d) => ({ ...d, equipmentCategory: e.target.value as EquipmentCategory }))}
+                  >
+                    {EQUIPMENT_CATEGORY_OPTIONS.map((c) => (
+                      <option key={c} value={c}>
+                        {EQUIPMENT_CATEGORY_LABELS[c]}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="admin-hint">Only a Weapon lets the bearer's Hero attack — DESIGN.md §12.</span>
+                </label>
                 <label>
                   Attack Bonus
                   <input

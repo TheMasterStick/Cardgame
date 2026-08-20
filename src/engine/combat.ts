@@ -1,6 +1,7 @@
 import { CARD_DEFINITIONS } from "../data/cards";
 import { damageCard, damagePlayer, hasKeyword, resolveEffect, restoreGuard, type EffectTargetRef } from "./effects";
 import { getBuildingAuraAttackBonus } from "./building";
+import { getBearerAttackBonus, findBearerEquipment } from "./equipment";
 import { getAuraAttackBonus } from "./hero";
 import {
   otherPlayer,
@@ -83,7 +84,8 @@ export function getEffectiveCreatureAttack(state: GameState, owner: PlayerId, ca
     def.attack +
     card.attackDelta +
     getAuraAttackBonus(state, owner, card) +
-    getBuildingAuraAttackBonus(state, owner, card);
+    getBuildingAuraAttackBonus(state, owner, card) +
+    getBearerAttackBonus(state, owner, { kind: "creature", instanceId: card.instanceId });
   const located = locateOnBoard(state, owner, card.instanceId);
   if (!located) return attack;
   if (def.flankBonus && def.keywords.includes("flank") && isFlanking(located.row, located.columns)) {
@@ -102,17 +104,18 @@ export function creatureCanAttack(state: GameState, card: CardInstance): boolean
   return true;
 }
 
+/** The Hero specifically still requires an assigned Weapon-category item to attack at all (DESIGN.md §12) — Armor/Accessory/Mount alone doesn't gate it open. */
 export function heroCanAttack(state: GameState, owner: PlayerId): boolean {
   const player = state.players[owner];
   if (player.hero.hasAttackedThisTurn) return false;
-  return player.board.equipment !== null;
+  const weapon = findBearerEquipment(state, owner, { kind: "hero" });
+  if (!weapon) return false;
+  return (CARD_DEFINITIONS[weapon.defId] as EquipmentDefinition).category === "weapon";
 }
 
 export function getHeroAttack(state: GameState, owner: PlayerId): number {
   const player = state.players[owner];
-  if (!player.board.equipment) return 0;
-  const def = CARD_DEFINITIONS[player.board.equipment.defId] as EquipmentDefinition;
-  return player.hero.baseAttack + def.attackBonus;
+  return player.hero.baseAttack + getBearerAttackBonus(state, owner, { kind: "hero" });
 }
 
 interface ValidationResult {
@@ -321,8 +324,8 @@ function resolveCreatureTrade(
       : { kind: "card", owner: attackerOwner, instanceId: attackerInstanceId };
   fireOnDefendTrigger(state, defenderOwner, defender, attackerTarget);
 
-  damageCard(state, defenderOwner, actualDefenderId, attackerAttack);
-  if (attackerHasDrain) restoreGuard(state, attackerOwner, attackerAttack);
+  const dealtToDefender = damageCard(state, defenderOwner, actualDefenderId, attackerAttack);
+  if (attackerHasDrain) restoreGuard(state, attackerOwner, dealtToDefender);
 
   // Push (DESIGN.md §5): if the defender was in Vanguard and survives, and
   // its column's Support slot is open, it gets shoved back there. Only
@@ -340,12 +343,11 @@ function resolveCreatureTrade(
   const attackerEscapesRetaliation = attackerIsRanged && !hasKeyword(defender, "ranged");
   if (attackerEscapesRetaliation || defenderAttack <= 0) return;
 
-  if (attackerInstanceId === "hero") {
-    damagePlayer(state, attackerOwner, defenderAttack);
-  } else {
-    damageCard(state, attackerOwner, attackerInstanceId, defenderAttack);
-  }
-  if (hasKeyword(defender, "drain")) restoreGuard(state, defenderOwner, defenderAttack);
+  const dealtToAttacker =
+    attackerInstanceId === "hero"
+      ? damagePlayer(state, attackerOwner, defenderAttack)
+      : damageCard(state, attackerOwner, attackerInstanceId, defenderAttack);
+  if (hasKeyword(defender, "drain")) restoreGuard(state, defenderOwner, dealtToAttacker);
 }
 
 /**
@@ -421,16 +423,16 @@ export function declareCreatureAttack(
 
     if (cleaveInfo) {
       for (const splashTarget of cleaveSplashTargets(cleaveInfo.row, cleaveInfo.columns)) {
-        damageCard(state, defenderOwner, splashTarget.instanceId, attackerAttack);
-        if (attackerHasDrain) restoreGuard(state, attackerOwner, attackerAttack);
+        const dealt = damageCard(state, defenderOwner, splashTarget.instanceId, attackerAttack);
+        if (attackerHasDrain) restoreGuard(state, attackerOwner, dealt);
       }
     }
   } else if (target.type === "building") {
-    damageCard(state, defenderOwner, target.instanceId, attackerAttack);
-    if (attackerHasDrain) restoreGuard(state, attackerOwner, attackerAttack);
+    const dealt = damageCard(state, defenderOwner, target.instanceId, attackerAttack);
+    if (attackerHasDrain) restoreGuard(state, attackerOwner, dealt);
   } else {
-    damagePlayer(state, defenderOwner, attackerAttack);
-    if (attackerHasDrain) restoreGuard(state, attackerOwner, attackerAttack);
+    const dealt = damagePlayer(state, defenderOwner, attackerAttack);
+    if (attackerHasDrain) restoreGuard(state, attackerOwner, dealt);
   }
 
   if (hasKeyword(attacker, "stealth")) attacker.stealthBroken = true;
@@ -444,7 +446,7 @@ export function declareHeroAttack(
   target: AttackTarget,
 ): ValidationResult {
   if (!heroCanAttack(state, attackerOwner)) {
-    return { ok: false, reason: "Hero can't attack right now (needs Equipment, once per turn)." };
+    return { ok: false, reason: "Hero can't attack right now (needs an assigned Weapon, once per turn)." };
   }
   const validation = validateTarget(state, attackerOwner, NO_REACH, target);
   if (!validation.ok) return validation;
@@ -453,7 +455,7 @@ export function declareHeroAttack(
   const defenderOwner = otherPlayer(attackerOwner);
 
   if (target.type === "creature") {
-    // Heroes have no Ranged/Push/Drain weapon flags yet (Equipment has no such fields) — always a plain melee trade for now.
+    // Heroes have no Ranged/Push/Drain weapon flags yet — always a plain melee trade for now.
     resolveCreatureTrade(state, attackerOwner, "hero", attackerAttack, false, false, false, defenderOwner, target.instanceId);
   } else if (target.type === "building") {
     damageCard(state, defenderOwner, target.instanceId, attackerAttack);

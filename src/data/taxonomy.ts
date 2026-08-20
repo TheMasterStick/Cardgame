@@ -1,4 +1,4 @@
-import type { CardArchetype, Element, Faction, Keyword, Race, Rarity } from "../engine/types";
+import type { CardArchetype, Element, EquipmentCategory, Faction, Keyword, Race, Rarity } from "../engine/types";
 
 export const ELEMENT_LABELS: Record<Element, string> = {
   frost: "Frost",
@@ -97,6 +97,7 @@ export const KEYWORD_LABELS: Record<Keyword, string> = {
   drain: "Drain",
   bloodied: "Bloodied",
   summon: "Summon",
+  armiger: "Armiger",
 };
 
 /** Small glyphs shown on the compact card face so keyworded cards are recognizable at a glance. */
@@ -123,7 +124,16 @@ export const KEYWORD_ICONS: Record<Keyword, string> = {
   drain: "🩸",
   bloodied: "💔",
   summon: "🌀",
+  armiger: "🎒",
 };
+
+export const EQUIPMENT_CATEGORY_LABELS: Record<EquipmentCategory, string> = {
+  weapon: "Weapon",
+  armor: "Armor",
+  accessory: "Accessory",
+  mount: "Mount",
+};
+export const EQUIPMENT_CATEGORY_OPTIONS = Object.keys(EQUIPMENT_CATEGORY_LABELS) as EquipmentCategory[];
 
 /**
  * Guard is one mechanic (DESIGN.md §6) skinned per Faction — a Human Kingdom

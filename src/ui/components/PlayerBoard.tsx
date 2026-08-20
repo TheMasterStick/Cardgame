@@ -1,9 +1,18 @@
 import type { CSSProperties, ReactNode } from "react";
 import { CARD_DEFINITIONS } from "../../data/cards";
 import { guardLabel } from "../../data/taxonomy";
-import { canAttack, creatureCanAttack, getEffectiveCreatureAttack, heroCanAttack } from "../../engine/combat";
+import { canAttack, creatureCanAttack, getEffectiveCreatureAttack, getHeroAttack, heroCanAttack } from "../../engine/combat";
+import { findBearerEquipment } from "../../engine/equipment";
 import { peekSpellDiscount } from "../../engine/hero";
-import type { BuildingDefinition, CardInstance, CreatureDefinition, GameState, HeroCardDefinition, PlayerId } from "../../engine/types";
+import type {
+  BuildingDefinition,
+  CardInstance,
+  CreatureDefinition,
+  EquipmentDefinition,
+  GameState,
+  HeroCardDefinition,
+  PlayerId,
+} from "../../engine/types";
 import { BOARD_THEME, cssImage } from "../../data/theme";
 import { getPendingEffect, isEffectTargetable, pendingEffectSourceArchetype, type AiHighlight, type PendingAction } from "../targeting";
 import { CardView } from "./CardView";
@@ -11,6 +20,16 @@ import { CardView } from "./CardView";
 /** The first slot index a creature occupies in this row — a Massive creature (DESIGN.md §5) spans more than one. */
 function firstOccupiedIndex(row: (CardInstance | null)[], instanceId: string): number {
   return row.findIndex((c) => c?.instanceId === instanceId);
+}
+
+/** Short label for who an Equipment zone item is currently equipped to (DESIGN.md §12). */
+function equipmentBearerLabel(state: GameState, owner: PlayerId, card: CardInstance): string {
+  const bearer = card.equipmentBearer;
+  if (!bearer) return "Unassigned";
+  if (bearer.kind === "hero") return "Hero";
+  const board = state.players[owner].board;
+  const creature = [...board.vanguard, ...board.support].find((c) => c?.instanceId === bearer.instanceId);
+  return creature ? CARD_DEFINITIONS[creature.defId].name : "Unassigned";
 }
 
 interface PlayerBoardProps {
@@ -28,6 +47,7 @@ interface PlayerBoardProps {
   onHeroPowerClick?: () => void;
   onSignatureClick?: () => void;
   onBuildingAbilityClick?: (slotIndex: number) => void;
+  onEquipmentZoneClick?: (slotIndex: number) => void;
 }
 
 function Slot({ children }: { children?: ReactNode }) {
@@ -56,6 +76,7 @@ export function PlayerBoard({
   onHeroPowerClick,
   onSignatureClick,
   onBuildingAbilityClick,
+  onEquipmentZoneClick,
 }: PlayerBoardProps) {
   const playerState = state.players[owner];
   const pendingEffect = getPendingEffect(state, pending);
@@ -91,6 +112,8 @@ export function PlayerBoard({
   let portraitClickable = false;
   if (pending?.kind === "attack") {
     portraitClickable = owner === "opponent" && canAttack(state, "player", pending.attackerId, { type: "player" });
+  } else if (pending?.kind === "assignEquipment") {
+    portraitClickable = owner === "player";
   } else if (pending && pendingEffect) {
     portraitClickable = isEffectTargetable(pendingEffect, "portrait", owner);
   } else if (canInitiate) {
@@ -166,12 +189,11 @@ export function PlayerBoard({
             <div className="portrait__guard">
               {guardLabel(heroDef?.faction)} {playerState.guard.current}/{playerState.guard.max}
             </div>
-            {playerState.board.equipment && (
-              <div className="portrait__attack">
-                ⚔ {playerState.hero.baseAttack +
-                  (CARD_DEFINITIONS[playerState.board.equipment.defId] as { attackBonus: number }).attackBonus}
-              </div>
-            )}
+            {(() => {
+              const weapon = findBearerEquipment(state, owner, { kind: "hero" });
+              const hasWeapon = !!weapon && (CARD_DEFINITIONS[weapon.defId] as EquipmentDefinition).category === "weapon";
+              return hasWeapon && <div className="portrait__attack">⚔ {getHeroAttack(state, owner)}</div>;
+            })()}
             {playerState.hero.statuses.length > 0 && (
               <div className="card__statuses">
                 {playerState.hero.statuses.map((s, idx) => (
@@ -183,9 +205,6 @@ export function PlayerBoard({
               </div>
             )}
           </div>
-          <Slot>
-            {playerState.board.equipment && <CardView instance={playerState.board.equipment} />}
-          </Slot>
           {owner === "player" && (heroDef?.heroPower || heroDef?.signature) && (
             <div className="hero-column__actions">
               {heroDef.heroPower && (
@@ -225,6 +244,30 @@ export function PlayerBoard({
         ))}
       </div>
 
+      <div className="row row--equipment" title="Equipment zone: up to 4 items. The Hero, or any Armiger creature, can hold at most 1 at a time.">
+        {playerState.board.equipment.map((card, i) => {
+          let clickable = false;
+          if (card && canInitiate && owner === "player") {
+            clickable = playerState.energy.current >= 1;
+          }
+          return (
+            <Slot key={i}>
+              {card && (
+                <div className="equipment-slot">
+                  <CardView
+                    instance={card}
+                    highlighted={clickable}
+                    onClick={clickable ? () => onEquipmentZoneClick?.(i) : undefined}
+                    acting={aiActing(card.instanceId)}
+                  />
+                  <div className="equipment-slot__bearer">{equipmentBearerLabel(state, owner, card)}</div>
+                </div>
+              )}
+            </Slot>
+          );
+        })}
+      </div>
+
       <div className="row row--support" title="Support: backline. Only Ranged creatures can attack from here — a creature with Advance can move into Vanguard instead.">
         {playerState.board.support.map((card, i) => {
           if (!card) {
@@ -238,6 +281,8 @@ export function PlayerBoard({
             clickable =
               owner === "opponent" &&
               canAttack(state, "player", pending.attackerId, { type: "creature", instanceId: card.instanceId });
+          } else if (pending?.kind === "assignEquipment") {
+            clickable = owner === "player" && (CARD_DEFINITIONS[card.defId] as CreatureDefinition).keywords.includes("armiger");
           } else if (pending && pendingEffect) {
             clickable = isEffectTargetable(pendingEffect, "creature", owner, card, pendingSourceArchetype);
           } else if (canInitiate) {
@@ -273,6 +318,8 @@ export function PlayerBoard({
             clickable =
               owner === "opponent" &&
               canAttack(state, "player", pending.attackerId, { type: "creature", instanceId: card.instanceId });
+          } else if (pending?.kind === "assignEquipment") {
+            clickable = owner === "player" && (CARD_DEFINITIONS[card.defId] as CreatureDefinition).keywords.includes("armiger");
           } else if (pending && pendingEffect) {
             clickable = isEffectTargetable(pendingEffect, "creature", owner, card, pendingSourceArchetype);
           } else if (canInitiate) {

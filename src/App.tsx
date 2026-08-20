@@ -17,6 +17,7 @@ import { createInitialGameState } from "./engine/factory";
 import { runAiTurnSteps } from "./engine/ai";
 import { activateSlotCard, endTurn, playCardFromHand, startGame } from "./engine/game";
 import { activateBuildingAbility } from "./engine/building";
+import { assignEquipment } from "./engine/equipment";
 import { activateHeroPower, activateHeroSignature, peekSpellDiscount } from "./engine/hero";
 import { DECK_SIZE, type GameState, type HeroCardDefinition, type PlayerId } from "./engine/types";
 import { fetchRemoteCards } from "./lib/adminCards";
@@ -342,6 +343,14 @@ export default function App() {
     commit();
   }
 
+  function handleEquipmentZoneClick(slotIndex: number) {
+    const state = gameRef.current;
+    if (!state || pending || state.activePlayer !== "player" || state.winner) return;
+    const item = state.players.player.board.equipment[slotIndex];
+    if (!item) return;
+    setPending({ kind: "assignEquipment", slotIndex });
+  }
+
   function handleCreatureClick(owner: PlayerId, instanceId: string) {
     const state = gameRef.current;
     if (!state) return;
@@ -403,6 +412,15 @@ export default function App() {
       return;
     }
     if (pending.kind === "placeCreature") return; // resolved via handlePlaceCreature, not this path
+    if (pending.kind === "assignEquipment") {
+      if (archetype === "creature" && owner === "player") {
+        const result = assignEquipment(state, "player", pending.slotIndex, { kind: "creature", instanceId });
+        if (!result.ok) fail(result.reason);
+      }
+      setPending(null);
+      commit();
+      return;
+    }
 
     const targetRef: EffectTargetRef = { kind: "card", owner, instanceId };
     const result =
@@ -440,6 +458,15 @@ export default function App() {
       return;
     }
     if (pending.kind === "placeCreature") return; // resolved via handlePlaceCreature, not this path
+    if (pending.kind === "assignEquipment") {
+      if (owner === "player") {
+        const result = assignEquipment(state, "player", pending.slotIndex, { kind: "hero" });
+        if (!result.ok) fail(result.reason);
+      }
+      setPending(null);
+      commit();
+      return;
+    }
 
     const targetRef: EffectTargetRef = { kind: "player", owner };
     const result =
@@ -600,6 +627,7 @@ export default function App() {
               onHeroPowerClick={handleHeroPowerClick}
               onSignatureClick={handleSignatureClick}
               onBuildingAbilityClick={handleBuildingAbilityClick}
+              onEquipmentZoneClick={handleEquipmentZoneClick}
             />
             <ResourceBar playerState={state.players.player} label="You" layout="vertical" />
           </div>

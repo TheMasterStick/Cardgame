@@ -12,6 +12,7 @@ import {
   type ReachProfile,
 } from "./combat";
 import { activateBuildingAbility } from "./building";
+import { assignEquipment, getBearerDamageReduction } from "./equipment";
 import { hasKeyword, type EffectTargetRef } from "./effects";
 import { activateSlotCard, costPoolFor, endTurn, playCardFromHand } from "./game";
 import { activateHeroPower, activateHeroSignature, peekSpellDiscount } from "./hero";
@@ -21,6 +22,7 @@ import {
   type CardEffect,
   type CardInstance,
   type CreatureDefinition,
+  type EquipmentBearer,
   type EquipmentDefinition,
   type GameState,
   type HeroCardDefinition,
@@ -66,11 +68,9 @@ function targetableBoardCreatures(board: BoardState): CardInstance[] {
   return boardCreatures(board).filter((c) => !hasStealth(c));
 }
 
-/** How much a targetPlayer/targetAny hit against this player would be reduced by their equipped weapon, if any. */
+/** How much a targetPlayer/targetAny hit against this player would be reduced by their Hero's equipped Armor, if any. */
 function equipmentDamageReduction(state: GameState, owner: PlayerId): number {
-  const equipment = state.players[owner].board.equipment;
-  if (!equipment) return 0;
-  return (CARD_DEFINITIONS[equipment.defId] as EquipmentDefinition).damageReduction;
+  return getBearerDamageReduction(state, owner, { kind: "hero" });
 }
 
 /** Picks a reasonable target for an onPlay Warcry-style effect: the weakest enemy creature, from either row. */
@@ -228,6 +228,42 @@ function* activatableBuildingSlots(state: GameState): Generator<number, void, vo
   }
 }
 
+/**
+ * Every zone item worth assigning right now: an Unassigned Weapon when the
+ * Hero doesn't have one equipped yet, or an Unassigned item when there's a
+ * bare Armiger creature on the AI's own board to give it to. Single pass
+ * over the zone, like activatableBuildingSlots — this only ever fills an
+ * empty bearer, never bumps/reassigns an already-equipped one, so there's
+ * nothing here that could loop even though assignEquipment itself has no
+ * charge count to guarantee termination the way Spell/Ability activation does.
+ */
+function* assignableEquipment(state: GameState): Generator<{ slotIndex: number; bearer: EquipmentBearer }, void, void> {
+  const player = state.players[AI];
+  const zone = player.board.equipment;
+  let heroHasWeapon = zone.some((item) => item?.equipmentBearer?.kind === "hero");
+  const bareArmigers = alive([...player.board.vanguard, ...player.board.support]).filter((c) => {
+    const def = CARD_DEFINITIONS[c.defId] as CreatureDefinition;
+    return (
+      def.keywords.includes("armiger") &&
+      !zone.some((item) => item?.equipmentBearer?.kind === "creature" && item.equipmentBearer.instanceId === c.instanceId)
+    );
+  });
+  let armigerIndex = 0;
+
+  for (let i = 0; i < zone.length; i++) {
+    const item = zone[i];
+    if (!item || item.equipmentBearer) continue;
+    const def = CARD_DEFINITIONS[item.defId] as EquipmentDefinition;
+    if (!heroHasWeapon && def.category === "weapon") {
+      yield { slotIndex: i, bearer: { kind: "hero" } };
+      heroHasWeapon = true;
+    } else if (armigerIndex < bareArmigers.length) {
+      yield { slotIndex: i, bearer: { kind: "creature", instanceId: bareArmigers[armigerIndex].instanceId } };
+      armigerIndex++;
+    }
+  }
+}
+
 /** Uses the AI's Hero Power once, if affordable and there's a worthwhile target. */
 function tryHeroPower(state: GameState): boolean {
   const player = state.players[AI];
@@ -344,6 +380,7 @@ export type AiTurnStep =
   | { kind: "playCard"; instanceId: string }
   | { kind: "activateCard"; instanceId: string }
   | { kind: "activateBuilding"; instanceId: string }
+  | { kind: "assignEquipment"; instanceId: string }
   | { kind: "advance"; instanceId: string }
   | { kind: "attack"; attackerId: string; target: AttackTarget }
   | { kind: "heroAttack"; target: AttackTarget }
@@ -383,6 +420,16 @@ export function* runAiTurnSteps(state: GameState): Generator<AiTurnStep, void, v
     const result = activateBuildingAbility(state, AI, slotIndex, target);
     if (result.ok) {
       yield { kind: "activateBuilding", instanceId: card.instanceId };
+      if (state.winner) return;
+    }
+  }
+
+  for (const { slotIndex, bearer } of assignableEquipment(state)) {
+    const item = state.players[AI].board.equipment[slotIndex];
+    if (!item) continue;
+    const result = assignEquipment(state, AI, slotIndex, bearer);
+    if (result.ok) {
+      yield { kind: "assignEquipment", instanceId: item.instanceId };
       if (state.winner) return;
     }
   }

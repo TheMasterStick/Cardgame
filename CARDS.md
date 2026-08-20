@@ -175,13 +175,25 @@ they're always the Ritual/Charged shape, Energy instead of Mana.
   for creature/building deaths (see DESIGN.md §17's Phase C
   implementation-status note for why).
 
-**Equipment** (`archetype: "equipment"`, fills the Hero's single Equipment slot):
+**Equipment** (`archetype: "equipment"`, plays into a 4-slot player-owned zone — DESIGN.md §12):
 ```json
 { "id": "iron-sword", "name": "Iron Sword", "archetype": "equipment", "cost": 2, "rarity": "common",
-  "attackBonus": 0, "damageReduction": 0, "text": "Your Hero can attack." }
+  "category": "weapon", "attackBonus": 0, "damageReduction": 0, "text": "Weapon. Assign to your Hero so it can attack." }
 ```
-- `attackBonus`: added to the Hero's base Attack once equipped.
-- `damageReduction`: subtracted from all incoming damage to that player (Guard + Hero HP) while equipped.
+- `category`: one of `"weapon"`, `"armor"`, `"accessory"`, `"mount"` — required. Only a
+  `"weapon"` item, once assigned to the Hero, lets the Hero attack at all; the other three
+  categories are expected to mostly grant `damageReduction` or utility rather than
+  `attackBonus`, though that split isn't engine-enforced.
+- `attackBonus`: added to the bearer's Attack once equipped — the Hero's base Attack, or an
+  Armiger creature's effective Attack (§7's `armiger` keyword — a plain creature can't hold
+  Equipment at all without it).
+- `damageReduction`: subtracted from all damage the bearer takes while equipped.
+- A card played from hand always enters the zone **Unassigned**. Assigning it to a bearer (the
+  Hero, or an on-board Armiger creature) — first assignment or later reassignment alike — is a
+  separate action costing 1 Energy; each bearer holds at most 1 item, and assigning a second
+  item to an already-equipped bearer bumps the old one back to Unassigned rather than being
+  refused. A bearer's Equipment survives its death, returning to Unassigned instead of being
+  destroyed.
 
 ---
 
@@ -214,6 +226,7 @@ Only meaningful on Creature cards (`keywords: Keyword[]`). See DESIGN.md
 | `drain` | Every time this creature deals *combat* damage (attacking or retaliating, including once per Cleave splash hit), its controller's Hero regains that much Guard, capped at Guard's current max — no overflow into Hero HP, and no effect on Guard's cap itself (that's what `gainCap`/`gainGuard` are for). |
 | `bloodied` | Label for a card whose printed effect only applies below 50% Health — not yet wired to any actual trigger mechanism in the engine (DESIGN.md §7 deliberately defers that decision until a real Bloodied card needs it). Safe to put on a card today; it just won't do anything yet. |
 | `summon` | Label for a trigger whose effect creates another creature via the `summonCreature` CardEffect (see Effects below) — pair with whichever `TriggerName` fits the card (`onPlay` for a Warcry-style summon, `onDeath` for a death-rattle one, etc.). |
+| `armiger` | This creature is an eligible Equipment bearer (DESIGN.md §12) — without it, a creature can't hold any Equipment at all, only the Hero can. Doesn't grant anything by itself; the equipped item's `attackBonus`/`damageReduction` is what actually does something once assigned. |
 
 `warcry`, `counter`, and `revenge` are labels that pair with a
 matching `triggers` entry (`onPlay`, `onDefend`, `onDeath`
@@ -407,7 +420,7 @@ drop its JSON output straight into the array in
 > `keywords` (array, any of `ranged`, `reach`, `infiltrate`, `charge`,
 > `warcry`, `taunt`, `counter`, `revenge`, `frenzy`, `immune`,
 > `poison`, `protector`, `flank`, `formation`, `advance`, `push`,
-> `stealth`, `ward`, `cleave`, `drain`, `bloodied`, `summon`),
+> `stealth`, `ward`, `cleave`, `drain`, `bloodied`, `summon`, `armiger`),
 > `triggers` (array of `{on, effect}`, `on` one of
 > `onPlay`/`onAttack`/`onDeath`/`onDefend`/`startOfTurn`/`endOfTurn`).
 > Creatures can optionally add `spaceCost` (number, Massive — default
@@ -426,7 +439,9 @@ drop its JSON output straight into the array in
 > `ritual` normally uses `"unlimited"`, `charged` a fixed number).
 > Abilities are always the `ritual`/`charged` shape (no `spellForm`
 > field) and need `activateCost`, `charges`, and `effect` the same way.
-> Equipment needs `attackBonus` and `damageReduction`.
+> Equipment needs `category` (one of `weapon`, `armor`, `accessory`,
+> `mount` — only a `weapon`, once assigned, lets its bearer's Hero
+> attack), `attackBonus`, and `damageReduction`.
 > An `effect` object has a `kind` (`damage`, `heal`, `applyStatus`,
 > `buff`, `drawCard`, `gainGuard`, `gainCap`, or `summonCreature`) plus
 > kind-specific fields: `damage`/`heal` need `amount` + `target`;
