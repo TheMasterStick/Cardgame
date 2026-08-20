@@ -16,6 +16,7 @@ import type { EffectTargetRef } from "./engine/effects";
 import { createInitialGameState } from "./engine/factory";
 import { runAiTurnSteps } from "./engine/ai";
 import { activateSlotCard, endTurn, playCardFromHand, startGame } from "./engine/game";
+import { activateBuildingAbility } from "./engine/building";
 import { activateHeroPower, activateHeroSignature, peekSpellDiscount } from "./engine/hero";
 import { DECK_SIZE, type GameState, type HeroCardDefinition, type PlayerId } from "./engine/types";
 import { fetchRemoteCards } from "./lib/adminCards";
@@ -323,6 +324,24 @@ export default function App() {
     commit();
   }
 
+  function handleBuildingAbilityClick(slotIndex: number) {
+    const state = gameRef.current;
+    if (!state || pending || state.activePlayer !== "player" || state.winner) return;
+    const building = state.players.player.board.buildings[slotIndex];
+    if (!building) return;
+    const def = CARD_DEFINITIONS[building.defId];
+    if (def.archetype !== "building") return;
+    const ability = def.ability;
+    if (!ability) return;
+    if (effectNeedsExplicitTarget(ability.effect) && effectHasLegalTarget(state, ability.effect)) {
+      setPending({ kind: "buildingAbility", slotIndex });
+      return;
+    }
+    const result = activateBuildingAbility(state, "player", slotIndex);
+    if (!result.ok) fail(result.reason);
+    commit();
+  }
+
   function handleCreatureClick(owner: PlayerId, instanceId: string) {
     const state = gameRef.current;
     if (!state) return;
@@ -393,7 +412,9 @@ export default function App() {
           ? activateSlotCard(state, "player", pending.slotIndex, targetRef)
           : pending.kind === "heroPower"
             ? activateHeroPower(state, "player", targetRef)
-            : activateHeroSignature(state, "player", targetRef);
+            : pending.kind === "signature"
+              ? activateHeroSignature(state, "player", targetRef)
+              : activateBuildingAbility(state, "player", pending.slotIndex, targetRef);
     if (!result.ok) fail(result.reason);
     setPending(null);
     commit();
@@ -428,7 +449,9 @@ export default function App() {
           ? activateSlotCard(state, "player", pending.slotIndex, targetRef)
           : pending.kind === "heroPower"
             ? activateHeroPower(state, "player", targetRef)
-            : activateHeroSignature(state, "player", targetRef);
+            : pending.kind === "signature"
+              ? activateHeroSignature(state, "player", targetRef)
+              : activateBuildingAbility(state, "player", pending.slotIndex, targetRef);
     if (!result.ok) fail(result.reason);
     setPending(null);
     commit();
@@ -576,6 +599,7 @@ export default function App() {
               onPlaceCreature={handlePlaceCreature}
               onHeroPowerClick={handleHeroPowerClick}
               onSignatureClick={handleSignatureClick}
+              onBuildingAbilityClick={handleBuildingAbilityClick}
             />
             <ResourceBar playerState={state.players.player} label="You" layout="vertical" />
           </div>

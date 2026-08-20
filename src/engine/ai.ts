@@ -11,6 +11,7 @@ import {
   type AttackTarget,
   type ReachProfile,
 } from "./combat";
+import { activateBuildingAbility } from "./building";
 import { hasKeyword, type EffectTargetRef } from "./effects";
 import { activateSlotCard, costPoolFor, endTurn, playCardFromHand } from "./game";
 import { activateHeroPower, activateHeroSignature, peekSpellDiscount } from "./hero";
@@ -203,6 +204,30 @@ function activateOneSlotCard(state: GameState): string | null {
   return null;
 }
 
+/**
+ * Every Building slot the AI can profitably activate right now: affordable,
+ * with an ability, and a worthwhile target. A Building has no charge count
+ * (DESIGN.md §11) — it stays activatable turn after turn — so this is
+ * deliberately a single pass over each slot rather than activateOneSlotCard's
+ * "retry until nothing's left" pattern; a 0-cost ability could otherwise
+ * loop forever. Capping the AI at one activation per Building per turn is a
+ * simplification (a human could spend down their whole pool re-activating
+ * one Building), not a rule the engine itself enforces.
+ */
+function* activatableBuildingSlots(state: GameState): Generator<number, void, void> {
+  const player = state.players[AI];
+  for (let i = 0; i < player.board.buildings.length; i++) {
+    const card = player.board.buildings[i];
+    if (!card) continue;
+    const def = CARD_DEFINITIONS[card.defId];
+    if (def.archetype !== "building" || !def.ability) continue;
+    const poolKind = def.ability.pool ?? "resource";
+    const pool = poolKind === "mana" ? player.mana : poolKind === "energy" ? player.energy : player.resources;
+    if (pool.current < def.ability.activateCost) continue;
+    yield i;
+  }
+}
+
 /** Uses the AI's Hero Power once, if affordable and there's a worthwhile target. */
 function tryHeroPower(state: GameState): boolean {
   const player = state.players[AI];
@@ -318,6 +343,7 @@ function chooseAttackTarget(state: GameState, reach: ReachProfile, attackerAttac
 export type AiTurnStep =
   | { kind: "playCard"; instanceId: string }
   | { kind: "activateCard"; instanceId: string }
+  | { kind: "activateBuilding"; instanceId: string }
   | { kind: "advance"; instanceId: string }
   | { kind: "attack"; attackerId: string; target: AttackTarget }
   | { kind: "heroAttack"; target: AttackTarget }
@@ -345,6 +371,20 @@ export function* runAiTurnSteps(state: GameState): Generator<AiTurnStep, void, v
     if (!instanceId) break;
     yield { kind: "activateCard", instanceId };
     if (state.winner) return;
+  }
+
+  for (const slotIndex of activatableBuildingSlots(state)) {
+    const card = state.players[AI].board.buildings[slotIndex];
+    if (!card) continue; // shouldn't happen — activatableBuildingSlots only yields occupied slots
+    const def = CARD_DEFINITIONS[card.defId];
+    if (def.archetype !== "building" || !def.ability) continue;
+    const target = pickActivationTarget(state, def.ability.effect);
+    if (target === "skip") continue;
+    const result = activateBuildingAbility(state, AI, slotIndex, target);
+    if (result.ok) {
+      yield { kind: "activateBuilding", instanceId: card.instanceId };
+      if (state.winner) return;
+    }
   }
 
   if (tryHeroPower(state)) {

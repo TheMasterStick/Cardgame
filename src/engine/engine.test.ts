@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { activateBuildingAbility } from "./building";
 import { declareAdvance, declareCreatureAttack, getEffectiveCreatureAttack } from "./combat";
+import { CARD_DEFINITIONS } from "../data/cards";
 import { drawCard } from "./deck";
 import { damageCard, damagePlayer, gainCap, resolveEffect } from "./effects";
 import { createCardInstance, createInitialGameState } from "./factory";
@@ -1166,5 +1168,123 @@ describe("Summon (DESIGN.md §7 — summonCreature effect)", () => {
     // Matriarch's own slot clears before onDeath fires, so the Summon lands
     // right back in the now-open column 0 rather than needing a new one.
     expect(state.players.player.board.vanguard[0]?.defId).toBe("militia-recruit");
+  });
+});
+
+describe("Buildings as objects (Phase E, DESIGN.md §11)", () => {
+  it("a Building's auraBuff passive raises the attack of matching friendly creatures", () => {
+    const state = makeState();
+    const matriarch = createCardInstance("spider-matriarch", "player"); // race: beast
+    state.players.player.board.vanguard[0] = matriarch;
+    const before = getEffectiveCreatureAttack(state, "player", matriarch);
+
+    const den = createCardInstance("beast-den", "player"); // Passive: Beast creatures +2 Attack
+    state.players.player.board.buildings[0] = den;
+    const after = getEffectiveCreatureAttack(state, "player", matriarch);
+
+    expect(after).toBe(before + 2);
+  });
+
+  it("does not buff a friendly creature that doesn't match the passive's race filter", () => {
+    const state = makeState();
+    const footman = createCardInstance("footman", "player"); // no race
+    state.players.player.board.vanguard[0] = footman;
+    const before = getEffectiveCreatureAttack(state, "player", footman);
+
+    const den = createCardInstance("beast-den", "player");
+    state.players.player.board.buildings[0] = den;
+    const after = getEffectiveCreatureAttack(state, "player", footman);
+
+    expect(after).toBe(before);
+  });
+
+  it("activateBuildingAbility spends the ability's configured pool (Mana for Demon Gate) and resolves its effect", () => {
+    const state = makeState();
+    const gate = createCardInstance("demon-gate", "player"); // Activate (3 Mana): summon a Flame Imp
+    state.players.player.board.buildings[0] = gate;
+    state.players.player.mana.current = 5;
+
+    const result = activateBuildingAbility(state, "player", 0);
+    expect(result.ok).toBe(true);
+    expect(state.players.player.mana.current).toBe(2); // 5 - 3
+    const board = state.players.player.board;
+    const summoned = [...board.vanguard, ...board.support].filter((c) => c?.defId === "flame-imp");
+    expect(summoned).toHaveLength(1);
+  });
+
+  it("has no usage cap — stays activatable every time it's affordable, unlike Hero Power's once-per-turn limit", () => {
+    const state = makeState();
+    const gate = createCardInstance("demon-gate", "player");
+    state.players.player.board.buildings[0] = gate;
+    state.players.player.mana.current = 10;
+
+    const first = activateBuildingAbility(state, "player", 0);
+    expect(first.ok).toBe(true);
+    expect(state.players.player.mana.current).toBe(7);
+
+    const second = activateBuildingAbility(state, "player", 0);
+    expect(second.ok).toBe(true);
+    expect(state.players.player.mana.current).toBe(4);
+
+    const board = state.players.player.board;
+    const summoned = [...board.vanguard, ...board.support].filter((c) => c?.defId === "flame-imp");
+    expect(summoned).toHaveLength(2);
+  });
+
+  it("defaults to the Resources pool for a Building whose ability omits `pool`", () => {
+    const state = makeState();
+    const testDefId = "test-resource-building";
+    CARD_DEFINITIONS[testDefId] = {
+      id: testDefId,
+      name: "Test Resource Building",
+      archetype: "building",
+      cost: 1,
+      rarity: "common",
+      hp: 3,
+      triggers: [],
+      ability: { effect: { kind: "gainGuard", amount: 1 }, activateCost: 2 },
+    };
+    try {
+      const building = createCardInstance(testDefId, "player");
+      state.players.player.board.buildings[0] = building;
+      state.players.player.resources.current = 5;
+      const startingGuard = state.players.player.guard.current;
+
+      const result = activateBuildingAbility(state, "player", 0);
+      expect(result.ok).toBe(true);
+      expect(state.players.player.resources.current).toBe(3); // 5 - 2, defaulted to Resources
+      expect(state.players.player.guard.current).toBe(startingGuard + 1);
+    } finally {
+      delete CARD_DEFINITIONS[testDefId];
+    }
+  });
+
+  it("rejects activation when the configured pool can't afford the cost", () => {
+    const state = makeState();
+    const gate = createCardInstance("demon-gate", "player");
+    state.players.player.board.buildings[0] = gate;
+    state.players.player.mana.current = 2; // needs 3
+
+    const result = activateBuildingAbility(state, "player", 0);
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/Mana/);
+    expect(state.players.player.mana.current).toBe(2); // unchanged
+  });
+
+  it("rejects activation on a Building with no activated ability", () => {
+    const state = makeState();
+    const den = createCardInstance("beast-den", "player"); // passive only, no ability
+    state.players.player.board.buildings[0] = den;
+
+    const result = activateBuildingAbility(state, "player", 0);
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/no activated ability/i);
+  });
+
+  it("rejects activation when the targeted slot has no Building", () => {
+    const state = makeState();
+    const result = activateBuildingAbility(state, "player", 0);
+    expect(result.ok).toBe(false);
+    expect(result.reason).toMatch(/No Building/i);
   });
 });

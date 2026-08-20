@@ -1,8 +1,10 @@
 import type {
+  BuildingActivatedAbility,
   CardArchetype,
   CardDefinition,
   CardEffect,
   Keyword,
+  PassiveEffect,
   Rarity,
   Trigger,
   TriggerName,
@@ -76,6 +78,34 @@ function parseKeywords(raw: unknown): Keyword[] {
   return raw.filter((k): k is Keyword => typeof k === "string" && VALID_KEYWORDS.includes(k as Keyword));
 }
 
+/** Only the auraBuff template is accepted for a custom Building's passive — see BuildingDefinition's doc comment in types.ts. */
+function parseBuildingPassive(raw: unknown): Extract<PassiveEffect, { kind: "auraBuff" }> | undefined {
+  if (!isRecord(raw) || raw.kind !== "auraBuff") return undefined;
+  if (typeof raw.attackDelta !== "number") return undefined;
+  const filter = raw.filter;
+  if (filter === "all") return { kind: "auraBuff", filter: "all", attackDelta: raw.attackDelta };
+  if (isRecord(filter) && typeof filter.race === "string") {
+    return { kind: "auraBuff", filter: { race: filter.race as never }, attackDelta: raw.attackDelta };
+  }
+  if (isRecord(filter) && typeof filter.faction === "string") {
+    return { kind: "auraBuff", filter: { faction: filter.faction as never }, attackDelta: raw.attackDelta };
+  }
+  return undefined;
+}
+
+function parseBuildingAbility(raw: unknown): BuildingActivatedAbility | undefined {
+  if (!isRecord(raw)) return undefined;
+  if (typeof raw.activateCost !== "number") return undefined;
+  if (raw.pool !== undefined && raw.pool !== "resource" && raw.pool !== "mana" && raw.pool !== "energy") return undefined;
+  if (!isValidEffect(raw.effect)) return undefined;
+  return {
+    effect: raw.effect,
+    activateCost: raw.activateCost,
+    pool: raw.pool,
+    text: typeof raw.text === "string" ? raw.text : undefined,
+  };
+}
+
 export function validateCard(raw: unknown): CardDefinition | null {
   if (!isRecord(raw)) return null;
   const { id, name, archetype, cost, rarity } = raw;
@@ -103,7 +133,14 @@ export function validateCard(raw: unknown): CardDefinition | null {
     }
     case "building": {
       if (typeof raw.hp !== "number") return null;
-      return { ...base, archetype: "building", hp: raw.hp, triggers: parseTriggers(raw.triggers) };
+      return {
+        ...base,
+        archetype: "building",
+        hp: raw.hp,
+        triggers: parseTriggers(raw.triggers),
+        passive: parseBuildingPassive(raw.passive),
+        ability: parseBuildingAbility(raw.ability),
+      };
     }
     case "spell": {
       const spellForm = raw.spellForm;

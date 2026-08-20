@@ -3,7 +3,7 @@ import { CARD_DEFINITIONS } from "../../data/cards";
 import { guardLabel } from "../../data/taxonomy";
 import { canAttack, creatureCanAttack, getEffectiveCreatureAttack, heroCanAttack } from "../../engine/combat";
 import { peekSpellDiscount } from "../../engine/hero";
-import type { CardInstance, CreatureDefinition, GameState, HeroCardDefinition, PlayerId } from "../../engine/types";
+import type { BuildingDefinition, CardInstance, CreatureDefinition, GameState, HeroCardDefinition, PlayerId } from "../../engine/types";
 import { BOARD_THEME, cssImage } from "../../data/theme";
 import { getPendingEffect, isEffectTargetable, pendingEffectSourceArchetype, type AiHighlight, type PendingAction } from "../targeting";
 import { CardView } from "./CardView";
@@ -24,9 +24,10 @@ interface PlayerBoardProps {
   onSlotClick: (owner: PlayerId, slotIndex: number) => void;
   onPortraitClick: (owner: PlayerId) => void;
   onPlaceCreature: (owner: PlayerId, row: "vanguard" | "support", slotIndex: number) => void;
-  /** Only meaningful for the human "player" board — the AI opponent's Hero Power/Signature are decided in ai.ts, not clicked. */
+  /** Only meaningful for the human "player" board — the AI opponent's Hero Power/Signature/Building abilities are decided in ai.ts, not clicked. */
   onHeroPowerClick?: () => void;
   onSignatureClick?: () => void;
+  onBuildingAbilityClick?: (slotIndex: number) => void;
 }
 
 function Slot({ children }: { children?: ReactNode }) {
@@ -54,6 +55,7 @@ export function PlayerBoard({
   onPlaceCreature,
   onHeroPowerClick,
   onSignatureClick,
+  onBuildingAbilityClick,
 }: PlayerBoardProps) {
   const playerState = state.players[owner];
   const pendingEffect = getPendingEffect(state, pending);
@@ -107,13 +109,22 @@ export function PlayerBoard({
       <div className="row row--buildings">
         {playerState.board.buildings.map((card, i) => {
           let clickable = false;
+          let onClick: (() => void) | undefined;
           if (card) {
             if (pending?.kind === "attack") {
               clickable =
                 owner === "opponent" &&
                 canAttack(state, "player", pending.attackerId, { type: "building", instanceId: card.instanceId });
+              onClick = clickable ? () => onBuildingClick(owner, card.instanceId) : undefined;
             } else if (pending && pendingEffect) {
               clickable = isEffectTargetable(pendingEffect, "building", owner);
+              onClick = clickable ? () => onBuildingClick(owner, card.instanceId) : undefined;
+            } else if (canInitiate) {
+              const ability = (CARD_DEFINITIONS[card.defId] as BuildingDefinition).ability;
+              const pool = ability?.pool ?? "resource";
+              const poolAmount = pool === "mana" ? playerState.mana : pool === "energy" ? playerState.energy : playerState.resources;
+              clickable = !!ability && poolAmount.current >= ability.activateCost;
+              onClick = clickable ? () => onBuildingAbilityClick?.(i) : undefined;
             }
           }
           return (
@@ -122,7 +133,7 @@ export function PlayerBoard({
                 <CardView
                   instance={card}
                   highlighted={clickable}
-                  onClick={clickable ? () => onBuildingClick(owner, card.instanceId) : undefined}
+                  onClick={onClick}
                   acting={aiActing(card.instanceId)}
                 />
               )}

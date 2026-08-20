@@ -173,4 +173,58 @@ describe("custom card validation", () => {
       expect(card.triggers).toHaveLength(0);
     }
   });
+
+  it("accepts a Building with an auraBuff passive and a Mana-costed activated ability", () => {
+    const card = validateCard({
+      id: "x",
+      name: "X",
+      archetype: "building",
+      cost: 3,
+      rarity: "rare",
+      hp: 5,
+      passive: { kind: "auraBuff", filter: { race: "beast" }, attackDelta: 2 },
+      ability: { effect: { kind: "summonCreature", creatureId: "militia-recruit" }, activateCost: 3, pool: "mana" },
+    });
+    expect(card).not.toBeNull();
+    if (card?.archetype === "building") {
+      expect(card.passive).toEqual({ kind: "auraBuff", filter: { race: "beast" }, attackDelta: 2 });
+      expect(card.ability?.pool).toBe("mana");
+      expect(card.ability?.activateCost).toBe(3);
+    }
+  });
+
+  it("defaults a Building ability's pool to undefined (Resources) when omitted, and drops a malformed passive", () => {
+    const card = validateCard({
+      id: "x",
+      name: "X",
+      archetype: "building",
+      cost: 2,
+      rarity: "common",
+      hp: 3,
+      passive: { kind: "auraBuff", attackDelta: 1 }, // missing filter — invalid
+      ability: { effect: { kind: "gainGuard", amount: 2 }, activateCost: 1 },
+    });
+    expect(card).not.toBeNull();
+    if (card?.archetype === "building") {
+      expect(card.passive).toBeUndefined();
+      expect(card.ability?.pool).toBeUndefined();
+      expect(card.ability?.activateCost).toBe(1);
+    }
+  });
+
+  it("drops an ability with an invalid pool but keeps the rest of a valid Building", () => {
+    const card = validateCard({
+      id: "x",
+      name: "X",
+      archetype: "building",
+      cost: 2,
+      rarity: "common",
+      hp: 3,
+      ability: { effect: { kind: "gainGuard", amount: 2 }, activateCost: 1, pool: "gold" },
+    });
+    expect(card).not.toBeNull();
+    if (card?.archetype === "building") {
+      expect(card.ability).toBeUndefined();
+    }
+  });
 });

@@ -195,6 +195,30 @@ const buildings: BuildingDefinition[] = [
     text: "On Play: gain 5 Guard.",
     triggers: [{ on: "onPlay", effect: { kind: "gainGuard", amount: 5 } }],
   },
+  {
+    id: "beast-den",
+    name: "Beast Den",
+    archetype: "building",
+    cost: 3,
+    rarity: "rare",
+    hp: 5,
+    race: "beast",
+    text: "Passive: your Beast creatures have +2 Attack.",
+    passive: { kind: "auraBuff", filter: { race: "beast" }, attackDelta: 2 },
+    triggers: [],
+  },
+  {
+    id: "demon-gate",
+    name: "Demon Gate",
+    archetype: "building",
+    cost: 4,
+    rarity: "epic",
+    hp: 6,
+    race: "demon",
+    text: "Activate (3 Mana): summon a Flame Imp.",
+    ability: { effect: { kind: "summonCreature", creatureId: "flame-imp" }, activateCost: 3, pool: "mana" },
+    triggers: [],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -364,6 +388,7 @@ const creatures: CreatureDefinition[] = [
     art: "/cards/Flame-Imp.png",
     attack: 3,
     hp: 2,
+    race: "demon",
     keywords: [],
     text: "On Play: deal 2 damage to your own Hero.",
     triggers: [{ on: "onPlay", effect: { kind: "damage", amount: 2, target: "selfHero" } }],

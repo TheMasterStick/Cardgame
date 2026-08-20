@@ -284,10 +284,36 @@ export interface CreatureDefinition extends CardDefinitionBase {
   formationBonus?: PositionalBonus;
 }
 
+/**
+ * A Building's activated ability (DESIGN.md §11) — Resources-costed by
+ * default, since that's the archetype's own cost pool, but a specific card
+ * can spend a different one instead (e.g. a Demon Gate spending Mana).
+ * Unlike a Spell/Ability card, there's no charge count: a Building is a
+ * persistent battlefield object, not consumed on use, so its ability is
+ * repeatable every turn — gated only by whether its cost is affordable,
+ * same as a Ritual Spell with unlimited charges.
+ */
+export interface BuildingActivatedAbility {
+  effect: CardEffect;
+  activateCost: number;
+  /** Defaults to "resource" (the archetype's own pool) when omitted. */
+  pool?: "resource" | "mana" | "energy";
+  text?: string;
+}
+
 export interface BuildingDefinition extends CardDefinitionBase {
   archetype: "building";
   hp: number;
   triggers: Trigger[];
+  /**
+   * Only the auraBuff template is supported for Buildings so far (a
+   * banner/totem effect) — firstSpellDiscount is a Hero-only concept for
+   * now, not yet given a stacking/interaction model for a second source,
+   * so it's deliberately excluded from this field's type rather than
+   * silently accepted and ignored.
+   */
+  passive?: Extract<PassiveEffect, { kind: "auraBuff" }>;
+  ability?: BuildingActivatedAbility;
 }
 
 /**

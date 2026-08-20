@@ -1,5 +1,6 @@
 import { CARD_DEFINITIONS } from "../data/cards";
 import { damageCard, damagePlayer, hasKeyword, resolveEffect, restoreGuard, type EffectTargetRef } from "./effects";
+import { getBuildingAuraAttackBonus } from "./building";
 import { getAuraAttackBonus } from "./hero";
 import {
   otherPlayer,
@@ -67,18 +68,22 @@ function cleaveSplashTargets(row: (CardInstance | null)[], targetColumns: number
 }
 
 /**
- * Live Attack including Flank/Formation bonuses (DESIGN.md §5) and the
- * controller's Hero auraBuff Passive (§9), if any. All three are
- * continuously re-evaluated from current board/hero state, never stored on
- * the CardInstance — this is the function anything actually dealing or
- * previewing combat damage should call instead of the bare
- * getCreatureAttack. Falls back to base + aura if the creature isn't
+ * Live Attack including Flank/Formation bonuses (DESIGN.md §5) and any
+ * auraBuff Passives from the controller's Hero (§9) or Buildings (§11).
+ * All of these are continuously re-evaluated from current board/hero
+ * state, never stored on the CardInstance — this is the function anything
+ * actually dealing or previewing combat damage should call instead of the
+ * bare getCreatureAttack. Falls back to base + auras if the creature isn't
  * currently on a board row at all (Flank/Formation need row/column context;
- * the aura bonus doesn't).
+ * the aura bonuses don't).
  */
 export function getEffectiveCreatureAttack(state: GameState, owner: PlayerId, card: CardInstance): number {
   const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
-  let attack = def.attack + card.attackDelta + getAuraAttackBonus(state, owner, card);
+  let attack =
+    def.attack +
+    card.attackDelta +
+    getAuraAttackBonus(state, owner, card) +
+    getBuildingAuraAttackBonus(state, owner, card);
   const located = locateOnBoard(state, owner, card.instanceId);
   if (!located) return attack;
   if (def.flankBonus && def.keywords.includes("flank") && isFlanking(located.row, located.columns)) {

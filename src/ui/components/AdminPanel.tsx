@@ -16,6 +16,7 @@ import { saveRemoteCard, uploadCardArt } from "../../lib/adminCards";
 import type { Collection } from "../../engine/collection";
 import { createCardInstance } from "../../engine/factory";
 import type {
+  BuildingDefinition,
   CardArchetype,
   CardDefinition,
   CardEffect,
@@ -89,6 +90,11 @@ interface CardDraft {
   effectHpDelta: number;
   effectPool: "resource" | "mana" | "energy";
   effectCreatureId: string;
+  /** Building only: whether the Effect fieldset below describes the On Construction trigger or the activated ability (DESIGN.md §11) — reuses activateCost/effectPool for the ability's cost/pool, same fields Spell/Ability already use. */
+  buildingEffectTarget: "trigger" | "ability";
+  buildingPassiveEnabled: boolean;
+  buildingPassiveFilterKind: "all" | "race" | "faction";
+  buildingPassiveFilterValue: Race | Faction | "";
 }
 
 function emptyDraft(): CardDraft {
@@ -121,6 +127,10 @@ function emptyDraft(): CardDraft {
     effectHpDelta: 1,
     effectPool: "resource",
     effectCreatureId: "",
+    buildingEffectTarget: "trigger",
+    buildingPassiveEnabled: false,
+    buildingPassiveFilterKind: "all",
+    buildingPassiveFilterValue: "",
   };
 }
 
@@ -174,7 +184,20 @@ function draftFromCard(def: CardDefinition): CardDraft {
     }
   } else if (def.archetype === "building") {
     draft.hp = def.hp;
-    if (def.triggers[0]) {
+    if (def.passive) {
+      draft.buildingPassiveEnabled = true;
+      draft.buildingPassiveFilterKind = def.passive.filter === "all" ? "all" : "race" in def.passive.filter ? "race" : "faction";
+      draft.buildingPassiveFilterValue =
+        def.passive.filter === "all" ? "" : "race" in def.passive.filter ? def.passive.filter.race : def.passive.filter.faction;
+      draft.effectAttackDelta = def.passive.attackDelta;
+    }
+    if (def.ability) {
+      draft.buildingEffectTarget = "ability";
+      draft.activateCost = def.ability.activateCost;
+      draft.effectPool = def.ability.pool ?? "resource";
+      loadEffectIntoDraft(draft, def.ability.effect);
+    } else if (def.triggers[0]) {
+      draft.buildingEffectTarget = "trigger";
       draft.triggerOn = def.triggers[0].on;
       loadEffectIntoDraft(draft, def.triggers[0].effect);
     }
@@ -255,9 +278,26 @@ function buildCardDefinition(draft: CardDraft): CardDefinition | { error: string
     return { ...base, archetype: "creature", attack: draft.attack, hp: draft.hp, keywords: draft.keywords, triggers };
   }
   if (draft.archetype === "building") {
+    const passive: BuildingDefinition["passive"] = draft.buildingPassiveEnabled
+      ? {
+          kind: "auraBuff",
+          filter:
+            draft.buildingPassiveFilterKind === "all"
+              ? "all"
+              : draft.buildingPassiveFilterKind === "race"
+                ? { race: draft.buildingPassiveFilterValue as Race }
+                : { faction: draft.buildingPassiveFilterValue as Faction },
+          attackDelta: draft.effectAttackDelta,
+        }
+      : undefined;
     const effect = buildEffect(draft);
+    if (draft.buildingEffectTarget === "ability") {
+      if (!effect) return { error: "Choose an effect for this Building's activated ability." };
+      const ability: BuildingDefinition["ability"] = { effect, activateCost: draft.activateCost, pool: draft.effectPool };
+      return { ...base, archetype: "building", hp: draft.hp, triggers: [], passive, ability };
+    }
     const triggers: Trigger[] = draft.triggerOn !== "none" && effect ? [{ on: draft.triggerOn, effect }] : [];
-    return { ...base, archetype: "building", hp: draft.hp, triggers };
+    return { ...base, archetype: "building", hp: draft.hp, triggers, passive };
   }
   if (draft.archetype === "spell") {
     const effect = buildEffect(draft);
@@ -530,10 +570,119 @@ export function AdminPanel({ collection, userId, onSetCoins, onCardsChanged, onB
               </>
             )}
             {draft.archetype === "building" && (
-              <label>
-                HP
-                <input type="number" value={draft.hp} onChange={(e) => setDraft((d) => ({ ...d, hp: Number(e.target.value) }))} />
-              </label>
+              <>
+                <label>
+                  HP
+                  <input type="number" value={draft.hp} onChange={(e) => setDraft((d) => ({ ...d, hp: Number(e.target.value) }))} />
+                </label>
+                <fieldset className="admin-effect">
+                  <legend>Passive</legend>
+                  <label className="admin-keyword-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={draft.buildingPassiveEnabled}
+                      onChange={(e) => setDraft((d) => ({ ...d, buildingPassiveEnabled: e.target.checked }))}
+                    />
+                    Grants an aura buff to matching creatures
+                  </label>
+                  {draft.buildingPassiveEnabled && (
+                    <>
+                      <label>
+                        Applies to
+                        <select
+                          value={draft.buildingPassiveFilterKind}
+                          onChange={(e) =>
+                            setDraft((d) => ({
+                              ...d,
+                              buildingPassiveFilterKind: e.target.value as CardDraft["buildingPassiveFilterKind"],
+                              buildingPassiveFilterValue: "",
+                            }))
+                          }
+                        >
+                          <option value="all">All friendly creatures</option>
+                          <option value="race">Creatures of a Race</option>
+                          <option value="faction">Creatures of a Faction</option>
+                        </select>
+                      </label>
+                      {draft.buildingPassiveFilterKind === "race" && (
+                        <label>
+                          Race
+                          <select
+                            value={draft.buildingPassiveFilterValue}
+                            onChange={(e) => setDraft((d) => ({ ...d, buildingPassiveFilterValue: e.target.value as Race }))}
+                          >
+                            <option value="">Choose…</option>
+                            {RACE_OPTIONS.map((r) => (
+                              <option key={r} value={r}>
+                                {RACE_LABELS[r]}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                      {draft.buildingPassiveFilterKind === "faction" && (
+                        <label>
+                          Faction
+                          <select
+                            value={draft.buildingPassiveFilterValue}
+                            onChange={(e) => setDraft((d) => ({ ...d, buildingPassiveFilterValue: e.target.value as Faction }))}
+                          >
+                            <option value="">Choose…</option>
+                            {FACTION_OPTIONS.map((f) => (
+                              <option key={f} value={f}>
+                                {FACTION_LABELS[f]}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      )}
+                      <label>
+                        Attack Delta
+                        <input
+                          type="number"
+                          value={draft.effectAttackDelta}
+                          onChange={(e) => setDraft((d) => ({ ...d, effectAttackDelta: Number(e.target.value) }))}
+                        />
+                      </label>
+                    </>
+                  )}
+                </fieldset>
+                <label>
+                  Effect applies to
+                  <select
+                    value={draft.buildingEffectTarget}
+                    onChange={(e) =>
+                      setDraft((d) => ({ ...d, buildingEffectTarget: e.target.value as CardDraft["buildingEffectTarget"] }))
+                    }
+                  >
+                    <option value="trigger">A trigger (e.g. On Construction)</option>
+                    <option value="ability">An activated ability</option>
+                  </select>
+                </label>
+                {draft.buildingEffectTarget === "ability" && (
+                  <>
+                    <label>
+                      Activate Cost
+                      <input
+                        type="number"
+                        value={draft.activateCost}
+                        onChange={(e) => setDraft((d) => ({ ...d, activateCost: Number(e.target.value) }))}
+                      />
+                    </label>
+                    <label>
+                      Pool
+                      <select
+                        value={draft.effectPool}
+                        onChange={(e) => setDraft((d) => ({ ...d, effectPool: e.target.value as CardDraft["effectPool"] }))}
+                      >
+                        <option value="resource">Resources</option>
+                        <option value="mana">Mana</option>
+                        <option value="energy">Energy</option>
+                      </select>
+                    </label>
+                  </>
+                )}
+              </>
             )}
             {draft.archetype === "creature" && (
               <div className="admin-keywords">
@@ -607,7 +756,8 @@ export function AdminPanel({ collection, userId, onSetCoins, onCardsChanged, onB
               </>
             )}
 
-            {(draft.archetype === "creature" || draft.archetype === "building") && (
+            {(draft.archetype === "creature" ||
+              (draft.archetype === "building" && draft.buildingEffectTarget === "trigger")) && (
               <label>
                 Trigger
                 <select
@@ -624,7 +774,10 @@ export function AdminPanel({ collection, userId, onSetCoins, onCardsChanged, onB
               </label>
             )}
 
-            {((draft.archetype === "creature" || draft.archetype === "building") && draft.triggerOn !== "none") ||
+            {((draft.archetype === "creature" ||
+              (draft.archetype === "building" && draft.buildingEffectTarget === "trigger")) &&
+              draft.triggerOn !== "none") ||
+            (draft.archetype === "building" && draft.buildingEffectTarget === "ability") ||
             draft.archetype === "spell" ||
             draft.archetype === "ability" ? (
               <fieldset className="admin-effect">
@@ -635,7 +788,9 @@ export function AdminPanel({ collection, userId, onSetCoins, onCardsChanged, onB
                     value={draft.effectKind}
                     onChange={(e) => setDraft((d) => ({ ...d, effectKind: e.target.value as CardEffect["kind"] | "none" }))}
                   >
-                    {(draft.archetype === "spell" || draft.archetype === "ability") && <option value="none">Choose one…</option>}
+                    {(draft.archetype === "spell" || draft.archetype === "ability" || draft.archetype === "building") && (
+                      <option value="none">Choose one…</option>
+                    )}
                     {EFFECT_KINDS.map((k) => (
                       <option key={k} value={k}>
                         {k}

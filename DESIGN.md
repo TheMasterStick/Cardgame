@@ -93,10 +93,32 @@ nothing forces that decision prematurely. Separately, this pass also
 fixed `src/data/loadCustomCards.ts`'s keyword validator (it guards
 `customCards.json`), which had been silently accepting only `ranged`/
 `charge` on custom creatures since Phase A — every other keyword now
-round-trips correctly, not just the six new ones. Everything else below (Buildings-as-objects, the
-Equipment rework, Board-as-resource) is still spec only. CARDS.md/
-BACKEND.md describe what's live today; check them (not just this doc)
-for current schema.
+round-trips correctly, not just the six new ones.
+**Phase E is also live**: Buildings as battlefield objects (§11).
+Durability, column protection, the Graveyard-on-destruction, and the
+On Construction trigger (mapped onto the same `onPlay` trigger a
+creature's Warcry uses — a Building is just as much "played" the
+moment it's placed) were all already live from earlier phases, so
+Phase E's actual new surface is the **passive** and **activated
+ability**: a Building's `passive` field is deliberately typed as only
+the `auraBuff` template (`Extract<PassiveEffect, { kind: "auraBuff"
+}>`), not the full Hero `PassiveEffect` union — `firstSpellDiscount` is
+excluded at the type level, not just by convention, since a second
+discount-granting source has no defined stacking/interaction model
+yet. An `ability` is Resources-costed by default, same as §11 says,
+with an optional `pool: "resource" | "mana" | "energy"` override for a
+card whose text spends something else — `demon-gate` is the literal
+Mana-costed example this section names. Unlike a Spell/Ability card's
+charge count, or Hero Power's once-per-turn cap, a Building's
+activated ability has **no usage cap at all**: it's repeatable every
+turn (by the human, or by the AI's own single-pass-per-turn heuristic)
+as long as its owner can afford it, since Buildings are persistent
+battlefield objects rather than a consumed resource. Example cards:
+`beast-den` (a Beast-only Attack aura) and `demon-gate` (Activate: 3
+Mana, summon a Flame Imp). Everything else below (the Equipment
+rework, Board-as-resource) is still spec only. CARDS.md/BACKEND.md
+describe what's live today; check them (not just this doc) for
+current schema.
 
 Sections marked **Open default** are judgment calls made to keep the
 spec internally consistent and buildable; flag any of them if they
@@ -606,7 +628,7 @@ Suggested build order, each phase individually shippable/testable:
 | **B2 — Reach & position, wave 2** ✅ *(live)* | Protector, Flank, Formation, Advance, Push, Massive. Protector's redirect is heuristic-automatic rather than a live prompt (see the implementation-status note above); everything else matches this section as written. |
 | **C — Spell forms & Hero rework** ✅ *(live)* | Instant/Ritual/Charged split for Spells. Hero Passive/Power/Signature. Allegiance deckbuilding validation. See the implementation-status note above for the discard-vs-graveyard deviation and Allegiance's currently-inert status. |
 | **D — Keyword expansion** ✅ *(live)* | Stealth, Ward, Cleave, Drain, Bloodied, Summon (+ the `summonCreature` effect kind), Warcry rename. See the implementation-status note above for scoping details and the loadCustomCards.ts validator fix. |
-| **E — Buildings as objects** | Durability/attackability, activated abilities, On Construction triggers, enemy interaction (Siege/Sabotage). |
+| **E — Buildings as objects** ✅ *(live)* | Durability/attackability, activated abilities, On Construction triggers, enemy interaction (Siege/Sabotage). Durability/column-protection/Graveyard/On Construction were already live from earlier phases; this wave added the passive (auraBuff-only) and activated ability (no usage cap). Siege/Sabotage-style "ignore column protection" effects remain spec-only — no card exercises that escape hatch yet. See the implementation-status note above. |
 | **F — Equipment rework** | 4-slot zone, categories, assign/reassign for Energy, survives-death/Unassigned flow. |
 | **G — Board-as-resource (§16)** | Swarm/Consume/Garrison/Mount/Transformation, plus Hero Rule-Breaks (§9) once there's enough of the rest in place to make rule-breaking meaningful. |
 

@@ -1,7 +1,7 @@
 import { CARD_DEFINITIONS } from "../data/cards";
 import type { AiTurnStep } from "../engine/ai";
 import { hasKeyword } from "../engine/effects";
-import type { CardArchetype, CardEffect, CardInstance, EffectTarget, GameState, HeroCardDefinition, PlayerId } from "../engine/types";
+import type { BuildingDefinition, CardArchetype, CardEffect, CardInstance, EffectTarget, GameState, HeroCardDefinition, PlayerId } from "../engine/types";
 
 const EXPLICIT_TARGET_CATEGORIES: EffectTarget[] = [
   "targetCreature",
@@ -74,7 +74,8 @@ export type PendingAction =
   | { kind: "activate"; slotIndex: number }
   | { kind: "attack"; attackerId: string | "hero" }
   | { kind: "heroPower" }
-  | { kind: "signature" };
+  | { kind: "signature" }
+  | { kind: "buildingAbility"; slotIndex: number };
 
 /**
  * All pending actions in this prototype are initiated by the human "player"
@@ -93,6 +94,12 @@ export function getPendingEffect(state: GameState, pending: PendingAction | null
   if (pending.kind === "heroPower" || pending.kind === "signature") {
     const heroDef = CARD_DEFINITIONS[state.players.player.hero.defId] as HeroCardDefinition;
     return (pending.kind === "heroPower" ? heroDef.heroPower : heroDef.signature)?.effect ?? null;
+  }
+  if (pending.kind === "buildingAbility") {
+    const building = state.players.player.board.buildings[pending.slotIndex];
+    if (!building) return null;
+    const def = CARD_DEFINITIONS[building.defId] as BuildingDefinition;
+    return def.ability?.effect ?? null;
   }
   const card = state.players.player.board.spellAbilitySlots[pending.slotIndex];
   if (!card) return null;
@@ -163,6 +170,7 @@ export function highlightForStep(step: AiTurnStep): AiHighlight {
   switch (step.kind) {
     case "playCard":
     case "activateCard":
+    case "activateBuilding":
     case "advance":
       return { ...NO_AI_HIGHLIGHT, actorId: step.instanceId };
     case "heroPower":

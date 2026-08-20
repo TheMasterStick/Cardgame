@@ -101,11 +101,38 @@ of a match; its stats become the starting Hero HP/Attack (see DESIGN.md
   each one does.
 - `triggers`: array of `{ "on": TriggerName, "effect": CardEffect }` — see below. Omit or use `[]` for a vanilla creature.
 
-**Building** (`archetype: "building"`) — same as Creature minus `attack`/`keywords`:
+**Building** (`archetype: "building"`) — same as Creature minus `attack`/`keywords`, plus two optional fields for its battlefield-object behavior (DESIGN.md §11):
 ```json
 { "id": "silver-mine", "name": "Silver Mine", "archetype": "building", "cost": 2, "rarity": "common",
   "hp": 3, "triggers": [{ "on": "onPlay", "effect": { "kind": "gainCap", "pool": "resource", "amount": 1 } }] }
 ```
+- `passive` *(optional)*: an aura — only the `auraBuff` template is
+  accepted for a Building (not the full Hero `PassiveEffect` union;
+  `firstSpellDiscount` has no defined stacking model for a second
+  source yet, so it's rejected). `filter` is `"all"`, `{ "race": ... }`,
+  or `{ "faction": ... }`; `attackDelta` is added to the Attack of every
+  matching **friendly** creature, live and continuously re-evaluated
+  (like Flank/Formation), not a one-time buff.
+  ```json
+  { "id": "beast-den", "name": "Beast Den", "archetype": "building", "cost": 3, "rarity": "rare",
+    "hp": 5, "race": "beast", "text": "Passive: your Beast creatures have +2 Attack.",
+    "passive": { "kind": "auraBuff", "filter": { "race": "beast" }, "attackDelta": 2 } }
+  ```
+- `ability` *(optional)*: an activated ability — `{ "effect": CardEffect, "activateCost": number, "pool": "resource" | "mana" | "energy" }`.
+  `pool` defaults to `"resource"` (Resources) when omitted, per §11; a
+  specific card can spend Mana or Energy instead, like Demon Gate here.
+  Unlike a Spell/Ability card, there's **no `charges` field and no cap**
+  — a Building's ability stays activatable every turn for as long as
+  its owner can pay `activateCost`.
+  ```json
+  { "id": "demon-gate", "name": "Demon Gate", "archetype": "building", "cost": 4, "rarity": "epic",
+    "hp": 6, "race": "demon", "text": "Activate (3 Mana): summon a Flame Imp.",
+    "ability": { "effect": { "kind": "summonCreature", "creatureId": "flame-imp" }, "activateCost": 3, "pool": "mana" } }
+  ```
+- `triggers`: same On Construction / onAttack / onDeath / startOfTurn /
+  endOfTurn triggers a Creature can have. A Building only ever uses
+  `triggers` OR `ability` in practice — nothing stops both being
+  present, but no example card combines them.
 
 **Spell** (`archetype: "spell"`, costs Mana) / **Ability** (`archetype: "ability"`, costs Energy):
 
@@ -386,7 +413,12 @@ drop its JSON output straight into the array in
 > Creatures can optionally add `spaceCost` (number, Massive — default
 > 1), `flankBonus`/`formationBonus` (`{ attackDelta: number }`, paired
 > with the `flank`/`formation` keywords).
-> Buildings need `hp` and `triggers`. Spells additionally need
+> Buildings need `hp` and `triggers`, and can optionally add `passive`
+> (`{ kind: "auraBuff", filter: "all" | { race } | { faction },
+> attackDelta: number }`) and/or `ability` (`{ effect: CardEffect,
+> activateCost: number, pool?: "resource" | "mana" | "energy" }` —
+> `pool` defaults to `"resource"`, and unlike a Spell/Ability there's no
+> `charges`/cap). Spells additionally need
 > `spellForm` (one of `instant`, `ritual`, `charged`) and a single
 > `effect`; `instant` casts straight from hand and takes no
 > `activateCost`/`charges`, while `ritual`/`charged` also need
