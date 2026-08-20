@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CARD_DEFINITIONS } from "../data/cards";
-import { deckAllegianceViolations, isCardAllowedForHero } from "./customDeck";
+import { STARTER_DECKS } from "../data/decks";
+import { deckAllegianceViolations, isCardAllowedForHero, type DeckDraft } from "./customDeck";
 import type { CardDefinition, CreatureDefinition, HeroCardDefinition } from "./types";
 
 function hero(overrides: Partial<HeroCardDefinition> = {}): HeroCardDefinition {
@@ -96,5 +97,29 @@ describe("Allegiance (DESIGN.md §10)", () => {
     delete CARD_DEFINITIONS[allowed.id];
     delete CARD_DEFINITIONS[neutral.id];
     delete CARD_DEFINITIONS[disallowed.id];
+  });
+
+  it("the shipped Archivist Hero (arcane-industries) is a real, live Allegiance restriction", () => {
+    const archivistDef = CARD_DEFINITIONS["archivist"] as HeroCardDefinition;
+    expect(archivistDef.faction).toBe("arcane-industries");
+
+    const arcaneGolem = CARD_DEFINITIONS["arcane-golem"];
+    expect(isCardAllowedForHero(archivistDef, arcaneGolem)).toBe(true);
+
+    const footman = CARD_DEFINITIONS["footman"]; // Neutral — no faction, always allowed
+    expect(isCardAllowedForHero(archivistDef, footman)).toBe(true);
+
+    const offFaction: CardDefinition = { ...arcaneGolem, id: "test-off-faction", faction: "necropolitan" };
+    expect(isCardAllowedForHero(archivistDef, offFaction)).toBe(false);
+  });
+
+  it("the Archivist starter deck is exactly 30 cards and entirely Allegiance-legal", () => {
+    const archivistDef = CARD_DEFINITIONS["archivist"] as HeroCardDefinition;
+    const deckIds = STARTER_DECKS["archivist"];
+    expect(deckIds).toHaveLength(30);
+
+    const draft: DeckDraft = {};
+    for (const id of deckIds) draft[id] = (draft[id] ?? 0) + 1;
+    expect(deckAllegianceViolations(draft, archivistDef)).toEqual([]);
   });
 });

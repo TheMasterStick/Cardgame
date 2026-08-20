@@ -94,6 +94,35 @@ const ROGUE_DECK: DeckList = [
   ["blood-sacrifice", 1],
 ];
 
+// Arcane Industries (DESIGN.md §10 Allegiance) — the Archivist is the
+// first Hero to actually carry a Faction, so this is also the first deck
+// where Allegiance is a real, live restriction rather than just built and
+// tested: arcane-golem/arcane-sanctum/arcane-missiles/arcane-turret are
+// all faction: "arcane-industries", everything else here is Neutral.
+const ARCHIVIST_DECK: DeckList = [
+  ["arcane-golem", 1],
+  ["arcane-turret", 2],
+  ["arcane-sanctum", 2],
+  ["arcane-missiles", 2],
+  ["apprentice-mage", 2],
+  ["arrow-archer", 2],
+  ["footman", 2],
+  ["plague-rat", 2],
+  ["shield-bearer", 1],
+  ["gold-mine", 1],
+  ["lumbermill", 1],
+  ["mana-pool", 2],
+  ["bulletin-board", 1],
+  ["fireball", 1],
+  ["lightning-bolt", 2],
+  ["frost-nova", 1],
+  ["renewal", 1],
+  ["focus", 1],
+  ["iron-sword", 1],
+  ["toxic-cloud", 1],
+  ["warded-acolyte", 1],
+];
+
 // Keyed by Hero card id (see data/cards.ts's `heroes` array). Quick Play
 // only offers heroes that have an entry here — a Hero card without a
 // starter deck is only playable via the Deck Builder.
@@ -101,4 +130,5 @@ export const STARTER_DECKS: Record<string, string[]> = {
   fighter: expand(FIGHTER_DECK),
   mage: expand(MAGE_DECK),
   rogue: expand(ROGUE_DECK),
+  archivist: expand(ARCHIVIST_DECK),
 };

@@ -50,11 +50,15 @@ array is reserved for creature/building deaths (it's what a future
 Raise Dead-style Signature would recall from, per the §9 example), and
 this already matched the pre-Phase-C charge-exhaustion behavior, so
 Instant/Charged disposal was made consistent with it rather than the
-other way around; (2) Allegiance is correctly built and unit-tested
-but currently inert in play — only one existing card and none of the
-three starter Heroes carry a `faction` tag yet, so no deck is actually
-restricted until real Faction-tagged content exists. The three starter
-Heroes' base Attack numbers (10/20/15) were left exactly as they were
+other way around; (2) Allegiance was correctly built and unit-tested
+here, but sat inert in play through Phases D-I since none of the three
+starter Heroes carried a `faction` tag and only one card
+(`arcane-golem`) did — **the Phase J cleanup pass below made it a real,
+live restriction**: a new Hero, `archivist` (`faction:
+"arcane-industries"`), ships with an actual 30-card starter deck built
+around it, so Allegiance now genuinely gates what a real deck can
+contain instead of only being provable with synthetic test fixtures.
+The three starter Heroes' base Attack numbers (10/20/15) were left exactly as they were
 even though this pass touched their card entries — see §9's
 open-default note; retiring them to the low/0-base convention is a
 separate balance call, not bundled into this rework.
@@ -227,6 +231,19 @@ restriction (matches Equipment's 1-item-per-bearer cap); there's no
 manual un-garrison action in this pass, only ejection on the Building's
 death. Example card: `garrison-post` (an Ability, 1 Energy), in the
 Fighter starter deck. Mount is cut, not deferred — see above.
+**Phase J made Allegiance a live restriction, not just a tested
+mechanism:** `archivist`, a new `faction: "arcane-industries"` Hero,
+ships with a real 30-card starter deck (`ARCHIVIST_DECK` in
+`decks.ts`) built from `arcane-golem` (pre-existing) plus three cards
+retagged/added into the Faction — `arcane-sanctum` and
+`arcane-missiles` (both pre-existing, just newly tagged) and
+`arcane-turret` (new) — mixed with Neutral filler. Retagging two
+already-shipped cards into a Faction is safe by construction: a
+Faction-less Hero (the three original starters) has no Allegiance
+restriction at all, so nothing already in Fighter/Mage/Rogue's decks
+became illegal. Archivist's Passive uses `auraBuff`'s `{faction}`
+filter for the first time (previously only `{race}` and `"all"` had a
+real card), Hero Power draws a card, Signature raises max Mana.
 CARDS.md/BACKEND.md describe what's live today; check them (not just
 this doc) for current schema.
 
@@ -755,13 +772,14 @@ Suggested build order, each phase individually shippable/testable:
 | **A — Foundation** ✅ *(live)* | Board reshape (Vanguard+Support+columns), the 3-pool resource-by-archetype split, Ready/Exhausted, Guard rename (+ faction display labels), base reach-tier targeting (no Reach/Ranged/Infiltrate yet — just Vanguard-first, matches v1's existing chain shape). |
 | **B1 — Reach & position, wave 1** ✅ *(live)* | Reach, Ranged, Infiltrate keywords and the full targeting chain they unlock (§5). Deliberate Vanguard-vs-Support placement on play. Support creatures can attack if Ranged. Column-based Building protection (§11). Hero-targeting has no board-population gate — every attacker can always reach the Hero, gated only by a reachable Taunt creature (Infiltrate bypasses that too). Target-restricted Warcries/Spells with no legal target just fizzle instead of making the card unplayable. |
 | **B2 — Reach & position, wave 2** ✅ *(live)* | Protector, Flank, Formation, Advance, Push, Massive. Protector's redirect is heuristic-automatic rather than a live prompt (see the implementation-status note above); everything else matches this section as written. |
-| **C — Spell forms & Hero rework** ✅ *(live)* | Instant/Ritual/Charged split for Spells. Hero Passive/Power/Signature. Allegiance deckbuilding validation. See the implementation-status note above for the discard-vs-graveyard deviation and Allegiance's currently-inert status. |
+| **C — Spell forms & Hero rework** ✅ *(live)* | Instant/Ritual/Charged split for Spells. Hero Passive/Power/Signature. Allegiance deckbuilding validation — built and unit-tested here, made a real live restriction in Phase J. See the implementation-status note above for the discard-vs-graveyard deviation. |
 | **D — Keyword expansion** ✅ *(live)* | Stealth, Ward, Cleave, Drain, Bloodied, Summon (+ the `summonCreature` effect kind), Warcry rename. See the implementation-status note above for scoping details and the loadCustomCards.ts validator fix. |
 | **E — Buildings as objects** ✅ *(live)* | Durability/attackability, activated abilities, On Construction triggers, enemy interaction (Siege/Sabotage). Durability/column-protection/Graveyard/On Construction were already live from earlier phases; this wave added the passive (auraBuff-only) and activated ability (no usage cap). The Siege/Sabotage "ignore column protection" escape hatch is live and tested — Infiltrate bypasses it for attacks (`shadow-infiltrator`, since Phase B1), and Spells/Abilities targeting a Building were never subject to it at all. See the implementation-status note above. |
 | **F — Equipment rework** ✅ *(live)* | 4-slot zone, categories, assign/reassign for Energy, survives-death/Unassigned flow. Equipment always enters the zone Unassigned when played (the free immediate-assign-at-play path isn't built); a second item assigned to an already-equipped bearer auto-bumps the old one rather than being refused; bearer category restriction isn't enforced. See the implementation-status note above. |
 | **G — Board-as-resource (§16)** ✅ *(live, in part)* | Swarm (`summonCreature` count), Consume, Transformation, plus the Hero Rule-Breaks (§9) mechanism. Garrison shipped in Phase I. Mount is cut — see the implementation-status note above. |
 | **H — Closing flagged gaps** ✅ *(live)* | Not a pre-planned phase — a cleanup pass over three items earlier phases had explicitly left open, none needing new design decisions: Bloodied's trigger mechanism decided (continuous live check, `wounded-berserker`), a shipped Rule-Breaks Hero (`grand-marshal`), and a documentation correction (Siege/Sabotage's column-protection bypass was already live since Phase B1, the Phase E note was just stale). See the implementation-status note above. |
 | **I — Garrison (§16)** ✅ *(live)* | A `garrison` CardEffect (single-target, resolved the same way as Consume/Transform) moves a friendly creature into `CardInstance.garrisonedCreature` on a Building, off the battlefield and untargetable, ejected back out (or destroyed) when that Building dies. `garrison-post` demonstrates it in the Fighter starter deck. With this, every §16 Board-as-resource pattern that's actually part of the game is live — Mount was decided against, not deferred; see the implementation-status note above. |
+| **J — Allegiance made live (§10)** ✅ *(live)* | Not a pre-planned phase — Allegiance (§10) was built and unit-tested back in Phase C but never actually restricted a real deck, since no starter Hero carried a Faction. `archivist` (`faction: "arcane-industries"`) ships with a real 30-card starter deck, so the restriction now genuinely bites. See the implementation-status note above. |
 
 Each phase gets the same verification pass as prior work: `tsc
 --noEmit`, `eslint`, `vitest`, `vite build`, plus a Playwright smoke

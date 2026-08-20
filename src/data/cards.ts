@@ -90,6 +90,25 @@ const heroes: HeroCardDefinition[] = [
     ruleBreaks: { vanguardSlotDelta: 1, supportSlotDelta: 1 },
     heroPower: { effect: { kind: "gainGuard", amount: 2 }, activateCost: 2, text: "Gain 2 Guard." },
   },
+  {
+    id: "archivist",
+    name: "Archivist",
+    archetype: "hero",
+    cost: 0,
+    rarity: "rare",
+    hp: 12,
+    attack: 0,
+    faction: "arcane-industries",
+    text: "Passive: your Arcane Industries creatures have +1 Attack. Hero Power (2 Energy): draw a card. Signature (3 Energy, 2 uses/match): gain +1 max Mana.",
+    passive: { kind: "auraBuff", filter: { faction: "arcane-industries" }, attackDelta: 1 },
+    heroPower: { effect: { kind: "drawCard", amount: 1 }, activateCost: 2, text: "Draw a card." },
+    signature: {
+      effect: { kind: "gainCap", pool: "mana", amount: 1 },
+      activateCost: 3,
+      usesPerMatch: 2,
+      text: "Gain +1 max Mana.",
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -139,6 +158,7 @@ const buildings: BuildingDefinition[] = [
     rarity: "rare",
     art: "/cards/Arcane-Sanctum.png",
     hp: 4,
+    faction: "arcane-industries",
     text: "On Play: gain +1 max Mana.",
     triggers: [{ on: "onPlay", effect: { kind: "gainCap", pool: "mana", amount: 1 } }],
   },
@@ -681,6 +701,20 @@ const creatures: CreatureDefinition[] = [
     text: "Bloodied: while at half Health or below, +4 Attack.",
     triggers: [],
   },
+  {
+    id: "arcane-turret",
+    name: "Arcane Turret",
+    archetype: "creature",
+    cost: 3,
+    rarity: "uncommon",
+    attack: 3,
+    hp: 3,
+    element: "arcane",
+    faction: "arcane-industries",
+    keywords: ["ranged"],
+    text: "Ranged.",
+    triggers: [],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -733,6 +767,7 @@ const spells: SpellDefinition[] = [
     cost: 1,
     rarity: "common",
     art: "/cards/Arcane-Missiles.png",
+    faction: "arcane-industries",
     activateCost: 1,
     charges: "unlimited",
     text: "Activate (1 Mana): deal 1 damage to a creature, a building, or the enemy Hero.",
