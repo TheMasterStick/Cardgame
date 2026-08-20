@@ -153,7 +153,43 @@ of what was actually dealt (harmless before Phase F, since nothing
 could reduce a creature's incoming damage yet). Example cards:
 `royal-squire` (a vanilla Armiger creature) and `steel-barding` (a
 generic Armor item any Armiger bearer — Hero or creature — can wear).
-Everything else below (Board-as-resource) is still spec only.
+**Phase G is also live, in part**: three of the five Board-as-resource
+patterns (§16) — Swarm, Consume, Transformation — plus Hero Rule-Breaks
+(§9), the mechanism only. Swarm is just `summonCreature`'s `count`
+field (default 1): each copy re-checks for room, so a partly-full
+board still gets as many as fit instead of an all-or-nothing fizzle.
+Consume (a new `consume` CardEffect) destroys a targeted ally —
+bypassing its own Armor/damage-reduction entirely, since this is a
+self-inflicted sacrifice by its own controller, not a hostile hit —
+then permanently buffs every other creature its controller still has
+on board. Transformation (a new `transform` CardEffect) replaces a
+targeted ally in place with a different named creature, carrying its
+exhaustion/summoning-sickness state and statuses forward (it's the
+same unit, just bigger) while resetting its stat deltas to the new
+form's own base stats, and fires the new form's `onPlay` trigger on
+the way in — matching `summonCreature`'s own precedent for "entering
+the battlefield" outside a literal hand-play. A Massive new form
+fizzles cleanly, leaving the original creature untouched, if there's
+no contiguous room for it in the same row (`findTransformSlots` in
+`board.ts`, reusing `findOpenContiguousSlots` with the transforming
+creature's own slot(s) counted as already vacated). Example cards:
+`wolf-pack` (Swarm — three Young Wolves), `blood-sacrifice` (Consume),
+`alphas-call` (Transformation, into the new Massive `alpha-wolf`) —
+all three live in the Rogue starter deck as a demonstrable combo.
+Hero Rule-Breaks (`HeroCardDefinition.ruleBreaks`, applied once in
+`createInitialPlayerState`) can resize the Vanguard/Support/Building/
+Spell-Ability arrays and adjust starting Guard and the three pool
+caps — engine-tested directly, but **no shipped Hero actually sets
+one yet**, the same "mechanism built, no concrete card exercises it"
+status Allegiance had after Phase C; authoring an actual Legendary-
+tier Hero is a content decision for whenever one is designed, not
+bundled into wiring up the system itself. **Garrison and Mount are
+deliberately not built** — DESIGN.md itself (§16) flags both as
+needing genuinely new state-shape concepts (a Building-side "housed
+creature" slot; a composite-creature-instance format) that haven't
+been designed yet, so building them now would mean inventing that
+design under time pressure instead of when a concrete card actually
+needs it — the same reasoning Bloodied got in Phase D.
 CARDS.md/BACKEND.md describe what's live today; check them (not just
 this doc) for current schema.
 
@@ -455,7 +491,7 @@ A Hero card carries:
 | Passive | An always-on effect. **Open default:** built from a small curated set of templates (aura buff to a matching Faction/Race/Class, a first-spell-cheaper-per-turn discount, an on-reveal-enemy-card effect, etc.) rather than a free-form scripting language — matches how `CardEffect` is already a fixed set of `kind`s, not arbitrary code. The template set grows as new Heroes need new patterns. |
 | Hero Power | An activated effect using the same `CardEffect` shape as a Spell/Ability, Energy-costed, usable **once per turn** (not charge-based). |
 | Signature Ability *(optional)* | Same shape as Hero Power, but a stronger effect gated to a small number of uses **per match** (e.g. 1) instead of per turn. |
-| Rule-Breaks *(optional, Legendary-tier)* | A curated menu of numeric deltas a Hero can carry: extra Spell slots, extra Building slots, Vanguard/Support slot count changes, starting Guard delta, max Energy/Mana/Resources cap delta. **Open default:** only numeric-delta modifiers are supported at first; a fully bespoke rule-break (e.g. "Harpies may overfill Support by forming Flocks") is one-off card-specific code, done when that specific card is actually built, not a general system. |
+| Rule-Breaks *(optional, Legendary-tier)* | A curated menu of numeric deltas a Hero can carry: extra Spell slots, extra Building slots, Vanguard/Support slot count changes, starting Guard delta, max Energy/Mana/Resources cap delta. **Open default:** only numeric-delta modifiers are supported at first; a fully bespoke rule-break (e.g. "Harpies may overfill Support by forming Flocks") is one-off card-specific code, done when that specific card is actually built, not a general system. **Implementation status (Phase G):** the mechanism is live and engine-tested — `HeroCardDefinition.ruleBreaks` is applied once at match start — but no shipped Hero card sets it yet, the same inert-until-exercised state Allegiance was left in after Phase C. |
 
 **Example Signature Ability — Raise Dead** (a Necromancer-archetype
 Mage Hero): reveal the top 3 creatures in your Graveyard; play one of
@@ -640,20 +676,26 @@ Unchanged from v1, plus Allegiance validation (§10):
 
 Documented now so future card design has a target, but **not required
 for the v2 engine rebuild** (§17 Phase E+) — these are card-effect
-patterns layered on top of a working positional board, not core rules:
+patterns layered on top of a working positional board, not core rules.
+**Swarm, Consume, and Transformation are live as of Phase G** — see
+the implementation-status note near the top of this document for the
+exact mechanics and example cards. Garrison and Mount remain spec
+only, deliberately: both need a genuinely new state-shape concept
+(below) that hasn't been designed yet, so they're left for whenever a
+concrete card actually needs one, not built speculatively now.
 
-- **Swarm**: effects that create several small units at once, filling
-  the board fast.
-- **Consume**: destroy an allied creature to free its slot and empower
-  another (an explicit new effect kind).
+- **Swarm** ✅ *(live)*: effects that create several small units at
+  once, filling the board fast.
+- **Consume** ✅ *(live)*: destroy an allied creature to free its slot
+  and empower another (an explicit new effect kind).
 - **Garrison**: place a creature *inside* a Building instead of
   occupying a battlefield space (needs a Building-side "housed
   creature" slot concept).
 - **Mount**: two creatures merge into one board position (needs a
   composite-creature-instance concept).
-- **Transformation**: a card becomes a different, larger card in place
-  — e.g. a Massive upgrade that requires contiguous empty space to
-  complete, per §5.
+- **Transformation** ✅ *(live)*: a card becomes a different, larger
+  card in place — e.g. a Massive upgrade that requires contiguous
+  empty space to complete, per §5.
 
 ---
 
@@ -679,7 +721,7 @@ Suggested build order, each phase individually shippable/testable:
 | **D — Keyword expansion** ✅ *(live)* | Stealth, Ward, Cleave, Drain, Bloodied, Summon (+ the `summonCreature` effect kind), Warcry rename. See the implementation-status note above for scoping details and the loadCustomCards.ts validator fix. |
 | **E — Buildings as objects** ✅ *(live)* | Durability/attackability, activated abilities, On Construction triggers, enemy interaction (Siege/Sabotage). Durability/column-protection/Graveyard/On Construction were already live from earlier phases; this wave added the passive (auraBuff-only) and activated ability (no usage cap). Siege/Sabotage-style "ignore column protection" effects remain spec-only — no card exercises that escape hatch yet. See the implementation-status note above. |
 | **F — Equipment rework** ✅ *(live)* | 4-slot zone, categories, assign/reassign for Energy, survives-death/Unassigned flow. Equipment always enters the zone Unassigned when played (the free immediate-assign-at-play path isn't built); a second item assigned to an already-equipped bearer auto-bumps the old one rather than being refused; bearer category restriction isn't enforced. See the implementation-status note above. |
-| **G — Board-as-resource (§16)** | Swarm/Consume/Garrison/Mount/Transformation, plus Hero Rule-Breaks (§9) once there's enough of the rest in place to make rule-breaking meaningful. |
+| **G — Board-as-resource (§16)** ✅ *(live, in part)* | Swarm (`summonCreature` count), Consume, Transformation, plus the Hero Rule-Breaks (§9) mechanism. Garrison and Mount remain spec-only — they need new state-shape concepts (a Building-side "housed creature" slot, a composite-creature-instance) not yet designed. See the implementation-status note above. |
 
 Each phase gets the same verification pass as prior work: `tsc
 --noEmit`, `eslint`, `vitest`, `vite build`, plus a Playwright smoke

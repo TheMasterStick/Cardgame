@@ -166,6 +166,35 @@ export interface GainCapEffect {
 export interface SummonCreatureEffect {
   kind: "summonCreature";
   creatureId: string;
+  /** Swarm (DESIGN.md §16) — create this many copies instead of one. Omit or 1 for a plain single summon. Stops early (partial fizzle) if the board runs out of room partway through. */
+  count?: number;
+}
+
+/**
+ * Consume (DESIGN.md §16): destroy a targeted allied creature — bypassing
+ * its own Armor/damage-reduction entirely, since this is a self-inflicted
+ * sacrifice by its own controller, not a hostile attack — then permanently
+ * buff every other creature the controller still has on board.
+ */
+export interface ConsumeEffect {
+  kind: "consume";
+  target: EffectTarget;
+  attackDelta?: number;
+  hpDelta?: number;
+}
+
+/**
+ * Transformation (DESIGN.md §16): a targeted allied creature becomes a
+ * different (typically larger) named creature in place, preserving its
+ * summoning-sickness/exhaustion state and statuses but resetting its
+ * stat deltas to the new form's own base stats. Fizzles (no-op) if the
+ * new form is Massive and there's no contiguous room for it in the same
+ * row, per §5.
+ */
+export interface TransformEffect {
+  kind: "transform";
+  target: EffectTarget;
+  creatureId: string;
 }
 
 export type CardEffect =
@@ -176,7 +205,9 @@ export type CardEffect =
   | DrawCardEffect
   | GainGuardEffect
   | GainCapEffect
-  | SummonCreatureEffect;
+  | SummonCreatureEffect
+  | ConsumeEffect
+  | TransformEffect;
 
 export type TriggerName =
   | "onPlay"
@@ -264,6 +295,25 @@ export interface HeroCardDefinition extends CardDefinitionBase {
     /** No Faction restriction at all despite having a Faction (a Mercenary Captain). */
     unrestricted?: boolean;
   };
+  /** Rule-Breaks (DESIGN.md §9) — a curated menu of numeric deltas a Legendary-tier Hero can carry. Applied once at match start. Omit entirely for a Hero that plays by the standard board/pool shape. */
+  ruleBreaks?: HeroRuleBreaks;
+}
+
+/**
+ * Only numeric-delta modifiers are supported (DESIGN.md §9's own "Open
+ * default") — a fully bespoke rule-break is one-off card-specific code,
+ * built when that specific card exists, not a general system. All fields
+ * are deltas applied once at match start, on top of the standard shape.
+ */
+export interface HeroRuleBreaks {
+  extraSpellAbilitySlots?: number;
+  extraBuildingSlots?: number;
+  vanguardSlotDelta?: number;
+  supportSlotDelta?: number;
+  startingGuardDelta?: number;
+  resourceCapDelta?: number;
+  manaCapDelta?: number;
+  energyCapDelta?: number;
 }
 
 /** A conditional stat bump from a positional keyword — Attack only (DESIGN.md §5). Re-evaluated live, never stored on the CardInstance. */

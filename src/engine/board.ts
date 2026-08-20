@@ -33,3 +33,17 @@ export function findOpenContiguousSlots(row: (CardInstance | null)[], spaceCost:
   }
   return null;
 }
+
+/**
+ * Contiguous slots for a Transformation (DESIGN.md §16) — same search as
+ * findOpenContiguousSlots, but the creature's own currently-occupied
+ * slot(s) count as available (they're being vacated by the transform),
+ * anchored at its current column first before searching the rest of the
+ * row. Null if the new form doesn't fit anywhere, so the transform fizzles.
+ */
+export function findTransformSlots(row: (CardInstance | null)[], instanceId: string, spaceCost: number): number[] | null {
+  const currentColumn = row.findIndex((c) => c?.instanceId === instanceId);
+  if (currentColumn === -1) return null;
+  const vacated = row.map((c) => (c?.instanceId === instanceId ? null : c));
+  return findOpenContiguousSlots(vacated, spaceCost, currentColumn);
+}

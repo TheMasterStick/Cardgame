@@ -23,7 +23,7 @@ export function effectNeedsExplicitTarget(effect: CardEffect): boolean {
 /** Which side of the board an effect's target must come from, for UI click-restriction purposes. */
 export function effectTargetSide(effect: CardEffect): "own" | "enemy" | null {
   if (effect.kind === "damage" || effect.kind === "applyStatus") return "enemy";
-  if (effect.kind === "heal" || effect.kind === "buff") return "own";
+  if (effect.kind === "heal" || effect.kind === "buff" || effect.kind === "consume" || effect.kind === "transform") return "own";
   return null;
 }
 

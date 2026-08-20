@@ -2,6 +2,7 @@ import { CARD_DEFINITIONS } from "../data/cards";
 import {
   BUILDING_SLOTS,
   EQUIPMENT_ZONE_SIZE,
+  MAX_POOL,
   SPELL_ABILITY_SLOTS,
   STARTING_GUARD,
   STARTING_POOL,
@@ -12,6 +13,7 @@ import {
   type GameState,
   type HeroCardDefinition,
   type HeroInstance,
+  type HeroRuleBreaks,
   type PlayerId,
   type PlayerState,
 } from "./types";
@@ -62,12 +64,13 @@ export function createHeroInstance(heroDefId: string): HeroInstance {
   };
 }
 
-function emptyBoard(): BoardState {
+/** Board array sizes, standard unless a Legendary-tier Hero's Rule-Breaks (DESIGN.md §9) say otherwise. */
+function emptyBoard(ruleBreaks: HeroRuleBreaks | undefined): BoardState {
   return {
-    vanguard: Array(VANGUARD_SIZE).fill(null),
-    support: Array(SUPPORT_SIZE).fill(null),
-    buildings: Array(BUILDING_SLOTS).fill(null),
-    spellAbilitySlots: Array(SPELL_ABILITY_SLOTS).fill(null),
+    vanguard: Array(VANGUARD_SIZE + (ruleBreaks?.vanguardSlotDelta ?? 0)).fill(null),
+    support: Array(SUPPORT_SIZE + (ruleBreaks?.supportSlotDelta ?? 0)).fill(null),
+    buildings: Array(BUILDING_SLOTS + (ruleBreaks?.extraBuildingSlots ?? 0)).fill(null),
+    spellAbilitySlots: Array(SPELL_ABILITY_SLOTS + (ruleBreaks?.extraSpellAbilitySlots ?? 0)).fill(null),
     equipment: Array(EQUIPMENT_ZONE_SIZE).fill(null),
   };
 }
@@ -78,18 +81,24 @@ export function createInitialPlayerState(
   deckDefIds: string[],
 ): PlayerState {
   const deck = shuffle(deckDefIds.map((defId) => createCardInstance(defId, id)));
+  const heroDef = CARD_DEFINITIONS[heroDefId];
+  const ruleBreaks = heroDef?.archetype === "hero" ? heroDef.ruleBreaks : undefined;
+  const startingGuard = STARTING_GUARD + (ruleBreaks?.startingGuardDelta ?? 0);
+  const resourceCap = Math.min(MAX_POOL, STARTING_POOL + (ruleBreaks?.resourceCapDelta ?? 0));
+  const manaCap = Math.min(MAX_POOL, STARTING_POOL + (ruleBreaks?.manaCapDelta ?? 0));
+  const energyCap = Math.min(MAX_POOL, STARTING_POOL + (ruleBreaks?.energyCapDelta ?? 0));
   return {
     id,
     hero: createHeroInstance(heroDefId),
-    guard: { current: STARTING_GUARD, max: STARTING_GUARD },
-    resources: { current: STARTING_POOL, cap: STARTING_POOL },
-    mana: { current: STARTING_POOL, cap: STARTING_POOL },
-    energy: { current: STARTING_POOL, cap: STARTING_POOL },
+    guard: { current: startingGuard, max: startingGuard },
+    resources: { current: resourceCap, cap: resourceCap },
+    mana: { current: manaCap, cap: manaCap },
+    energy: { current: energyCap, cap: energyCap },
     deck,
     hand: [],
     discard: [],
     graveyard: [],
-    board: emptyBoard(),
+    board: emptyBoard(ruleBreaks),
   };
 }
 

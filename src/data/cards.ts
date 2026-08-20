@@ -642,6 +642,20 @@ const creatures: CreatureDefinition[] = [
     text: "Armiger — this creature can hold one Equipment item (DESIGN.md §12).",
     triggers: [],
   },
+  {
+    id: "alpha-wolf",
+    name: "Alpha Wolf",
+    archetype: "creature",
+    cost: 5,
+    rarity: "rare",
+    attack: 5,
+    hp: 6,
+    race: "beast",
+    spaceCost: 2,
+    keywords: ["charge"],
+    text: "Massive (2 slots). Charge. Reached mainly via Transformation (DESIGN.md §16), not played from hand.",
+    triggers: [],
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -725,6 +739,26 @@ const spells: SpellDefinition[] = [
     text: "Activate (3 Mana): poison a creature or the enemy Hero for 2.",
     effect: { kind: "applyStatus", status: "poison", amount: 2, target: "targetAny" },
   },
+  {
+    id: "wolf-pack",
+    name: "Wolf Pack",
+    archetype: "spell",
+    spellForm: "instant",
+    cost: 4,
+    rarity: "rare",
+    text: "Swarm: summon three Young Wolves.",
+    effect: { kind: "summonCreature", creatureId: "young-wolf", count: 3 },
+  },
+  {
+    id: "alphas-call",
+    name: "Alpha's Call",
+    archetype: "spell",
+    spellForm: "instant",
+    cost: 3,
+    rarity: "epic",
+    text: "Transform an allied creature into an Alpha Wolf.",
+    effect: { kind: "transform", target: "targetCreature", creatureId: "alpha-wolf" },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -791,6 +825,17 @@ const abilities: AbilityDefinition[] = [
     charges: 2,
     text: "Activate (3 Energy): deal 5 damage to a creature.",
     effect: { kind: "damage", amount: 5, target: "targetCreature" },
+  },
+  {
+    id: "blood-sacrifice",
+    name: "Blood Sacrifice",
+    archetype: "ability",
+    cost: 2,
+    rarity: "rare",
+    activateCost: 2,
+    charges: "unlimited",
+    text: "Activate (2 Energy): Consume — destroy an allied creature; your other creatures gain +1/+1.",
+    effect: { kind: "consume", target: "targetCreature", attackDelta: 1, hpDelta: 1 },
   },
 ];
 

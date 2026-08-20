@@ -66,9 +66,9 @@ const MAGE_DECK: DeckList = [
 ];
 
 const ROGUE_DECK: DeckList = [
-  ["assassin", 2],
+  ["assassin", 1],
   ["berserker", 1],
-  ["arrow-archer", 2],
+  ["arrow-archer", 1],
   ["footman", 2],
   ["plague-rat", 2],
   ["shadow-stalker", 1],
@@ -81,7 +81,7 @@ const ROGUE_DECK: DeckList = [
   ["exercise", 1],
   ["recruitment-station", 1],
   ["bulletin-board", 1],
-  ["lightning-bolt", 3],
+  ["lightning-bolt", 2],
   ["arcane-missiles", 1],
   ["toxic-cloud", 1],
   ["war-cry", 1],
@@ -89,6 +89,9 @@ const ROGUE_DECK: DeckList = [
   ["executioners-strike", 1],
   ["cloak-of-shadows", 1],
   ["iron-sword", 1],
+  ["wolf-pack", 1],
+  ["alphas-call", 1],
+  ["blood-sacrifice", 1],
 ];
 
 // Keyed by Hero card id (see data/cards.ts's `heroes` array). Quick Play

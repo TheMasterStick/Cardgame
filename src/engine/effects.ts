@@ -1,5 +1,5 @@
 import { CARD_DEFINITIONS } from "../data/cards";
-import { findOpenContiguousSlots } from "./board";
+import { findOpenContiguousSlots, findTransformSlots } from "./board";
 import { drawCard } from "./deck";
 import { getBearerDamageReduction, unassignEquipmentFrom } from "./equipment";
 import { createCardInstance } from "./factory";
@@ -229,6 +229,15 @@ export function checkWinner(state: GameState): void {
   }
 }
 
+/** Permanently adjusts a creature's Attack/HP by the given deltas — shared by the `buff` and `consume` effects. */
+function applyStatBuff(card: CardInstance, attackDelta: number | undefined, hpDelta: number | undefined): void {
+  if (attackDelta) card.attackDelta += attackDelta;
+  if (hpDelta) {
+    card.hpDelta += hpDelta;
+    if (card.currentHp !== undefined) card.currentHp += hpDelta;
+  }
+}
+
 /**
  * Resolves any CardEffect against a chosen target (or no target, for
  * effects that don't need one). `actingPlayer` is the controller of the
@@ -302,24 +311,17 @@ export function resolveEffect(
       return;
     }
     case "buff": {
-      const applyBuff = (card: CardInstance) => {
-        if (effect.attackDelta) card.attackDelta += effect.attackDelta;
-        if (effect.hpDelta) {
-          card.hpDelta += effect.hpDelta;
-          if (card.currentHp !== undefined) card.currentHp += effect.hpDelta;
-        }
-      };
       if (effect.target === "allFriendlyCreatures" || effect.target === "allEnemyCreatures") {
         const owner = effect.target === "allFriendlyCreatures" ? actingPlayer : otherPlayer(actingPlayer);
         for (const c of allBoardCreatures(state.players[owner].board)) {
-          if (!isImmuneToSpell(c, sourceArchetype)) applyBuff(c);
+          if (!isImmuneToSpell(c, sourceArchetype)) applyStatBuff(c, effect.attackDelta, effect.hpDelta);
         }
         return;
       }
       if (!target || target.kind !== "card") return;
       const found = findCard(state, target.owner, target.instanceId);
       if (!found || isImmuneToSpell(found.card, sourceArchetype)) return;
-      applyBuff(found.card);
+      applyStatBuff(found.card, effect.attackDelta, effect.hpDelta);
       return;
     }
     case "drawCard": {
@@ -339,16 +341,64 @@ export function resolveEffect(
       if (!def || def.archetype !== "creature") return;
       const player = state.players[actingPlayer];
       const spaceCost = def.spaceCost ?? 1;
-      const vanguardSlots = findOpenContiguousSlots(player.board.vanguard, spaceCost);
-      const row = vanguardSlots ? "vanguard" : "support";
-      const slots = vanguardSlots ?? findOpenContiguousSlots(player.board.support, spaceCost);
-      if (!slots) return; // no room in either row — fizzles, like a Warcry with no legal target
-      const summoned = createCardInstance(effect.creatureId, actingPlayer);
-      summoned.summonedTurn = state.turnNumber;
-      for (const s of slots) player.board[row][s] = summoned;
-      state.log.push(`${effect.creatureId} (${actingPlayer}) is summoned.`);
-      for (const trigger of def.triggers) {
-        if (trigger.on === "onPlay") resolveEffect(state, actingPlayer, trigger.effect, null);
+      // Swarm (DESIGN.md §16): count > 1 summons several at once. Each
+      // copy re-checks for room, so a partway-full board still gets as
+      // many as fit rather than an all-or-nothing fizzle.
+      const count = effect.count ?? 1;
+      for (let i = 0; i < count; i++) {
+        const vanguardSlots = findOpenContiguousSlots(player.board.vanguard, spaceCost);
+        const row = vanguardSlots ? "vanguard" : "support";
+        const slots = vanguardSlots ?? findOpenContiguousSlots(player.board.support, spaceCost);
+        if (!slots) return; // no room left in either row — fizzles, like a Warcry with no legal target
+        const summoned = createCardInstance(effect.creatureId, actingPlayer);
+        summoned.summonedTurn = state.turnNumber;
+        for (const s of slots) player.board[row][s] = summoned;
+        state.log.push(`${effect.creatureId} (${actingPlayer}) is summoned.`);
+        for (const trigger of def.triggers) {
+          if (trigger.on === "onPlay") resolveEffect(state, actingPlayer, trigger.effect, null);
+        }
+      }
+      return;
+    }
+    case "consume": {
+      if (!target || target.kind !== "card") return;
+      const found = findCard(state, target.owner, target.instanceId);
+      if (!found || found.card.currentHp === undefined) return;
+      // A sacrifice by its own controller, not a hostile hit — bypasses
+      // Armor/damage-reduction entirely rather than going through damageCard.
+      found.card.currentHp = 0;
+      killCardIfDead(state, target.owner, target.instanceId);
+      for (const c of allBoardCreatures(state.players[actingPlayer].board)) {
+        applyStatBuff(c, effect.attackDelta, effect.hpDelta);
+      }
+      return;
+    }
+    case "transform": {
+      if (!target || target.kind !== "card") return;
+      const newDef = CARD_DEFINITIONS[effect.creatureId];
+      if (!newDef || newDef.archetype !== "creature") return;
+      const found = findCard(state, target.owner, target.instanceId);
+      if (!found || (found.row !== "vanguard" && found.row !== "support")) return;
+      const row = state.players[target.owner].board[found.row];
+      const spaceCost = newDef.spaceCost ?? 1;
+      const slots = findTransformSlots(row, found.card.instanceId, spaceCost);
+      if (!slots) return; // no contiguous room for the new (often larger) form — fizzles
+      const old = found.card;
+      for (let i = 0; i < row.length; i++) {
+        if (row[i]?.instanceId === old.instanceId) row[i] = null;
+      }
+      const transformed = createCardInstance(effect.creatureId, target.owner);
+      // The same battle-hardened unit, just bigger — carries its
+      // exhaustion/summoning-sickness state and statuses forward rather
+      // than resetting them; its stat deltas reset to the new form's own
+      // base stats instead of carrying over.
+      transformed.summonedTurn = old.summonedTurn;
+      transformed.hasAttackedThisTurn = old.hasAttackedThisTurn;
+      transformed.statuses = old.statuses;
+      for (const s of slots) row[s] = transformed;
+      state.log.push(`${old.defId} (${target.owner}) transforms into ${effect.creatureId}.`);
+      for (const trigger of newDef.triggers) {
+        if (trigger.on === "onPlay") resolveEffect(state, target.owner, trigger.effect, null);
       }
       return;
     }

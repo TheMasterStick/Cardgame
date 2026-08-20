@@ -51,6 +51,8 @@ const EFFECT_KINDS: CardEffect["kind"][] = [
   "gainGuard",
   "gainCap",
   "summonCreature",
+  "consume",
+  "transform",
 ];
 const CREATURE_TRIGGER_NAMES: TriggerName[] = ["onPlay", "onAttack", "onDeath", "onDefend", "startOfTurn", "endOfTurn"];
 const TARGET_OPTIONS = [
@@ -94,6 +96,8 @@ interface CardDraft {
   effectHpDelta: number;
   effectPool: "resource" | "mana" | "energy";
   effectCreatureId: string;
+  /** Swarm only (summonCreature's count field, DESIGN.md §16) — how many copies to summon at once. */
+  effectCount: number;
   /** Building only: whether the Effect fieldset below describes the On Construction trigger or the activated ability (DESIGN.md §11) — reuses activateCost/effectPool for the ability's cost/pool, same fields Spell/Ability already use. */
   buildingEffectTarget: "trigger" | "ability";
   buildingPassiveEnabled: boolean;
@@ -132,6 +136,7 @@ function emptyDraft(): CardDraft {
     effectHpDelta: 1,
     effectPool: "resource",
     effectCreatureId: "",
+    effectCount: 1,
     buildingEffectTarget: "trigger",
     buildingPassiveEnabled: false,
     buildingPassiveFilterKind: "all",
@@ -159,6 +164,14 @@ function loadEffectIntoDraft(draft: CardDraft, effect: CardEffect): void {
     draft.effectAmount = effect.amount;
     draft.effectPool = effect.pool;
   } else if (effect.kind === "summonCreature") {
+    draft.effectCreatureId = effect.creatureId;
+    draft.effectCount = effect.count ?? 1;
+  } else if (effect.kind === "consume") {
+    draft.effectTarget = effect.target as CardDraft["effectTarget"];
+    draft.effectAttackDelta = effect.attackDelta ?? 0;
+    draft.effectHpDelta = effect.hpDelta ?? 0;
+  } else if (effect.kind === "transform") {
+    draft.effectTarget = effect.target as CardDraft["effectTarget"];
     draft.effectCreatureId = effect.creatureId;
   }
 }
@@ -251,7 +264,20 @@ function buildEffect(draft: CardDraft): CardEffect | null {
     case "gainCap":
       return { kind: "gainCap", pool: draft.effectPool, amount: draft.effectAmount };
     case "summonCreature":
-      return draft.effectCreatureId.trim() ? { kind: "summonCreature", creatureId: draft.effectCreatureId.trim() } : null;
+      return draft.effectCreatureId.trim()
+        ? { kind: "summonCreature", creatureId: draft.effectCreatureId.trim(), count: draft.effectCount > 1 ? draft.effectCount : undefined }
+        : null;
+    case "consume":
+      return {
+        kind: "consume",
+        target: draft.effectTarget,
+        attackDelta: draft.effectAttackDelta || undefined,
+        hpDelta: draft.effectHpDelta || undefined,
+      };
+    case "transform":
+      return draft.effectCreatureId.trim()
+        ? { kind: "transform", target: draft.effectTarget, creatureId: draft.effectCreatureId.trim() }
+        : null;
     default:
       return null;
   }
@@ -828,7 +854,9 @@ export function AdminPanel({ collection, userId, onSetCoins, onCardsChanged, onB
                 {(draft.effectKind === "damage" ||
                   draft.effectKind === "heal" ||
                   draft.effectKind === "applyStatus" ||
-                  draft.effectKind === "buff") && (
+                  draft.effectKind === "buff" ||
+                  draft.effectKind === "consume" ||
+                  draft.effectKind === "transform") && (
                   <label>
                     Target
                     <select
@@ -882,7 +910,7 @@ export function AdminPanel({ collection, userId, onSetCoins, onCardsChanged, onB
                     )}
                   </>
                 )}
-                {draft.effectKind === "buff" && (
+                {(draft.effectKind === "buff" || draft.effectKind === "consume") && (
                   <>
                     <label>
                       Attack Delta
@@ -900,6 +928,9 @@ export function AdminPanel({ collection, userId, onSetCoins, onCardsChanged, onB
                         onChange={(e) => setDraft((d) => ({ ...d, effectHpDelta: Number(e.target.value) }))}
                       />
                     </label>
+                    {draft.effectKind === "consume" && (
+                      <span className="admin-hint">Target is the ally destroyed — these deltas apply to every other friendly creature.</span>
+                    )}
                   </>
                 )}
                 {draft.effectKind === "gainCap" && (
@@ -916,15 +947,39 @@ export function AdminPanel({ collection, userId, onSetCoins, onCardsChanged, onB
                   </label>
                 )}
                 {draft.effectKind === "summonCreature" && (
+                  <>
+                    <label>
+                      Creature to summon (card ID)
+                      <input
+                        type="text"
+                        value={draft.effectCreatureId}
+                        onChange={(e) => setDraft((d) => ({ ...d, effectCreatureId: e.target.value }))}
+                        placeholder="e.g. militia-recruit"
+                      />
+                      <span className="admin-hint">Must match an existing Creature card's ID exactly.</span>
+                    </label>
+                    <label>
+                      Count (Swarm)
+                      <input
+                        type="number"
+                        min={1}
+                        value={draft.effectCount}
+                        onChange={(e) => setDraft((d) => ({ ...d, effectCount: Number(e.target.value) || 1 }))}
+                      />
+                      <span className="admin-hint">More than 1 summons several at once (DESIGN.md §16).</span>
+                    </label>
+                  </>
+                )}
+                {draft.effectKind === "transform" && (
                   <label>
-                    Creature to summon (card ID)
+                    Creature to transform into (card ID)
                     <input
                       type="text"
                       value={draft.effectCreatureId}
                       onChange={(e) => setDraft((d) => ({ ...d, effectCreatureId: e.target.value }))}
-                      placeholder="e.g. militia-recruit"
+                      placeholder="e.g. alpha-wolf"
                     />
-                    <span className="admin-hint">Must match an existing Creature card's ID exactly.</span>
+                    <span className="admin-hint">Must match an existing Creature card's ID exactly. Target is the ally that transforms.</span>
                   </label>
                 )}
               </fieldset>

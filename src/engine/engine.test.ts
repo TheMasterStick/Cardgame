@@ -8,7 +8,16 @@ import { assignEquipment } from "./equipment";
 import { createCardInstance, createInitialGameState } from "./factory";
 import { activateSlotCard, playCardFromHand, startTurn } from "./game";
 import { activateHeroPower, activateHeroSignature } from "./hero";
-import { MAX_POOL, STARTING_GUARD, type GameState } from "./types";
+import {
+  BUILDING_SLOTS,
+  MAX_POOL,
+  SPELL_ABILITY_SLOTS,
+  STARTING_GUARD,
+  STARTING_POOL,
+  SUPPORT_SIZE,
+  VANGUARD_SIZE,
+  type GameState,
+} from "./types";
 
 function makeState(): GameState {
   return createInitialGameState("fighter", [], "mage", []);
@@ -1428,5 +1437,168 @@ describe("Equipment (DESIGN.md §12)", () => {
     assignEquipment(state, "player", 0, { kind: "hero" });
 
     expect(getHeroAttack(state, "player")).toBe(state.players.player.hero.baseAttack + 3);
+  });
+});
+
+describe("Swarm (DESIGN.md §16 — summonCreature's count field)", () => {
+  it("creates several copies at once", () => {
+    const state = makeState();
+    resolveEffect(state, "player", { kind: "summonCreature", creatureId: "militia-recruit", count: 3 }, null);
+    const summoned = state.players.player.board.vanguard.filter((c) => c?.defId === "militia-recruit");
+    expect(summoned).toHaveLength(3);
+  });
+
+  it("summons as many as fit, then stops, when the board runs out of room partway through", () => {
+    const state = makeState();
+    const board = state.players.player.board;
+    for (let i = 0; i < board.vanguard.length; i++) board.vanguard[i] = createCardInstance("footman", "player");
+    for (let i = 0; i < board.support.length - 1; i++) board.support[i] = createCardInstance("footman", "player");
+    // Exactly one open slot left on the whole board (the last Support slot).
+
+    resolveEffect(state, "player", { kind: "summonCreature", creatureId: "militia-recruit", count: 3 }, null);
+    const summoned = [...board.vanguard, ...board.support].filter((c) => c?.defId === "militia-recruit");
+    expect(summoned).toHaveLength(1);
+  });
+});
+
+describe("Consume (DESIGN.md §16)", () => {
+  it("destroys the targeted ally — bypassing its Armor entirely, since it's a self-inflicted sacrifice — and buffs every other friendly creature", () => {
+    const state = makeState();
+    const squire = createCardInstance("royal-squire", "player"); // Armiger
+    state.players.player.board.vanguard[0] = squire;
+    const barding = createCardInstance("steel-barding", "player"); // damageReduction 2
+    state.players.player.board.equipment[0] = barding;
+    assignEquipment(state, "player", 0, { kind: "creature", instanceId: squire.instanceId });
+
+    const other = createCardInstance("footman", "player");
+    state.players.player.board.vanguard[1] = other;
+
+    resolveEffect(
+      state,
+      "player",
+      { kind: "consume", target: "targetCreature", attackDelta: 1, hpDelta: 1 },
+      { kind: "card", owner: "player", instanceId: squire.instanceId },
+    );
+
+    expect(state.players.player.graveyard).toContain(squire); // destroyed outright, Armor didn't save it
+    expect(other.attackDelta).toBe(1);
+    expect(other.hpDelta).toBe(1);
+  });
+
+  it("fizzles without crashing when there's no target", () => {
+    const state = makeState();
+    const footman = createCardInstance("footman", "player");
+    state.players.player.board.vanguard[0] = footman;
+    expect(() =>
+      resolveEffect(state, "player", { kind: "consume", target: "targetCreature", attackDelta: 1, hpDelta: 1 }, null),
+    ).not.toThrow();
+    expect(footman.attackDelta).toBe(0);
+  });
+});
+
+describe("Transformation (DESIGN.md §16)", () => {
+  it("replaces the creature in place, preserving its exhaustion state and statuses", () => {
+    const state = makeState();
+    const footman = createCardInstance("footman", "player");
+    footman.hasAttackedThisTurn = true;
+    footman.statuses = [{ type: "poison", amount: 3 }];
+    state.players.player.board.vanguard[2] = footman;
+
+    resolveEffect(
+      state,
+      "player",
+      { kind: "transform", target: "targetCreature", creatureId: "flame-imp" },
+      { kind: "card", owner: "player", instanceId: footman.instanceId },
+    );
+
+    const transformed = state.players.player.board.vanguard[2];
+    expect(transformed?.defId).toBe("flame-imp");
+    expect(transformed?.instanceId).not.toBe(footman.instanceId);
+    expect(transformed?.hasAttackedThisTurn).toBe(true);
+    expect(transformed?.statuses).toEqual([{ type: "poison", amount: 3 }]);
+  });
+
+  it("fires the new form's onPlay trigger", () => {
+    const state = makeState();
+    const footman = createCardInstance("footman", "player");
+    state.players.player.board.vanguard[0] = footman;
+    const startingHeroHp = state.players.player.hero.currentHp;
+
+    resolveEffect(
+      state,
+      "player",
+      { kind: "transform", target: "targetCreature", creatureId: "flame-imp" }, // flame-imp: On Play, deal 2 to own Hero
+      { kind: "card", owner: "player", instanceId: footman.instanceId },
+    );
+
+    expect(state.players.player.hero.currentHp).toBe(startingHeroHp - 2);
+  });
+
+  it("fizzles when the new (Massive) form has no contiguous room, leaving the original creature untouched", () => {
+    const state = makeState();
+    const board = state.players.player.board;
+    const footman = createCardInstance("footman", "player");
+    board.vanguard[0] = footman;
+    for (let i = 1; i < board.vanguard.length; i++) board.vanguard[i] = createCardInstance("footman", "player");
+
+    resolveEffect(
+      state,
+      "player",
+      { kind: "transform", target: "targetCreature", creatureId: "alpha-wolf" }, // spaceCost 2
+      { kind: "card", owner: "player", instanceId: footman.instanceId },
+    );
+
+    expect(board.vanguard[0]).toBe(footman); // unchanged — no room for a 2-slot form
+  });
+});
+
+describe("Hero Rule-Breaks (DESIGN.md §9)", () => {
+  it("resizes board arrays, pool caps, and starting Guard at match start", () => {
+    const testHeroId = "test-rule-break-hero";
+    CARD_DEFINITIONS[testHeroId] = {
+      id: testHeroId,
+      name: "Test Rule-Break Hero",
+      archetype: "hero",
+      cost: 0,
+      rarity: "legendary",
+      attack: 0,
+      hp: 20,
+      ruleBreaks: {
+        vanguardSlotDelta: 1,
+        supportSlotDelta: -1,
+        extraBuildingSlots: 1,
+        extraSpellAbilitySlots: 1,
+        startingGuardDelta: 10,
+        resourceCapDelta: 2,
+        manaCapDelta: -1,
+        energyCapDelta: 3,
+      },
+    };
+    try {
+      const state = createInitialGameState(testHeroId, [], "fighter", []);
+      const player = state.players.player;
+      expect(player.board.vanguard).toHaveLength(VANGUARD_SIZE + 1);
+      expect(player.board.support).toHaveLength(SUPPORT_SIZE - 1);
+      expect(player.board.buildings).toHaveLength(BUILDING_SLOTS + 1);
+      expect(player.board.spellAbilitySlots).toHaveLength(SPELL_ABILITY_SLOTS + 1);
+      expect(player.guard.current).toBe(STARTING_GUARD + 10);
+      expect(player.guard.max).toBe(STARTING_GUARD + 10);
+      expect(player.resources.cap).toBe(STARTING_POOL + 2);
+      expect(player.mana.cap).toBe(STARTING_POOL - 1);
+      expect(player.energy.cap).toBe(STARTING_POOL + 3);
+    } finally {
+      delete CARD_DEFINITIONS[testHeroId];
+    }
+  });
+
+  it("a Hero with no ruleBreaks gets the standard shape", () => {
+    const state = makeState();
+    const player = state.players.player;
+    expect(player.board.vanguard).toHaveLength(VANGUARD_SIZE);
+    expect(player.board.support).toHaveLength(SUPPORT_SIZE);
+    expect(player.board.buildings).toHaveLength(BUILDING_SLOTS);
+    expect(player.board.spellAbilitySlots).toHaveLength(SPELL_ABILITY_SLOTS);
+    expect(player.guard.current).toBe(STARTING_GUARD);
+    expect(player.resources.cap).toBe(STARTING_POOL);
   });
 });

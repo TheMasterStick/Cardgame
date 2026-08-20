@@ -45,7 +45,7 @@ const VALID_KEYWORDS: Keyword[] = [
 ];
 const VALID_EQUIPMENT_CATEGORIES: EquipmentCategory[] = ["weapon", "armor", "accessory", "mount"];
 const VALID_TRIGGER_NAMES: TriggerName[] = ["onPlay", "onAttack", "onDeath", "startOfTurn", "endOfTurn"];
-const EFFECT_KINDS_NEEDING_TARGET = new Set(["damage", "heal", "applyStatus", "buff"]);
+const EFFECT_KINDS_NEEDING_TARGET = new Set(["damage", "heal", "applyStatus", "buff", "consume", "transform"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -60,7 +60,7 @@ function isValidEffect(effect: unknown): effect is CardEffect {
   if (kind === "applyStatus" && (typeof effect.status !== "string" || typeof effect.amount !== "number")) return false;
   if ((kind === "drawCard" || kind === "gainGuard") && typeof effect.amount !== "number") return false;
   if (kind === "gainCap" && (typeof effect.pool !== "string" || typeof effect.amount !== "number")) return false;
-  if (kind === "summonCreature" && (typeof effect.creatureId !== "string" || !effect.creatureId)) return false;
+  if ((kind === "summonCreature" || kind === "transform") && (typeof effect.creatureId !== "string" || !effect.creatureId)) return false;
 
   return true;
 }

@@ -73,8 +73,25 @@ function equipmentDamageReduction(state: GameState, owner: PlayerId): number {
   return getBearerDamageReduction(state, owner, { kind: "hero" });
 }
 
-/** Picks a reasonable target for an onPlay Warcry-style effect: the weakest enemy creature, from either row. */
-function pickOnPlayTarget(state: GameState, owner: PlayerId): EffectTargetRef {
+/** The AI's own weakest (lowest current HP) creature, or null if it has none — shared by Consume/Transform's ally-only targeting. */
+function weakestOwnCreature(state: GameState, owner: PlayerId): CardInstance | null {
+  const ownCreatures = boardCreatures(state.players[owner].board);
+  if (ownCreatures.length === 0) return null;
+  return ownCreatures.reduce((a, b) => ((a.currentHp ?? Infinity) <= (b.currentHp ?? Infinity) ? a : b));
+}
+
+/**
+ * Picks a reasonable target for an onPlay trigger. Most onPlay effects
+ * (damage/applyStatus, the classic Warcry shape) want the weakest enemy
+ * creature; Consume/Transform are ally-only (DESIGN.md §16) and need the
+ * opposite side entirely, so this needs to know which effect it's picking
+ * for rather than always assuming "hostile."
+ */
+function pickOnPlayTarget(state: GameState, owner: PlayerId, effect?: CardEffect): EffectTargetRef {
+  if (effect?.kind === "consume" || effect?.kind === "transform") {
+    const weakest = weakestOwnCreature(state, owner);
+    return weakest ? { kind: "card", owner, instanceId: weakest.instanceId } : null;
+  }
   const enemy = otherPlayer(owner);
   const enemyCreatures = boardCreatures(state.players[enemy].board);
   if (enemyCreatures.length === 0) return null;
@@ -128,6 +145,11 @@ function pickActivationTarget(state: GameState, effect: CardEffect): EffectTarge
       const ownCreatures = boardCreatures(state.players[AI].board);
       return ownCreatures.length > 0 ? { kind: "card", owner: AI, instanceId: ownCreatures[0].instanceId } : "skip";
     }
+    case "consume":
+    case "transform": {
+      const weakest = weakestOwnCreature(state, AI);
+      return weakest ? { kind: "card", owner: AI, instanceId: weakest.instanceId } : "skip";
+    }
     case "drawCard":
     case "gainGuard":
     case "gainCap":
@@ -171,7 +193,8 @@ function playOneCard(state: GameState): string | null {
 
     let target: EffectTargetRef | null = null;
     if (def.archetype === "creature") {
-      target = pickOnPlayTarget(state, AI);
+      const onPlayEffect = def.triggers.find((t) => t.on === "onPlay")?.effect;
+      target = pickOnPlayTarget(state, AI, onPlayEffect);
     } else if (isInstantSpell) {
       const picked = pickActivationTarget(state, def.effect);
       if (picked === "skip") continue;

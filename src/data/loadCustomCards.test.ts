@@ -258,4 +258,60 @@ describe("custom card validation", () => {
       expect(card.ability).toBeUndefined();
     }
   });
+
+  it("accepts a Swarm summonCreature effect with a count", () => {
+    const card = validateCard({
+      id: "x",
+      name: "X",
+      archetype: "spell",
+      spellForm: "instant",
+      cost: 4,
+      rarity: "rare",
+      effect: { kind: "summonCreature", creatureId: "young-wolf", count: 3 },
+    });
+    expect(card).not.toBeNull();
+    if (card?.archetype === "spell" && card.spellForm === "instant") {
+      expect(card.effect).toEqual({ kind: "summonCreature", creatureId: "young-wolf", count: 3 });
+    }
+  });
+
+  it("accepts a Consume effect targeting an allied creature", () => {
+    const card = validateCard({
+      id: "x",
+      name: "X",
+      archetype: "ability",
+      cost: 2,
+      rarity: "rare",
+      activateCost: 2,
+      charges: "unlimited",
+      effect: { kind: "consume", target: "targetCreature", attackDelta: 1, hpDelta: 1 },
+    });
+    expect(card).not.toBeNull();
+  });
+
+  it("accepts a Transform effect naming the new creature", () => {
+    const card = validateCard({
+      id: "x",
+      name: "X",
+      archetype: "spell",
+      spellForm: "instant",
+      cost: 3,
+      rarity: "epic",
+      effect: { kind: "transform", target: "targetCreature", creatureId: "alpha-wolf" },
+    });
+    expect(card).not.toBeNull();
+  });
+
+  it("rejects a Transform effect missing creatureId", () => {
+    const card = validateCard({
+      id: "x",
+      name: "X",
+      archetype: "spell",
+      spellForm: "instant",
+      cost: 3,
+      rarity: "epic",
+      effect: { kind: "transform", target: "targetCreature" },
+    });
+    expect(card).toBeNull();
+  });
 });

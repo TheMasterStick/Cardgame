@@ -338,16 +338,20 @@ Used in a spell/ability's `effect` field, and in any creature/building
 | `drawCard` | `amount` | Draws for the acting player. No `target`. |
 | `gainGuard` | `amount` | Grants Guard to the acting player. No `target`. |
 | `gainCap` | `pool` (`"resource"\|"mana"\|"energy"`), `amount` | Raises a resource cap (and current amount) for the acting player. No `target`. |
-| `summonCreature` | `creatureId` (must match an existing Creature card's `id`) | Creates a copy of that Creature on the acting player's own board — Vanguard preferred, falling back to Support, respecting the summoned creature's own `spaceCost`. Fizzles silently (no crash, nothing created) if neither row has room, same philosophy as a Warcry with no legal target. The new creature has ordinary summoning sickness and fires its own `onPlay` triggers. No `target`. |
+| `summonCreature` | `creatureId` (must match an existing Creature card's `id`), `count`? (Swarm, default 1) | Creates `count` copies of that Creature on the acting player's own board — Vanguard preferred, falling back to Support, respecting the summoned creature's own `spaceCost`. Each copy fizzles silently (no crash, nothing created) if there's no room left, so a Swarm effect can partially land. The new creature(s) have ordinary summoning sickness and fire their own `onPlay` triggers. No `target`. |
+| `consume` | `target`, `attackDelta`?, `hpDelta`? | Force-destroys the targeted creature (bypasses Armor/damage-reduction — this is a sacrifice, not hostile damage) and then applies `attackDelta`/`hpDelta` as a permanent buff to every *other* friendly creature on the acting player's board. |
+| `transform` | `target`, `creatureId` (must match an existing Creature card's `id`) | Replaces the targeted creature in place with a fresh instance of `creatureId`, re-finding room for its `spaceCost` (its own occupied slot(s) count as vacated, so a same-size or smaller upgrade always fits, and a Massive upgrade can too if adjacent space is free) — fizzles silently if there's no room. The new form keeps the old instance's summoning-sickness/exhaustion state and any active statuses (same battle-hardened unit), but its stats reset to the new definition's base (any prior `buff`/Consume deltas are lost) and it fires its own `onPlay` triggers. |
 
-`target` (on the four kinds that need one) is one of:
+`target` (on the kinds that need one) is one of:
 `"targetCreature"`, `"targetBuilding"`, `"targetCreatureOrBuilding"`,
 `"targetAny"`, `"targetPlayer"`, `"allEnemyCreatures"`,
 `"allFriendlyCreatures"`, `"selfHero"`. The first five are picked by
 whoever activates the card (the UI asks for a target when needed); the
 last three resolve automatically. See DESIGN.md §4/§6 for how targeting
 actually plays out on the board — including how Taunt creatures can
-force a different target than the one picked.
+force a different target than the one picked. `consume`/`transform`
+are UI-scoped to the acting player's own creatures (see
+`ui/targeting.ts`), since both act on a friendly creature.
 
 `triggers` (creatures/buildings only) fire on: `"onPlay"`, `"onAttack"`,
 `"onDeath"`, `"onDefend"` (fires on the defending creature, pairs with
@@ -443,14 +447,17 @@ drop its JSON output straight into the array in
 > `mount` — only a `weapon`, once assigned, lets its bearer's Hero
 > attack), `attackBonus`, and `damageReduction`.
 > An `effect` object has a `kind` (`damage`, `heal`, `applyStatus`,
-> `buff`, `drawCard`, `gainGuard`, `gainCap`, or `summonCreature`) plus
-> kind-specific fields: `damage`/`heal` need `amount` + `target`;
-> `applyStatus` needs `status` (`"burn"` or `"poison"`) + `amount` +
-> `target`; `buff` needs `target` + `attackDelta`/`hpDelta`; `drawCard`
-> needs `amount`; `gainGuard` needs `amount`; `gainCap` needs `pool`
-> (`"resource"`/`"mana"`/`"energy"`) + `amount`; `summonCreature` needs
-> `creatureId` (must match an existing Creature card's `id`), no
-> `target`. `target` is one of
+> `buff`, `drawCard`, `gainGuard`, `gainCap`, `summonCreature`,
+> `consume`, or `transform`) plus kind-specific fields: `damage`/`heal`
+> need `amount` + `target`; `applyStatus` needs `status` (`"burn"` or
+> `"poison"`) + `amount` + `target`; `buff` needs `target` +
+> `attackDelta`/`hpDelta`; `drawCard` needs `amount`; `gainGuard` needs
+> `amount`; `gainCap` needs `pool` (`"resource"`/`"mana"`/`"energy"`) +
+> `amount`; `summonCreature` needs `creatureId` (must match an existing
+> Creature card's `id`) and optionally `count` (Swarm — defaults to 1),
+> no `target`; `consume` needs `target` and optionally
+> `attackDelta`/`hpDelta`; `transform` needs `target` + `creatureId`
+> (must match an existing Creature card's `id`). `target` is one of
 > `targetCreature`, `targetBuilding`, `targetCreatureOrBuilding`,
 > `targetAny`, `targetPlayer`, `allEnemyCreatures`,
 > `allFriendlyCreatures`, `selfHero`.
