@@ -162,12 +162,97 @@ describe("custom card validation", () => {
       rarity: "common",
       attack: 1,
       hp: 1,
-      keywords: ["stealth", "ward", "cleave", "drain", "bloodied", "summon", "warcry", "taunt", "armiger"],
+      keywords: [
+        "vanish",
+        "ward",
+        "cleave",
+        "drain",
+        "bloodied",
+        "summon",
+        "warcry",
+        "taunt",
+        "armiger",
+        "enrage",
+        "doubleStrike",
+        "resistant",
+        "deadeye",
+        "duel",
+        "crowdPleaser",
+        "bleed",
+        "burn",
+        "frostArmor",
+        "massive",
+      ],
     });
     expect(card).not.toBeNull();
     if (card?.archetype === "creature") {
-      expect(card.keywords).toEqual(["stealth", "ward", "cleave", "drain", "bloodied", "summon", "warcry", "taunt", "armiger"]);
+      expect(card.keywords).toEqual([
+        "vanish",
+        "ward",
+        "cleave",
+        "drain",
+        "bloodied",
+        "summon",
+        "warcry",
+        "taunt",
+        "armiger",
+        "enrage",
+        "doubleStrike",
+        "resistant",
+        "deadeye",
+        "duel",
+        "crowdPleaser",
+        "bleed",
+        "burn",
+        "frostArmor",
+        "massive",
+      ]);
     }
+  });
+
+  it("accepts a creatureType tag list", () => {
+    const card = validateCard({
+      id: "x",
+      name: "X",
+      archetype: "creature",
+      cost: 3,
+      rarity: "rare",
+      attack: 4,
+      hp: 7,
+      creatureType: ["defender", "elemental"],
+    });
+    expect(card).not.toBeNull();
+    if (card?.archetype === "creature") {
+      expect(card.creatureType).toEqual(["defender", "elemental"]);
+    }
+  });
+
+  it("accepts a well-formed instant ability with no activateCost/charges", () => {
+    const card = validateCard({
+      id: "test-instant-ability",
+      name: "Test Instant Ability",
+      archetype: "ability",
+      abilityForm: "instant",
+      cost: 2,
+      rarity: "common",
+      effect: { kind: "gainCap", pool: "energy", amount: 1 },
+    });
+    expect(card).not.toBeNull();
+    expect(card?.archetype).toBe("ability");
+  });
+
+  it("rejects an ability missing abilityForm", () => {
+    const card = validateCard({
+      id: "test-ability-no-form",
+      name: "Test Ability",
+      archetype: "ability",
+      cost: 2,
+      rarity: "common",
+      activateCost: 2,
+      charges: "unlimited",
+      effect: { kind: "drawCard", amount: 1 },
+    });
+    expect(card).toBeNull();
   });
 
   it("accepts a creature with an onDeath summonCreature trigger", () => {
@@ -280,6 +365,7 @@ describe("custom card validation", () => {
       id: "x",
       name: "X",
       archetype: "ability",
+      abilityForm: "activated",
       cost: 2,
       rarity: "rare",
       activateCost: 2,
@@ -320,6 +406,7 @@ describe("custom card validation", () => {
       id: "x",
       name: "X",
       archetype: "ability",
+      abilityForm: "activated",
       cost: 2,
       rarity: "rare",
       activateCost: 1,
@@ -334,6 +421,7 @@ describe("custom card validation", () => {
       id: "x",
       name: "X",
       archetype: "ability",
+      abilityForm: "activated",
       cost: 2,
       rarity: "rare",
       activateCost: 1,
@@ -341,5 +429,78 @@ describe("custom card validation", () => {
       effect: { kind: "garrison" },
     });
     expect(card).toBeNull();
+  });
+
+  it("accepts a gainIncome effect on a Building's When Built trigger", () => {
+    const card = validateCard({
+      id: "x",
+      name: "X",
+      archetype: "building",
+      cost: 1,
+      rarity: "common",
+      hp: 2,
+      triggers: [{ on: "onPlay", effect: { kind: "gainIncome", amount: 1 } }],
+    });
+    expect(card).not.toBeNull();
+    if (card?.archetype === "building") {
+      expect(card.triggers).toEqual([{ on: "onPlay", effect: { kind: "gainIncome", amount: 1 } }]);
+    }
+  });
+
+  it("accepts a Building ability with a lifetime charge count", () => {
+    const card = validateCard({
+      id: "x",
+      name: "X",
+      archetype: "building",
+      cost: 3,
+      rarity: "rare",
+      hp: 5,
+      ability: { effect: { kind: "drawCreature", amount: 1 }, activateCost: 2, charges: 2 },
+    });
+    expect(card).not.toBeNull();
+    if (card?.archetype === "building") {
+      expect(card.ability?.charges).toBe(2);
+    }
+  });
+
+  it("accepts a multi effect wrapping damage and applyStatus", () => {
+    const card = validateCard({
+      id: "x",
+      name: "X",
+      archetype: "spell",
+      spellForm: "charged",
+      cost: 3,
+      rarity: "epic",
+      activateCost: 3,
+      charges: 1,
+      effect: {
+        kind: "multi",
+        effects: [
+          { kind: "damage", amount: 2, target: "allEnemyCreatures" },
+          { kind: "applyStatus", status: "freeze", amount: 0, duration: 1, target: "allEnemyCreatures" },
+        ],
+      },
+    });
+    expect(card).not.toBeNull();
+  });
+
+  it("accepts equipment with keywords and a charge count", () => {
+    const card = validateCard({
+      id: "x",
+      name: "X",
+      archetype: "equipment",
+      cost: 3,
+      rarity: "rare",
+      category: "weapon",
+      attackBonus: 0,
+      damageReduction: 0,
+      keywords: ["vanish"],
+      charges: 3,
+    });
+    expect(card).not.toBeNull();
+    if (card?.archetype === "equipment") {
+      expect(card.keywords).toEqual(["vanish"]);
+      expect(card.charges).toBe(3);
+    }
   });
 });

@@ -25,7 +25,7 @@ const FIGHTER_DECK: DeckList = [
   ["warhammer-brawler", 1],
   ["demon-gate", 1],
   ["recruitment-station", 1],
-  ["call-to-arms", 1],
+  ["warhorn-of-gestmane", 1],
   ["bulletin-board", 1],
   ["gold-mine", 1],
   ["training-field", 1],

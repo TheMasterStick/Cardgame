@@ -1,6 +1,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { CARD_DEFINITIONS } from "../../data/cards";
-import { guardLabel } from "../../data/taxonomy";
+import { guardLabel, STATUS_ICONS } from "../../data/taxonomy";
 import { canAttack, creatureCanAttack, getEffectiveCreatureAttack, getHeroAttack, heroCanAttack } from "../../engine/combat";
 import { findBearerEquipment } from "../../engine/equipment";
 import { peekSpellDiscount } from "../../engine/hero";
@@ -206,7 +206,7 @@ export function PlayerBoard({
               <div className="card__statuses">
                 {playerState.hero.statuses.map((s, idx) => (
                   <span key={idx} className={`status status--${s.type}`}>
-                    {s.type === "burn" ? "🔥" : "☠"}
+                    {STATUS_ICONS[s.type]}
                     {s.amount}
                   </span>
                 ))}

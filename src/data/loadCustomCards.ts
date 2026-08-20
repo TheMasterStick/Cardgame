@@ -3,6 +3,7 @@ import type {
   CardArchetype,
   CardDefinition,
   CardEffect,
+  CreatureType,
   EquipmentCategory,
   Keyword,
   PassiveEffect,
@@ -35,17 +36,27 @@ const VALID_KEYWORDS: Keyword[] = [
   "formation",
   "advance",
   "push",
-  "stealth",
+  "vanish",
   "ward",
   "cleave",
   "drain",
   "bloodied",
   "summon",
   "armiger",
+  "enrage",
+  "doubleStrike",
+  "resistant",
+  "deadeye",
+  "duel",
+  "crowdPleaser",
+  "bleed",
+  "burn",
+  "frostArmor",
+  "massive",
 ];
 const VALID_EQUIPMENT_CATEGORIES: EquipmentCategory[] = ["weapon", "armor", "accessory", "mount"];
 const VALID_TRIGGER_NAMES: TriggerName[] = ["onPlay", "onAttack", "onDeath", "startOfTurn", "endOfTurn"];
-const EFFECT_KINDS_NEEDING_TARGET = new Set(["damage", "heal", "applyStatus", "buff", "consume", "transform", "garrison"]);
+const EFFECT_KINDS_NEEDING_TARGET = new Set(["damage", "heal", "applyStatus", "buff", "consume", "transform", "garrison", "devour"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
@@ -58,9 +69,10 @@ function isValidEffect(effect: unknown): effect is CardEffect {
   if (EFFECT_KINDS_NEEDING_TARGET.has(kind) && typeof effect.target !== "string") return false;
   if ((kind === "damage" || kind === "heal") && typeof effect.amount !== "number") return false;
   if (kind === "applyStatus" && (typeof effect.status !== "string" || typeof effect.amount !== "number")) return false;
-  if ((kind === "drawCard" || kind === "gainGuard") && typeof effect.amount !== "number") return false;
+  if ((kind === "drawCard" || kind === "gainGuard" || kind === "gainIncome" || kind === "drawCreature") && typeof effect.amount !== "number") return false;
   if (kind === "gainCap" && (typeof effect.pool !== "string" || typeof effect.amount !== "number")) return false;
   if ((kind === "summonCreature" || kind === "transform") && (typeof effect.creatureId !== "string" || !effect.creatureId)) return false;
+  if (kind === "multi" && (!Array.isArray(effect.effects) || !effect.effects.every(isValidEffect))) return false;
 
   return true;
 }
@@ -79,6 +91,26 @@ function parseTriggers(raw: unknown): Trigger[] {
 function parseKeywords(raw: unknown): Keyword[] {
   if (!Array.isArray(raw)) return [];
   return raw.filter((k): k is Keyword => typeof k === "string" && VALID_KEYWORDS.includes(k as Keyword));
+}
+
+const VALID_CREATURE_TYPES: CreatureType[] = [
+  "fighter",
+  "ranger",
+  "defender",
+  "beast",
+  "elemental",
+  "mage",
+  "ogre",
+  "giant",
+  "dragon",
+  "support",
+  "creature",
+];
+
+function parseCreatureType(raw: unknown): CreatureType[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const types = raw.filter((t): t is CreatureType => typeof t === "string" && VALID_CREATURE_TYPES.includes(t as CreatureType));
+  return types.length > 0 ? types : undefined;
 }
 
 /** Only the auraBuff template is accepted for a custom Building's passive — see BuildingDefinition's doc comment in types.ts. */
@@ -105,6 +137,7 @@ function parseBuildingAbility(raw: unknown): BuildingActivatedAbility | undefine
     effect: raw.effect,
     activateCost: raw.activateCost,
     pool: raw.pool,
+    charges: typeof raw.charges === "number" ? raw.charges : undefined,
     text: typeof raw.text === "string" ? raw.text : undefined,
   };
 }
@@ -132,6 +165,7 @@ export function validateCard(raw: unknown): CardDefinition | null {
         hp: raw.hp,
         keywords: parseKeywords(raw.keywords),
         triggers: parseTriggers(raw.triggers),
+        creatureType: parseCreatureType(raw.creatureType),
       };
     }
     case "building": {
@@ -157,12 +191,18 @@ export function validateCard(raw: unknown): CardDefinition | null {
       return { ...base, archetype: "spell", spellForm, activateCost: raw.activateCost, charges: raw.charges, effect: raw.effect };
     }
     case "ability": {
+      const abilityForm = raw.abilityForm;
+      if (abilityForm !== "instant" && abilityForm !== "activated") return null;
+      if (!isValidEffect(raw.effect)) return null;
+      if (abilityForm === "instant") {
+        return { ...base, archetype: "ability", abilityForm, effect: raw.effect };
+      }
       if (typeof raw.activateCost !== "number") return null;
       if (raw.charges !== "unlimited" && typeof raw.charges !== "number") return null;
-      if (!isValidEffect(raw.effect)) return null;
       return {
         ...base,
         archetype: "ability",
+        abilityForm,
         activateCost: raw.activateCost,
         charges: raw.charges,
         effect: raw.effect,
@@ -177,6 +217,8 @@ export function validateCard(raw: unknown): CardDefinition | null {
         category: raw.category as EquipmentCategory,
         attackBonus: raw.attackBonus,
         damageReduction: raw.damageReduction,
+        keywords: parseKeywords(raw.keywords),
+        charges: typeof raw.charges === "number" ? raw.charges : undefined,
       };
     }
     default:

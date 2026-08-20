@@ -1,13 +1,24 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { activateBuildingAbility } from "./building";
-import { declareAdvance, declareCreatureAttack, getEffectiveCreatureAttack, getHeroAttack, heroCanAttack } from "./combat";
+import {
+  creatureCanAttack,
+  declareAdvance,
+  declareCreatureAttack,
+  declareDuelMark,
+  declareHeroAttack,
+  getEffectiveCreatureAttack,
+  getEffectiveCreatureMaxHp,
+  getHeroAttack,
+  heroCanAttack,
+} from "./combat";
 import { CARD_DEFINITIONS } from "../data/cards";
 import { drawCard } from "./deck";
-import { damageCard, damagePlayer, gainCap, resolveEffect } from "./effects";
+import { damageCard, damagePlayer, gainCap, healCard, resolveEffect } from "./effects";
 import { assignEquipment } from "./equipment";
 import { createCardInstance, createInitialGameState } from "./factory";
 import { activateSlotCard, playCardFromHand, startTurn } from "./game";
 import { activateHeroPower, activateHeroSignature } from "./hero";
+import { applyStatus } from "./status";
 import {
   BUILDING_SLOTS,
   MAX_POOL,
@@ -69,8 +80,9 @@ describe("resources are spent from the pool matching the card's archetype", () =
 
     const result = playCardFromHand(state, "player", mine.instanceId);
     expect(result.ok).toBe(true);
-    // Started at 5, Gold Mine costs 2 (-> 3), then its own On Play grants +1 max/current Resources (-> 4).
-    expect(player.resources.current).toBe(4);
+    // Started at 5, Gold Mine costs 4 (-> 1), then its own When Built grants +1 max/current Resources (-> 2).
+    // The other When Built trigger (+2 income) only shows up on the next startTurn, not here.
+    expect(player.resources.current).toBe(2);
   });
 });
 
@@ -514,24 +526,47 @@ describe("Taunt", () => {
   });
 });
 
-describe("Frenzy", () => {
-  it("gains Attack equal to damage taken while it survives", () => {
+// makeState()'s player Hero is Fighter, whose Passive gives friendly
+// creatures +1 Attack (DESIGN.md §9) — every expected value below already
+// includes that +1 on top of Enrage itself.
+describe("Enrage (DESIGN.md §17)", () => {
+  it("gains live Attack equal to current missing HP, reduced again by healing", () => {
     const state = makeState();
-    const ogre = createCardInstance("berserking-ogre", "player");
+    const ogre = createCardInstance("berserking-ogre", "player"); // base 3 attack, +1 Fighter aura
     state.players.player.board.vanguard[0] = ogre;
 
     damageCard(state, "player", ogre.instanceId, 2);
-    expect(ogre.attackDelta).toBe(2);
-    expect(ogre.currentHp).toBe(3);
+    expect(ogre.attackDelta).toBe(0); // never permanently stored
+    expect(getEffectiveCreatureAttack(state, "player", ogre)).toBe(6); // 3 base + 1 aura + 2 missing HP
+
+    healCard(state, "player", ogre.instanceId, 1);
+    expect(getEffectiveCreatureAttack(state, "player", ogre)).toBe(5); // healing brings the bonus back down
   });
 
-  it("does not buff attack on the killing blow", () => {
+  it("has no bonus left once fully healed, and no bonus on the killing blow (dead creatures aren't queried)", () => {
     const state = makeState();
     const ogre = createCardInstance("berserking-ogre", "player");
     state.players.player.board.vanguard[0] = ogre;
 
+    expect(getEffectiveCreatureAttack(state, "player", ogre)).toBe(4); // 3 base + 1 aura, no missing HP
     damageCard(state, "player", ogre.instanceId, 5);
-    expect(ogre.attackDelta).toBe(0);
+    expect(ogre.currentHp).toBeLessThanOrEqual(0);
+  });
+});
+
+describe("Frenzy (DESIGN.md §17)", () => {
+  it("permanently gains Attack every time it attacks, regardless of whether the hit lands", () => {
+    const state = makeState();
+    const berserker = createCardInstance("berserker", "player");
+    berserker.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = berserker;
+
+    declareCreatureAttack(state, "player", berserker.instanceId, { type: "player" });
+    expect(berserker.attackDelta).toBe(2);
+
+    declareCreatureAttack(state, "player", berserker.instanceId, { type: "player" });
+    // still exhausted (hasAttackedThisTurn) — a second attack this turn is rejected, no further gain
+    expect(berserker.attackDelta).toBe(2);
   });
 });
 
@@ -548,14 +583,33 @@ describe("Immune", () => {
   });
 
   it("does not block an ability's damage", () => {
-    const state = makeState();
-    const golem = createCardInstance("arcane-golem", "opponent");
-    state.players.opponent.board.vanguard[0] = golem;
-    const ability = createCardInstance("executioners-strike", "player");
-    state.players.player.board.spellAbilitySlots[0] = ability;
+    // Executioner's Strike is Instant now (resolves on play, never reaches
+    // a slot) — none of the built-in "activated" Abilities deal damage, so
+    // a synthetic one exercises this specifically.
+    const testAbilityId = "test-damage-ability";
+    CARD_DEFINITIONS[testAbilityId] = {
+      id: testAbilityId,
+      name: "Test Damage Ability",
+      archetype: "ability",
+      abilityForm: "activated",
+      cost: 1,
+      rarity: "common",
+      activateCost: 1,
+      charges: "unlimited",
+      effect: { kind: "damage", amount: 2, target: "targetCreature" },
+    };
+    try {
+      const state = makeState();
+      const golem = createCardInstance("arcane-golem", "opponent");
+      state.players.opponent.board.vanguard[0] = golem;
+      const ability = createCardInstance(testAbilityId, "player");
+      state.players.player.board.spellAbilitySlots[0] = ability;
 
-    activateSlotCard(state, "player", 0, { kind: "card", owner: "opponent", instanceId: golem.instanceId });
-    expect(golem.currentHp).toBeLessThan(4);
+      activateSlotCard(state, "player", 0, { kind: "card", owner: "opponent", instanceId: golem.instanceId });
+      expect(golem.currentHp).toBeLessThan(4);
+    } finally {
+      delete CARD_DEFINITIONS[testAbilityId];
+    }
   });
 
   it("does not block a direct creature attack", () => {
@@ -730,7 +784,8 @@ describe("Formation", () => {
     const state = makeState();
     const veteran = createCardInstance("shieldwall-veteran", "player"); // base 2 attack, +2 formationBonus, +1 Fighter aura
     state.players.player.board.vanguard[1] = veteran;
-    state.players.player.board.vanguard[2] = createCardInstance("footman", "player");
+    // Formation is type-conditional now (DESIGN.md §17) — needs another Defender neighbor, not just any ally.
+    state.players.player.board.vanguard[2] = createCardInstance("shield-bearer", "player");
     expect(getEffectiveCreatureAttack(state, "player", veteran)).toBe(5);
   });
 
@@ -760,7 +815,7 @@ describe("Formation", () => {
     const state = makeState();
     const veteran = createCardInstance("shieldwall-veteran", "player");
     state.players.player.board.vanguard[0] = veteran;
-    state.players.player.board.vanguard[1] = createCardInstance("footman", "player");
+    state.players.player.board.vanguard[1] = createCardInstance("shield-bearer", "player");
     expect(getEffectiveCreatureAttack(state, "player", veteran)).toBe(5);
   });
 });
@@ -926,21 +981,37 @@ describe("Protector", () => {
 
 describe("Spell forms (DESIGN.md §1a)", () => {
   it("an Instant Spell casts straight from hand, resolves immediately, and goes to discard — never a slot, never the graveyard", () => {
-    const state = makeState(); // player = Fighter, no spell discount
-    const fireball = createCardInstance("fireball", "player");
-    state.players.player.hand.push(fireball);
-    const target = createCardInstance("hill-giant", "opponent"); // 9 HP
-    state.players.opponent.board.vanguard[0] = target;
+    // Fireball is Charged now (DESIGN.md §17) — none of the built-in Instant
+    // Spells deal damage, so a synthetic one exercises the Instant path itself.
+    const testSpellId = "test-instant-fireball";
+    CARD_DEFINITIONS[testSpellId] = {
+      id: testSpellId,
+      name: "Test Instant Fireball",
+      archetype: "spell",
+      spellForm: "instant",
+      cost: 4,
+      rarity: "rare",
+      effect: { kind: "damage", amount: 4, target: "targetAny" },
+    };
+    try {
+      const state = makeState(); // player = Fighter, no spell discount
+      const fireball = createCardInstance(testSpellId, "player");
+      state.players.player.hand.push(fireball);
+      const target = createCardInstance("hill-giant", "opponent"); // 9 HP
+      state.players.opponent.board.vanguard[0] = target;
 
-    const result = playCardFromHand(state, "player", fireball.instanceId, {
-      target: { kind: "card", owner: "opponent", instanceId: target.instanceId },
-    });
-    expect(result.ok).toBe(true);
-    expect(state.players.player.mana.current).toBe(1); // 5 - 4 cost
-    expect(state.players.player.board.spellAbilitySlots.every((c) => c === null)).toBe(true);
-    expect(state.players.player.discard).toContain(fireball);
-    expect(state.players.player.graveyard).not.toContain(fireball);
-    expect(target.currentHp).toBe(5); // 9 - 4
+      const result = playCardFromHand(state, "player", fireball.instanceId, {
+        target: { kind: "card", owner: "opponent", instanceId: target.instanceId },
+      });
+      expect(result.ok).toBe(true);
+      expect(state.players.player.mana.current).toBe(1); // 5 - 4 cost
+      expect(state.players.player.board.spellAbilitySlots.every((c) => c === null)).toBe(true);
+      expect(state.players.player.discard).toContain(fireball);
+      expect(state.players.player.graveyard).not.toContain(fireball);
+      expect(target.currentHp).toBe(5); // 9 - 4
+    } finally {
+      delete CARD_DEFINITIONS[testSpellId];
+    }
   });
 
   it("a Ritual/Charged Spell still goes into a slot and is activated separately, unaffected by the Instant path", () => {
@@ -1031,7 +1102,7 @@ describe("Hero Passive/Power/Signature (DESIGN.md §9)", () => {
   });
 });
 
-describe("Stealth (DESIGN.md §7)", () => {
+describe("Vanish (DESIGN.md §7/§17)", () => {
   it("cannot be chosen as the target of an enemy attack", () => {
     const state = makeState();
     const attacker = createCardInstance("footman", "player");
@@ -1047,7 +1118,7 @@ describe("Stealth (DESIGN.md §7)", () => {
     expect(result.ok).toBe(false);
   });
 
-  it("is permanently lost once the Stealthed creature attacks", () => {
+  it("is NOT lost once the Vanished creature attacks — unlike the old Stealth, there's no break-on-attack condition", () => {
     const state = makeState();
     const stalker = createCardInstance("shadow-stalker", "player");
     stalker.summonedTurn = 0;
@@ -1056,9 +1127,8 @@ describe("Stealth (DESIGN.md §7)", () => {
     state.players.opponent.board.vanguard[1] = bystander;
 
     declareCreatureAttack(state, "player", stalker.instanceId, { type: "player" });
-    expect(stalker.stealthBroken).toBe(true);
 
-    // Now targetable, from the opponent's side.
+    // Still untargetable, from the opponent's side.
     const counterAttacker = createCardInstance("footman", "opponent");
     counterAttacker.summonedTurn = 0;
     state.players.opponent.board.vanguard[2] = counterAttacker;
@@ -1066,7 +1136,7 @@ describe("Stealth (DESIGN.md §7)", () => {
       type: "creature",
       instanceId: stalker.instanceId,
     });
-    expect(result.ok).toBe(true);
+    expect(result.ok).toBe(false);
   });
 
   it("blocks a targeted Spell effect but not an AOE effect", () => {
@@ -1085,6 +1155,20 @@ describe("Stealth (DESIGN.md §7)", () => {
 
     resolveEffect(state, "player", { kind: "damage", amount: 1, target: "allEnemyCreatures" }, null, "spell");
     expect(stalker.currentHp).toBe(1); // AOE still lands
+  });
+
+  it("Cloak of Shadows grants the Hero Vanish, blocking a targeted attack against them", () => {
+    const state = makeState();
+    const cloak = createCardInstance("cloak-of-shadows", "opponent");
+    cloak.equipmentBearer = { kind: "hero" };
+    state.players.opponent.board.equipment[0] = cloak;
+
+    const attacker = createCardInstance("footman", "player");
+    attacker.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = attacker;
+
+    const result = declareCreatureAttack(state, "player", attacker.instanceId, { type: "player" });
+    expect(result.ok).toBe(false);
   });
 });
 
@@ -1132,8 +1216,9 @@ describe("Cleave (DESIGN.md §7)", () => {
     state.players.opponent.board.vanguard[4] = untouched; // column 3 is empty — not adjacent to anything
 
     declareCreatureAttack(state, "player", brawler.instanceId, { type: "creature", instanceId: primary.instanceId });
-    expect(leftFlank.currentHp).toBe(3); // 7 - 4 (3 base + 1 Fighter aura)
-    expect(rightFlank.currentHp).toBe(3);
+    // 7 - (3 base + 1 Fighter aura - 1 Resistant) = 4 — Stone Golem's own Resistant (DESIGN.md §17) applies to the splash hit too.
+    expect(leftFlank.currentHp).toBe(4);
+    expect(rightFlank.currentHp).toBe(4);
     expect(untouched.currentHp).toBe(7); // out of splash range, untouched
   });
 });
@@ -1400,11 +1485,11 @@ describe("Equipment (DESIGN.md §12)", () => {
     state.players.player.board.vanguard[0] = squire;
     const before = getEffectiveCreatureAttack(state, "player", squire);
 
-    const cloak = createCardInstance("cloak-of-shadows", "player"); // +3 Attack
-    state.players.player.board.equipment[0] = cloak;
+    const sword = createCardInstance("iron-sword", "player"); // +2 Attack
+    state.players.player.board.equipment[0] = sword;
     assignEquipment(state, "player", 0, { kind: "creature", instanceId: squire.instanceId });
 
-    expect(getEffectiveCreatureAttack(state, "player", squire)).toBe(before + 3);
+    expect(getEffectiveCreatureAttack(state, "player", squire)).toBe(before + 2);
   });
 
   it("an Armiger creature's equipped Armor reduces damage it takes", () => {
@@ -1454,11 +1539,11 @@ describe("Equipment (DESIGN.md §12)", () => {
 
   it("getHeroAttack folds in the Hero's equipped Weapon's attackBonus", () => {
     const state = makeState();
-    const cloak = createCardInstance("cloak-of-shadows", "player"); // +3 Attack
-    state.players.player.board.equipment[0] = cloak;
+    const sword = createCardInstance("iron-sword", "player"); // +2 Attack
+    state.players.player.board.equipment[0] = sword;
     assignEquipment(state, "player", 0, { kind: "hero" });
 
-    expect(getHeroAttack(state, "player")).toBe(state.players.player.hero.baseAttack + 3);
+    expect(getHeroAttack(state, "player")).toBe(state.players.player.hero.baseAttack + 2);
   });
 });
 
@@ -1726,7 +1811,7 @@ describe("Garrison (DESIGN.md §16)", () => {
     );
     expect(mine.garrisonedCreature).toBe(footman);
 
-    damageCard(state, "player", mine.instanceId, 3); // gold-mine has 3 hp — this destroys it
+    damageCard(state, "player", mine.instanceId, 5); // gold-mine has 5 hp — this destroys it
 
     expect(state.players.player.graveyard).toContain(mine);
     const onBoard = [...state.players.player.board.vanguard, ...state.players.player.board.support];
@@ -1756,10 +1841,256 @@ describe("Garrison (DESIGN.md §16)", () => {
       state.players.player.board.support[i] = createCardInstance("footman", "player");
     }
 
-    damageCard(state, "player", mine.instanceId, 3);
+    damageCard(state, "player", mine.instanceId, 5);
 
     expect(state.players.player.graveyard).toContain(footman);
     const onBoard = [...state.players.player.board.vanguard, ...state.players.player.board.support];
     expect(onBoard).not.toContain(footman);
+  });
+});
+
+describe("Resistant (DESIGN.md §17)", () => {
+  it("reduces every incoming hit by the printed amount, floored at 0", () => {
+    const state = makeState();
+    const golem = createCardInstance("stone-golem", "opponent"); // Resistant 1, 7 HP
+    state.players.opponent.board.vanguard[0] = golem;
+
+    expect(damageCard(state, "opponent", golem.instanceId, 3)).toBe(2);
+    expect(damageCard(state, "opponent", golem.instanceId, 1)).toBe(0); // floored, not negative
+  });
+});
+
+describe("Deadeye (DESIGN.md §17)", () => {
+  it("adds its bonus only when attacking a Backline (Support) target", () => {
+    const state = makeState();
+    const sniper = createCardInstance("longbow-sniper", "player"); // 3 base attack, Ranged + Deadeye +2
+    sniper.summonedTurn = 0;
+    state.players.player.board.support[0] = sniper;
+    const vanguardTarget = createCardInstance("hill-giant", "opponent");
+    state.players.opponent.board.vanguard[0] = vanguardTarget;
+    const backlineTarget = createCardInstance("footman", "opponent");
+    state.players.opponent.board.support[1] = backlineTarget;
+
+    const vanguardHpBefore = vanguardTarget.currentHp!;
+    declareCreatureAttack(state, "player", sniper.instanceId, { type: "creature", instanceId: vanguardTarget.instanceId });
+    expect(vanguardHpBefore - vanguardTarget.currentHp!).toBe(4); // 3 base + 1 Fighter aura, no Deadeye vs Vanguard
+
+    sniper.hasAttackedThisTurn = false;
+    const backlineHpBefore = backlineTarget.currentHp!;
+    declareCreatureAttack(state, "player", sniper.instanceId, { type: "creature", instanceId: backlineTarget.instanceId });
+    expect(backlineHpBefore - backlineTarget.currentHp!).toBe(6); // 3 base + 1 aura + 2 Deadeye vs Backline
+  });
+});
+
+describe("Double Strike (DESIGN.md §17)", () => {
+  it("can attack twice in the same turn, then is exhausted", () => {
+    const state = makeState();
+    const captain = createCardInstance("golden-company-captain", "player"); // Charge + Double Strike
+    captain.summonedTurn = state.turnNumber; // Charge lets it act despite just entering play
+    state.players.player.board.vanguard[0] = captain;
+
+    expect(creatureCanAttack(state, captain)).toBe(true);
+    declareCreatureAttack(state, "player", captain.instanceId, { type: "player" });
+    expect(captain.hasAttackedThisTurn).toBe(false); // one swing left
+    expect(creatureCanAttack(state, captain)).toBe(true);
+
+    declareCreatureAttack(state, "player", captain.instanceId, { type: "player" });
+    expect(captain.hasAttackedThisTurn).toBe(true); // both swings used
+    expect(creatureCanAttack(state, captain)).toBe(false);
+  });
+});
+
+describe("Bleed (DESIGN.md §17)", () => {
+  it("applies on a landed hit, via the previously-dead onAttack trigger wiring", () => {
+    const state = makeState();
+    const wolf = createCardInstance("grey-wolf", "player");
+    wolf.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = wolf;
+    const target = createCardInstance("hill-giant", "opponent"); // tough enough to survive the hit
+    state.players.opponent.board.vanguard[0] = target;
+
+    declareCreatureAttack(state, "player", wolf.instanceId, { type: "creature", instanceId: target.instanceId });
+    expect(target.statuses).toContainEqual({ type: "bleed", amount: 2, turnsRemaining: 2 });
+  });
+});
+
+describe("Freeze (DESIGN.md §17)", () => {
+  it("Frost Armor freezes an attacker, who then can't attack until it expires", () => {
+    const state = makeState();
+    const golem = createCardInstance("frost-golem", "opponent"); // Frost Armor
+    state.players.opponent.board.vanguard[0] = golem;
+    const attacker = createCardInstance("footman", "player");
+    attacker.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = attacker;
+
+    declareCreatureAttack(state, "player", attacker.instanceId, { type: "creature", instanceId: golem.instanceId });
+    expect(attacker.statuses).toContainEqual({ type: "freeze", amount: 0, turnsRemaining: 1 });
+
+    const secondAttacker = createCardInstance("footman", "player");
+    secondAttacker.summonedTurn = 0;
+    state.players.player.board.vanguard[1] = secondAttacker;
+    expect(creatureCanAttack(state, attacker)).toBe(false);
+    expect(creatureCanAttack(state, secondAttacker)).toBe(true); // unaffected
+  });
+
+  it("blocks the Hero from attacking too", () => {
+    const state = makeState();
+    applyStatus(state.players.player.hero, "freeze", 0, 1);
+    const sword = createCardInstance("iron-sword", "player");
+    state.players.player.board.equipment[0] = sword;
+    assignEquipment(state, "player", 0, { kind: "hero" });
+    expect(heroCanAttack(state, "player")).toBe(false);
+  });
+});
+
+describe("Crowd Pleaser (DESIGN.md §17)", () => {
+  it("scales Attack and HP with other creatures on the board, capped", () => {
+    const state = makeState();
+    const performer = createCardInstance("pit-fighter-of-klamet", "opponent"); // base 3/4, +1/+1 per other creature, cap +7/+6
+    state.players.opponent.board.vanguard[0] = performer;
+    expect(getEffectiveCreatureAttack(state, "opponent", performer)).toBe(3);
+    expect(getEffectiveCreatureMaxHp(state, "opponent", performer)).toBe(4);
+
+    for (let i = 1; i < 5; i++) {
+      state.players.opponent.board.vanguard[i] = createCardInstance("footman", "opponent");
+    }
+    for (let i = 0; i < 5; i++) {
+      state.players.player.board.vanguard[i] = createCardInstance("footman", "player");
+    }
+    // 9 other creatures on the board — Attack capped at +7, HP capped at +6.
+    expect(getEffectiveCreatureAttack(state, "opponent", performer)).toBe(10);
+    expect(getEffectiveCreatureMaxHp(state, "opponent", performer)).toBe(10);
+  });
+});
+
+describe("Duel (DESIGN.md §17)", () => {
+  it("marks a target, grants a live bonus, and bypasses Vanguard/Taunt while the mark holds", () => {
+    const state = makeState();
+    const veteran = createCardInstance("lorthaine-elite-veteran", "player"); // base 3/5, Duel +2/+2, activateCost 2
+    state.players.player.board.vanguard[0] = veteran;
+    const taunt = createCardInstance("stonewall-guardian", "opponent"); // Taunt
+    state.players.opponent.board.vanguard[0] = taunt;
+    const target = createCardInstance("apprentice-mage", "opponent");
+    state.players.opponent.board.support[0] = target;
+
+    const markResult = declareDuelMark(state, "player", veteran.instanceId, target.instanceId);
+    expect(markResult.ok).toBe(true);
+    expect(state.players.player.energy.current).toBe(3); // 5 - 2
+
+    expect(getEffectiveCreatureAttack(state, "player", veteran)).toBe(6); // 3 base + 1 aura + 2 Duel
+    expect(getEffectiveCreatureMaxHp(state, "player", veteran)).toBe(7); // 5 base + 2 Duel
+
+    // Bypasses the enemy Taunt and the Vanguard-first ladder to reach the marked Support target directly.
+    veteran.summonedTurn = 0;
+    const result = declareCreatureAttack(state, "player", veteran.instanceId, { type: "creature", instanceId: target.instanceId });
+    expect(result.ok).toBe(true);
+  });
+
+  it("stops applying once the marked creature dies, with no explicit cleanup", () => {
+    const state = makeState();
+    const veteran = createCardInstance("lorthaine-elite-veteran", "player");
+    state.players.player.board.vanguard[0] = veteran;
+    const target = createCardInstance("footman", "opponent");
+    state.players.opponent.board.vanguard[0] = target;
+    declareDuelMark(state, "player", veteran.instanceId, target.instanceId);
+    expect(getEffectiveCreatureAttack(state, "player", veteran)).toBe(6);
+
+    target.currentHp = 0;
+    // No board cleanup needed — killCardIfDead already removes it from the row, so the live lookup just stops finding it.
+    state.players.opponent.board.vanguard[0] = null;
+    expect(getEffectiveCreatureAttack(state, "player", veteran)).toBe(4); // back to 3 base + 1 aura
+  });
+});
+
+describe("Resource income (Farm/Gold Mine, DESIGN.md §17)", () => {
+  it("Farm permanently raises the controller's per-turn Resources trickle, reflected on the next startTurn", () => {
+    const state = makeState();
+    const player = state.players.player;
+    expect(player.resources.income).toBe(1);
+    const farm = createCardInstance("farm", "player");
+    player.hand.push(farm);
+    playCardFromHand(state, "player", farm.instanceId);
+    expect(player.resources.income).toBe(2);
+
+    player.resources.cap = 10;
+    player.resources.current = 3;
+    startTurn(state); // re-applies the regen formula for the current active player
+    expect(player.resources.current).toBe(5); // 3 + income of 2
+  });
+});
+
+describe("Recruitment Station drawCreature (DESIGN.md §17)", () => {
+  it("draws the first creature in the deck, skipping non-creatures ahead of it, and is capped at 2 activations", () => {
+    const state = makeState();
+    const player = state.players.player;
+    const spell = createCardInstance("lightning-bolt", "player");
+    const creature = createCardInstance("footman", "player");
+    player.deck = [spell, creature];
+    const station = createCardInstance("recruitment-station", "player");
+    player.board.buildings[0] = station;
+
+    const result = activateBuildingAbility(state, "player", 0);
+    expect(result.ok).toBe(true);
+    expect(player.hand).toContain(creature);
+    expect(player.deck).toContain(spell);
+    expect(player.deck).not.toContain(creature);
+
+    activateBuildingAbility(state, "player", 0); // 2nd of 2 activations — deck now empty, fizzles harmlessly
+    const third = activateBuildingAbility(state, "player", 0);
+    expect(third.ok).toBe(false); // out of charges
+  });
+});
+
+describe("Devour (DESIGN.md §17 — Elder Flame Imp)", () => {
+  it("destroys the target and gains half its printed Attack/HP, rounded down", () => {
+    const state = makeState();
+    state.players.player.energy.cap = 10;
+    state.players.player.energy.current = 10; // Elder Flame Imp costs 7, above the default 5 max
+    const imp = createCardInstance("elder-flame-imp", "player");
+    state.players.player.hand.push(imp);
+    const target = createCardInstance("hill-giant", "opponent"); // 7 attack, 9 hp -> +3/+4
+    state.players.opponent.board.vanguard[0] = target;
+
+    const result = playCardFromHand(state, "player", imp.instanceId, {
+      target: { kind: "card", owner: "opponent", instanceId: target.instanceId },
+    });
+    expect(result.ok).toBe(true);
+    expect(state.players.opponent.graveyard).toContain(target);
+    const placed = state.players.player.board.vanguard.find((c) => c?.instanceId === imp.instanceId);
+    expect(placed?.attackDelta).toBe(3);
+    expect(placed?.hpDelta).toBe(4);
+  });
+});
+
+describe("Multi effect (DESIGN.md §17 — Frost Nova)", () => {
+  it("resolves every listed sub-effect against the same target", () => {
+    const state = makeState();
+    const nova = createCardInstance("frost-nova", "player");
+    state.players.player.board.spellAbilitySlots[0] = nova;
+    const enemy = createCardInstance("footman", "opponent");
+    state.players.opponent.board.vanguard[0] = enemy;
+
+    const result = activateSlotCard(state, "player", 0);
+    expect(result.ok).toBe(true);
+    expect(enemy.currentHp).toBe(1); // 3 - 2
+    expect(enemy.statuses).toContainEqual({ type: "freeze", amount: 0, turnsRemaining: 1 });
+  });
+});
+
+describe("Cloak of Shadows charges (DESIGN.md §17)", () => {
+  it("discards itself after the Hero's 3rd attack while equipped", () => {
+    const state = makeState();
+    const cloak = createCardInstance("cloak-of-shadows", "player");
+    state.players.player.board.equipment[0] = cloak;
+    assignEquipment(state, "player", 0, { kind: "hero" });
+
+    for (let i = 0; i < 2; i++) {
+      declareHeroAttack(state, "player", { type: "player" }); // hits own Hero's opponent portrait target shape; only charge-ticking matters here
+      state.players.player.hero.hasAttackedThisTurn = false; // reset between swings for this test's purposes
+    }
+    expect(cloak.chargesRemaining).toBe(1);
+    declareHeroAttack(state, "player", { type: "player" });
+    expect(state.players.player.board.equipment[0]).toBeNull();
+    expect(state.players.player.discard).toContain(cloak);
   });
 });

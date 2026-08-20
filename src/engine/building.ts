@@ -41,9 +41,11 @@ function poolFor(player: PlayerState, pool: "resource" | "mana" | "energy"): { p
 /**
  * Activates a Building's ability (DESIGN.md §11) — Resources-costed by
  * default, or whichever pool the card specifies (e.g. a Demon Gate
- * spending Mana). No charge count: a Building is a persistent battlefield
- * object, not consumed on use, so this is gated only by affordability —
- * repeatable freely, even more than once per turn, unlike Hero Power.
+ * spending Mana). Gated only by affordability by default — repeatable
+ * freely, even more than once per turn, unlike Hero Power — unless the
+ * ability sets a lifetime `charges` count (Recruitment Station: 2), in
+ * which case it stops working once exhausted while the Building itself
+ * stays on the board.
  */
 export function activateBuildingAbility(
   state: GameState,
@@ -57,12 +59,16 @@ export function activateBuildingAbility(
   const def = CARD_DEFINITIONS[card.defId] as BuildingDefinition;
   const ability = def.ability;
   if (!ability) return { ok: false, reason: "This Building has no activated ability." };
+  if (typeof card.chargesRemaining === "number" && card.chargesRemaining <= 0) {
+    return { ok: false, reason: "This ability has no activations left." };
+  }
 
   const { pool, label } = poolFor(player, ability.pool ?? "resource");
   if (pool.current < ability.activateCost) return { ok: false, reason: `Not enough ${label}.` };
 
   pool.current -= ability.activateCost;
   resolveEffect(state, owner, ability.effect, target);
+  if (typeof card.chargesRemaining === "number") card.chargesRemaining -= 1;
   state.log.push(`${card.defId} (${owner})'s ability activates.`);
   return { ok: true };
 }

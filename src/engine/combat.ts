@@ -1,8 +1,9 @@
 import { CARD_DEFINITIONS } from "../data/cards";
 import { damageCard, damagePlayer, hasKeyword, resolveEffect, restoreGuard, type EffectTargetRef } from "./effects";
 import { getBuildingAuraAttackBonus } from "./building";
-import { getBearerAttackBonus, findBearerEquipment } from "./equipment";
+import { getBearerAttackBonus, findBearerEquipment, heroHasVanish, tickEquipmentChargesOnHeroAttack } from "./equipment";
 import { getAuraAttackBonus } from "./hero";
+import { isFrozen } from "./status";
 import {
   otherPlayer,
   type CardInstance,
@@ -43,20 +44,60 @@ function isFlanking(row: (CardInstance | null)[], columns: number[]): boolean {
   return columns.some((i) => i === 0 || i === row.length - 1);
 }
 
-function hasFormationAlly(row: (CardInstance | null)[], columns: number[], instanceId: string): boolean {
-  // Out-of-bounds neighbors (a creature sitting in the edge column) must
-  // read as "no neighbor" — a plain `row[-1]`/`row[row.length]` array access
-  // returns undefined rather than null, which would otherwise crash below.
+/**
+ * Formation (DESIGN.md §5/§17): true if an adjacent, same-row creature
+ * shares at least one `creatureType` tag with `selfDef` — "next to other
+ * Fighters" / "next to another Defender" are both this same check, just
+ * with a different tag on the card itself. Out-of-bounds neighbors (a
+ * creature sitting in the edge column) read as "no neighbor" — a plain
+ * `row[-1]`/`row[row.length]` array access returns undefined rather than
+ * null, which would otherwise crash below.
+ */
+function hasFormationAlly(
+  row: (CardInstance | null)[],
+  columns: number[],
+  instanceId: string,
+  selfDef: CreatureDefinition,
+): boolean {
   const leftIndex = Math.min(...columns) - 1;
   const rightIndex = Math.max(...columns) + 1;
   const left = leftIndex >= 0 ? row[leftIndex] : null;
   const right = rightIndex < row.length ? row[rightIndex] : null;
-  return (left !== null && left.instanceId !== instanceId) || (right !== null && right.instanceId !== instanceId);
+  const neighbors = [left, right].filter((c): c is CardInstance => c !== null && c.instanceId !== instanceId);
+  return neighbors.some((n) => {
+    const nDef = CARD_DEFINITIONS[n.defId] as CreatureDefinition;
+    return nDef.creatureType?.some((t) => selfDef.creatureType?.includes(t)) ?? false;
+  });
 }
 
-/** Stealth (DESIGN.md §7), until broken by this creature attacking or (not yet built) a Reveal effect. */
-function hasStealth(card: CardInstance): boolean {
-  return hasKeyword(card, "stealth") && !card.stealthBroken;
+/** Vanish (DESIGN.md §7/§17): untargetable by targeted attacks/effects for as long as the keyword is present — unlike the old Stealth, there's no break-on-attack condition. */
+function hasVanish(card: CardInstance): boolean {
+  return hasKeyword(card, "vanish");
+}
+
+/** All creatures currently on either player's board, deduplicated by instanceId (a Massive creature occupies more than one slot with the same instance). */
+function allCreaturesOnBoard(state: GameState): CardInstance[] {
+  const result: CardInstance[] = [];
+  const seen = new Set<string>();
+  for (const owner of ["player", "opponent"] as const) {
+    for (const c of [...state.players[owner].board.vanguard, ...state.players[owner].board.support]) {
+      if (c && !seen.has(c.instanceId)) {
+        seen.add(c.instanceId);
+        result.push(c);
+      }
+    }
+  }
+  return result;
+}
+
+/** Whether a given creature instance is still alive on either player's board — Duel's bonus depends on this staying true. */
+function isCreatureAliveOnBoard(state: GameState, instanceId: string): boolean {
+  for (const owner of ["player", "opponent"] as const) {
+    for (const row of [state.players[owner].board.vanguard, state.players[owner].board.support]) {
+      if (row.some((c) => c?.instanceId === instanceId)) return true;
+    }
+  }
+  return false;
 }
 
 /** Cleave (DESIGN.md §7): the creatures directly adjacent, same row, to whatever columns the primary target occupies. */
@@ -95,21 +136,80 @@ export function getEffectiveCreatureAttack(state: GameState, owner: PlayerId, ca
   ) {
     attack += def.bloodiedBonus.attackDelta;
   }
+  if (def.enrageBonus && def.keywords.includes("enrage") && card.currentHp !== undefined) {
+    const missingHp = Math.max(0, def.hp + card.hpDelta - card.currentHp);
+    attack += missingHp * def.enrageBonus.attackPerMissingHp;
+  }
+  if (def.crowdPleaserBonus && def.keywords.includes("crowdPleaser")) {
+    const otherCount = allCreaturesOnBoard(state).filter((c) => c.instanceId !== card.instanceId).length;
+    attack += Math.min(def.crowdPleaserBonus.attackCap, otherCount * def.crowdPleaserBonus.attackPerCreature);
+  }
+  if (
+    def.duel &&
+    def.keywords.includes("duel") &&
+    card.markedTargetId &&
+    isCreatureAliveOnBoard(state, card.markedTargetId)
+  ) {
+    attack += def.duel.bonus.attackDelta;
+  }
   const located = locateOnBoard(state, owner, card.instanceId);
   if (!located) return attack;
   if (def.flankBonus && def.keywords.includes("flank") && isFlanking(located.row, located.columns)) {
     attack += def.flankBonus.attackDelta;
   }
-  if (def.formationBonus && def.keywords.includes("formation") && hasFormationAlly(located.row, located.columns, card.instanceId)) {
+  if (
+    def.formationBonus &&
+    def.keywords.includes("formation") &&
+    hasFormationAlly(located.row, located.columns, card.instanceId, def)
+  ) {
     attack += def.formationBonus.attackDelta;
   }
   return attack;
+}
+
+/**
+ * Live effective max HP — a display-only overlay (DESIGN.md's live-bonus
+ * "Open default", see PositionalBonus's doc comment in types.ts): folds in
+ * Formation's optional `hpDelta`, Crowd Pleaser, and Duel, purely for
+ * showing an accurate "X / Y" in the UI. `currentHp`, death checks
+ * (killCardIfDead), and healCard's cap are all computed from the base
+ * `def.hp + card.hpDelta` only and never consult this function — losing a
+ * live bonus (an ally dying, a Formation partner stepping away) must never
+ * retroactively kill a creature just because its displayed max HP dropped.
+ */
+export function getEffectiveCreatureMaxHp(state: GameState, owner: PlayerId, card: CardInstance): number {
+  const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
+  let hp = def.hp + card.hpDelta;
+  if (def.crowdPleaserBonus && def.keywords.includes("crowdPleaser")) {
+    const otherCount = allCreaturesOnBoard(state).filter((c) => c.instanceId !== card.instanceId).length;
+    hp += Math.min(def.crowdPleaserBonus.hpCap, otherCount * def.crowdPleaserBonus.hpPerCreature);
+  }
+  if (
+    def.duel &&
+    def.keywords.includes("duel") &&
+    card.markedTargetId &&
+    isCreatureAliveOnBoard(state, card.markedTargetId) &&
+    def.duel.bonus.hpDelta
+  ) {
+    hp += def.duel.bonus.hpDelta;
+  }
+  const located = locateOnBoard(state, owner, card.instanceId);
+  if (
+    located &&
+    def.formationBonus?.hpDelta &&
+    def.keywords.includes("formation") &&
+    hasFormationAlly(located.row, located.columns, card.instanceId, def)
+  ) {
+    hp += def.formationBonus.hpDelta;
+  }
+  return hp;
 }
 
 export function creatureCanAttack(state: GameState, card: CardInstance): boolean {
   const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
   if (card.hasAttackedThisTurn) return false;
   if (card.summonedTurn === state.turnNumber && !def.keywords.includes("charge")) return false;
+  if (isFrozen(card)) return false;
   return true;
 }
 
@@ -117,6 +217,7 @@ export function creatureCanAttack(state: GameState, card: CardInstance): boolean
 export function heroCanAttack(state: GameState, owner: PlayerId): boolean {
   const player = state.players[owner];
   if (player.hero.hasAttackedThisTurn) return false;
+  if (isFrozen(player.hero)) return false;
   const weapon = findBearerEquipment(state, owner, { kind: "hero" });
   if (!weapon) return false;
   return (CARD_DEFINITIONS[weapon.defId] as EquipmentDefinition).category === "weapon";
@@ -196,11 +297,18 @@ function validateTarget(
   const defenderOwner = otherPlayer(attackerOwner);
   const defenderBoard = state.players[defenderOwner].board;
 
+  // Infiltrate (DESIGN.md §5/§17) bypasses every board-position restriction
+  // below — Taunt, the Vanguard/Support ladder, Building column-clearing —
+  // for every target type, not just Buildings/Hero. Duel (§17) reuses this
+  // same bypass for its one marked target (declareCreatureAttack sets
+  // `infiltrate: true` on the reach profile it passes in for that case).
+  if (reach.infiltrate) return { ok: true };
+
   if (target.type === "creature") {
-    const stealthed = [...defenderBoard.vanguard, ...defenderBoard.support].find(
-      (c): c is CardInstance => c?.instanceId === target.instanceId && hasStealth(c),
+    const vanished = [...defenderBoard.vanguard, ...defenderBoard.support].find(
+      (c): c is CardInstance => c?.instanceId === target.instanceId && hasVanish(c),
     );
-    if (stealthed) return { ok: false, reason: "This creature has Stealth and can't be targeted." };
+    if (vanished) return { ok: false, reason: "This creature has Vanish and can't be targeted." };
 
     const onVanguard = defenderBoard.vanguard.some((c) => c?.instanceId === target.instanceId);
     if (onVanguard) return checkTaunt(defenderBoard.vanguard, target.instanceId, "Vanguard");
@@ -219,9 +327,10 @@ function validateTarget(
     return { ok: false, reason: "Target creature not found." };
   }
 
-  if (reach.infiltrate) return { ok: true };
-
   if (target.type === "player") {
+    if (heroHasVanish(state, defenderOwner)) {
+      return { ok: false, reason: "This Hero has Vanish and can't be targeted." };
+    }
     if (rowHasTaunt(defenderBoard.vanguard)) {
       return { ok: false, reason: "An enemy Taunt creature in Vanguard must be attacked first." };
     }
@@ -302,6 +411,13 @@ function pickProtectorRedirect(
  * by itself: a Ranged creature being attacked by a melee attacker still
  * trades damage back exactly like melee vs melee.
  */
+interface TradeResult {
+  /** Actual (post-reduction) damage dealt to the defender — 0 if the defender was never found. */
+  dealtToDefender: number;
+  /** The creature that actually took the hit — may differ from the declared target via Protector redirect. Undefined if no defender was found at all. */
+  actualDefenderId?: string;
+}
+
 function resolveCreatureTrade(
   state: GameState,
   attackerOwner: PlayerId,
@@ -312,7 +428,7 @@ function resolveCreatureTrade(
   attackerHasDrain: boolean,
   defenderOwner: PlayerId,
   defenderInstanceId: string,
-): void {
+): TradeResult {
   const defenderBoard = state.players[defenderOwner].board;
 
   const redirect = pickProtectorRedirect(state, defenderOwner, defenderInstanceId, attackerAttack);
@@ -324,7 +440,7 @@ function resolveCreatureTrade(
     (vanguardColumn !== -1 ? defenderBoard.vanguard[vanguardColumn] : null) ??
     defenderBoard.support.find((c) => c?.instanceId === actualDefenderId) ??
     null;
-  if (!defender) return;
+  if (!defender) return { dealtToDefender: 0 };
   const defenderAttack = getEffectiveCreatureAttack(state, defenderOwner, defender);
 
   const attackerTarget: EffectTargetRef =
@@ -350,13 +466,14 @@ function resolveCreatureTrade(
   }
 
   const attackerEscapesRetaliation = attackerIsRanged && !hasKeyword(defender, "ranged");
-  if (attackerEscapesRetaliation || defenderAttack <= 0) return;
-
-  const dealtToAttacker =
-    attackerInstanceId === "hero"
-      ? damagePlayer(state, attackerOwner, defenderAttack)
-      : damageCard(state, attackerOwner, attackerInstanceId, defenderAttack);
-  if (hasKeyword(defender, "drain")) restoreGuard(state, defenderOwner, dealtToAttacker);
+  if (!attackerEscapesRetaliation && defenderAttack > 0) {
+    const dealtToAttacker =
+      attackerInstanceId === "hero"
+        ? damagePlayer(state, attackerOwner, defenderAttack)
+        : damageCard(state, attackerOwner, attackerInstanceId, defenderAttack);
+    if (hasKeyword(defender, "drain")) restoreGuard(state, defenderOwner, dealtToAttacker);
+  }
+  return { dealtToDefender, actualDefenderId };
 }
 
 /**
@@ -365,6 +482,14 @@ function resolveCreatureTrade(
  * highlight as clickable during a pending attack, so it never lights up a
  * target the engine would then reject.
  */
+/** Applies Duel's targeting bypass (DESIGN.md §17) on top of a creature's own reach profile — the attacker treats its one marked target as if it had Infiltrate, regardless of its real keywords. */
+function reachWithDuelBypass(reach: ReachProfile, attacker: CardInstance, target: AttackTarget): ReachProfile {
+  if (target.type === "creature" && attacker.markedTargetId === target.instanceId) {
+    return { ...reach, infiltrate: true };
+  }
+  return reach;
+}
+
 export function canAttack(
   state: GameState,
   attackerOwner: PlayerId,
@@ -383,7 +508,7 @@ export function canAttack(
   const reach = reachProfileOf(def);
   if (onSupport && !reach.ranged) return false;
   if (!creatureCanAttack(state, attacker)) return false;
-  return validateTarget(state, attackerOwner, reach, target).ok;
+  return validateTarget(state, attackerOwner, reachWithDuelBypass(reach, attacker, target), target).ok;
 }
 
 export function declareCreatureAttack(
@@ -398,8 +523,9 @@ export function declareCreatureAttack(
   const attacker = onVanguard ?? onSupport;
   if (!attacker) return { ok: false, reason: "Attacker not found on the board." };
   const def = CARD_DEFINITIONS[attacker.defId] as CreatureDefinition;
-  const reach = reachProfileOf(def);
-  if (onSupport && !reach.ranged) {
+  const baseReach = reachProfileOf(def);
+  const reach = reachWithDuelBypass(baseReach, attacker, target);
+  if (onSupport && !baseReach.ranged) {
     return { ok: false, reason: "Only Ranged creatures can attack from Support." };
   }
   if (!creatureCanAttack(state, attacker)) {
@@ -408,8 +534,19 @@ export function declareCreatureAttack(
   const validation = validateTarget(state, attackerOwner, reach, target);
   if (!validation.ok) return validation;
 
-  const attackerAttack = getEffectiveCreatureAttack(state, attackerOwner, attacker);
   const defenderOwner = otherPlayer(attackerOwner);
+  let attackerAttack = getEffectiveCreatureAttack(state, attackerOwner, attacker);
+  // Deadeye (DESIGN.md §17): attack-instance-scoped, not live-recomputed and
+  // not permanently stored — only applies while resolving an attack against
+  // a Backline (Support) target, and only for this one attack.
+  if (
+    def.keywords.includes("deadeye") &&
+    def.deadeyeBonus &&
+    target.type === "creature" &&
+    state.players[defenderOwner].board.support.some((c) => c?.instanceId === target.instanceId)
+  ) {
+    attackerAttack += def.deadeyeBonus.attackDelta;
+  }
   const attackerHasDrain = def.keywords.includes("drain");
 
   if (target.type === "creature") {
@@ -418,7 +555,7 @@ export function declareCreatureAttack(
     // the column indices it occupied stay valid for finding its neighbors.
     const cleaveInfo = def.keywords.includes("cleave") ? locateOnBoard(state, defenderOwner, target.instanceId) : null;
 
-    resolveCreatureTrade(
+    const trade = resolveCreatureTrade(
       state,
       attackerOwner,
       attackerInstanceId,
@@ -429,6 +566,17 @@ export function declareCreatureAttack(
       defenderOwner,
       target.instanceId,
     );
+
+    // onAttack (Poison-on-hit, Bleed-on-hit, Burn-on-hit) only fires against
+    // whoever actually took the damage (Protector redirect included), and
+    // only if a hit actually landed.
+    if (trade.actualDefenderId && trade.dealtToDefender > 0) {
+      fireOnAttackTrigger(state, attackerOwner, attacker, {
+        kind: "card",
+        owner: defenderOwner,
+        instanceId: trade.actualDefenderId,
+      });
+    }
 
     if (cleaveInfo) {
       for (const splashTarget of cleaveSplashTargets(cleaveInfo.row, cleaveInfo.columns)) {
@@ -444,8 +592,21 @@ export function declareCreatureAttack(
     if (attackerHasDrain) restoreGuard(state, attackerOwner, dealt);
   }
 
-  if (hasKeyword(attacker, "stealth")) attacker.stealthBroken = true;
-  attacker.hasAttackedThisTurn = true;
+  // Frenzy (DESIGN.md §17): permanent Attack gained every time this
+  // creature attacks, regardless of target type or whether the hit landed.
+  if (def.keywords.includes("frenzy") && def.frenzyBonus) {
+    attacker.attackDelta += def.frenzyBonus.attackDelta;
+    state.log.push(`${attacker.defId} (${attackerOwner}) Frenzies, gaining +${def.frenzyBonus.attackDelta} Attack.`);
+  }
+
+  // Double Strike (DESIGN.md §17): up to 2 attacks per turn instead of 1.
+  // `hasAttackedThisTurn` keeps meaning "exhausted" for every other caller.
+  if (def.keywords.includes("doubleStrike")) {
+    attacker.attacksUsedThisTurn = (attacker.attacksUsedThisTurn ?? 0) + 1;
+    if (attacker.attacksUsedThisTurn >= 2) attacker.hasAttackedThisTurn = true;
+  } else {
+    attacker.hasAttackedThisTurn = true;
+  }
   return { ok: true };
 }
 
@@ -473,6 +634,7 @@ export function declareHeroAttack(
   }
 
   state.players[attackerOwner].hero.hasAttackedThisTurn = true;
+  tickEquipmentChargesOnHeroAttack(state, attackerOwner);
   return { ok: true };
 }
 
@@ -523,4 +685,43 @@ export function fireOnAttackTrigger(
       resolveEffect(state, attackerOwner, trigger.effect, target);
     }
   }
+}
+
+/**
+ * Duel (DESIGN.md §17): Lorthaine Elite Veteran's Energy-costed activation
+ * that marks one enemy creature. Deliberately bespoke, single-card logic
+ * rather than a generic CardEffect — matches the project's existing
+ * precedent (see HeroRuleBreaks' doc comment) that a one-off mechanic is
+ * built as one-off code, not a general system. "Only one target may be
+ * marked" falls out naturally: re-activating just overwrites
+ * `markedTargetId`. The bonus/targeting-bypass it grants is entirely live
+ * (getEffectiveCreatureAttack/MaxHp, reachWithDuelBypass) — there's nothing
+ * to clean up when the marked creature dies, the live checks just stop
+ * finding it.
+ */
+export function declareDuelMark(
+  state: GameState,
+  owner: PlayerId,
+  instanceId: string,
+  targetInstanceId: string,
+): ValidationResult {
+  const player = state.players[owner];
+  const board = player.board;
+  const card = board.vanguard.find((c) => c?.instanceId === instanceId) ?? board.support.find((c) => c?.instanceId === instanceId);
+  if (!card) return { ok: false, reason: "This creature isn't on your board." };
+  const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
+  if (!def.keywords.includes("duel") || !def.duel) return { ok: false, reason: "This creature has no Duel activation." };
+  if (isFrozen(card)) return { ok: false, reason: "This creature is Frozen and can't act." };
+  if (player.energy.current < def.duel.activateCost) return { ok: false, reason: "Not enough Energy." };
+
+  const defenderOwner = otherPlayer(owner);
+  const enemyBoard = state.players[defenderOwner].board;
+  const enemyTarget = enemyBoard.vanguard.find((c) => c?.instanceId === targetInstanceId) ?? enemyBoard.support.find((c) => c?.instanceId === targetInstanceId);
+  if (!enemyTarget) return { ok: false, reason: "Target creature not found on the enemy board." };
+  if (hasVanish(enemyTarget)) return { ok: false, reason: "This creature has Vanish and can't be targeted." };
+
+  player.energy.current -= def.duel.activateCost;
+  card.markedTargetId = targetInstanceId;
+  state.log.push(`${card.defId} (${owner}) marks ${enemyTarget.defId} (${defenderOwner}) for Duel.`);
+  return { ok: true };
 }

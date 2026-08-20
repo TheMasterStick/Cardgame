@@ -3,6 +3,7 @@ import {
   creatureCanAttack,
   declareAdvance,
   declareCreatureAttack,
+  declareDuelMark,
   declareHeroAttack,
   getEffectiveCreatureAttack,
   getHeroAttack,
@@ -54,18 +55,18 @@ function boardCreatures(board: BoardState): CardInstance[] {
   return alive([...board.vanguard, ...board.support]);
 }
 
-function hasStealth(card: CardInstance): boolean {
-  return hasKeyword(card, "stealth") && !card.stealthBroken;
+function hasVanish(card: CardInstance): boolean {
+  return hasKeyword(card, "vanish");
 }
 
 /**
- * Same as boardCreatures, minus Stealthed ones — used for picking a Spell/
- * Ability/Hero Power/Signature target (DESIGN.md §7: Stealth can't be
- * chosen). Not used for Warcry (onPlay trigger) targeting, which Stealth
+ * Same as boardCreatures, minus Vanished ones — used for picking a Spell/
+ * Ability/Hero Power/Signature target (DESIGN.md §7/§17: Vanish can't be
+ * chosen). Not used for Warcry (onPlay trigger) targeting, which Vanish
  * doesn't scope to.
  */
 function targetableBoardCreatures(board: BoardState): CardInstance[] {
-  return boardCreatures(board).filter((c) => !hasStealth(c));
+  return boardCreatures(board).filter((c) => !hasVanish(c));
 }
 
 /** How much a targetPlayer/targetAny hit against this player would be reduced by their Hero's equipped Armor, if any. */
@@ -91,6 +92,9 @@ function pickOnPlayTarget(state: GameState, owner: PlayerId, effect?: CardEffect
   if (effect?.kind === "consume" || effect?.kind === "transform" || effect?.kind === "garrison") {
     const weakest = weakestOwnCreature(state, owner);
     return weakest ? { kind: "card", owner, instanceId: weakest.instanceId } : null;
+  }
+  if (effect && "target" in effect && effect.target === "targetRow") {
+    return pickRowTarget(state, owner);
   }
   const enemy = otherPlayer(owner);
   const enemyCreatures = boardCreatures(state.players[enemy].board);
@@ -122,15 +126,21 @@ function pickActivationTarget(state: GameState, effect: CardEffect): EffectTarge
         const enemyBuildings = alive(state.players[enemy].board.buildings);
         if (enemyBuildings.length > 0) return { kind: "card", owner: enemy, instanceId: enemyBuildings[0].instanceId };
       }
-      if (effect.target === "targetAny" && effect.amount > equipmentDamageReduction(state, enemy)) {
+      if (
+        (effect.target === "targetAny" || effect.target === "targetCreatureOrPlayer") &&
+        effect.amount > equipmentDamageReduction(state, enemy)
+      ) {
         return { kind: "player", owner: enemy }; // nothing else to hit — go face, but only if it'd actually land
       }
       return "skip"; // Creature-only with no enemy creature out (or a face hit their weapon would fully absorb) — not worth burning the activation on a no-op
     }
     case "applyStatus": {
       const enemyCreatures = targetableBoardCreatures(state.players[enemy].board);
-      if (enemyCreatures.length === 0) return "skip";
-      return { kind: "card", owner: enemy, instanceId: enemyCreatures[0].instanceId };
+      if (enemyCreatures.length > 0) return { kind: "card", owner: enemy, instanceId: enemyCreatures[0].instanceId };
+      if (effect.target === "targetPlayer" || effect.target === "targetCreatureOrPlayer" || effect.target === "targetAny") {
+        return { kind: "player", owner: enemy };
+      }
+      return "skip";
     }
     case "heal": {
       if (effect.target === "selfHero") {
@@ -138,7 +148,12 @@ function pickActivationTarget(state: GameState, effect: CardEffect): EffectTarge
         return hero.currentHp >= hero.maxHp ? "skip" : null;
       }
       const damaged = boardCreatures(state.players[AI].board).find((c) => (c.currentHp ?? 0) < creatureMaxHp(c));
-      return damaged ? { kind: "card", owner: AI, instanceId: damaged.instanceId } : "skip";
+      if (damaged) return { kind: "card", owner: AI, instanceId: damaged.instanceId };
+      if (effect.target === "targetCreatureOrPlayer" || effect.target === "targetAny") {
+        const hero = state.players[AI].hero;
+        if (hero.currentHp < hero.maxHp) return { kind: "player", owner: AI };
+      }
+      return "skip";
     }
     case "buff": {
       if (effect.target === "allFriendlyCreatures") return null;
@@ -158,12 +173,32 @@ function pickActivationTarget(state: GameState, effect: CardEffect): EffectTarge
       const weakest = weakestOwnCreature(state, AI);
       return weakest ? { kind: "card", owner: AI, instanceId: weakest.instanceId } : "skip";
     }
+    case "multi": {
+      // Frost Nova-style: resolve against the first sub-effect's own target
+      // scheme — every current "multi" card is all-AOE (no explicit target
+      // needed), so this only ever returns null in practice.
+      return pickActivationTarget(state, effect.effects[0]);
+    }
     case "drawCard":
     case "gainGuard":
     case "gainCap":
+    case "gainIncome":
+    case "drawCreature":
+    case "devour": // onPlay-only in practice — never reaches an activated Spell/Ability/Building slot
+      return null;
     case "summonCreature":
       return null;
   }
+}
+
+/** Picks which enemy row (Vanguard or Backline) has more value to hit — Black Dragon's row-choice targeting (DESIGN.md §17). Ties go to Vanguard. */
+function pickRowTarget(state: GameState, owner: PlayerId): EffectTargetRef {
+  const enemy = otherPlayer(owner);
+  const board = state.players[enemy].board;
+  const vanguardCount = alive(board.vanguard).length;
+  const supportCount = alive(board.support).length;
+  if (vanguardCount === 0 && supportCount === 0) return null;
+  return { kind: "row", owner: enemy, row: supportCount > vanguardCount ? "support" : "vanguard" };
 }
 
 /** Plays one affordable card from hand, or returns null if nothing more can be played right now. */
@@ -329,23 +364,23 @@ const NO_REACH: ReachProfile = { reach: false, ranged: false, infiltrate: false 
  * Reach/Ranged can already reach Support even while Vanguard is populated.
  */
 function reachableCreatures(enemyBoard: BoardState, reach: ReachProfile): CardInstance[] {
-  // Stealth (DESIGN.md §7) can't be chosen as an attack target at all — same
-  // treatment as it simply not being on the board for targeting/gating
+  // Vanish (DESIGN.md §7/§17) can't be chosen as an attack target at all —
+  // same treatment as it simply not being on the board for targeting/gating
   // purposes. Filtered before the Taunt gate so a (currently hypothetical)
-  // Stealthed Taunt creature can't gate out every other target.
-  const notStealthed = (row: CardInstance[]) => row.filter((c) => !hasStealth(c));
+  // Vanished Taunt creature can't gate out every other target.
+  const notVanished = (row: CardInstance[]) => row.filter((c) => !hasVanish(c));
   const gateByTaunt = (row: CardInstance[]): CardInstance[] => {
     const taunts = row.filter((c) => hasKeyword(c, "taunt"));
     return taunts.length > 0 ? taunts : row;
   };
   // Whether Vanguard blocks Support-reach is about the *actual* board state
   // (matches combat.ts's validateTarget), not which creatures the AI is
-  // still allowed to pick — an all-Stealthed Vanguard still isn't "empty".
+  // still allowed to pick — an all-Vanished Vanguard still isn't "empty".
   const rawVanguard = alive(enemyBoard.vanguard);
-  const vanguard = gateByTaunt(notStealthed(rawVanguard));
+  const vanguard = gateByTaunt(notVanished(rawVanguard));
   const canReachSupport = reach.reach || reach.ranged || rawVanguard.length === 0;
   if (!canReachSupport) return vanguard;
-  return [...vanguard, ...gateByTaunt(notStealthed(alive(enemyBoard.support)))];
+  return [...vanguard, ...gateByTaunt(notVanished(alive(enemyBoard.support)))];
 }
 
 /** Buildings whose own column is clear on both rows — attackable without Infiltrate (DESIGN.md §11). */
@@ -489,13 +524,37 @@ export function* runAiTurnSteps(state: GameState): Generator<AiTurnStep, void, v
     if (state.winner) return;
   }
 
-  const vanguardAttackers = alive(player.board.vanguard);
-  const supportAttackers = alive(player.board.support).filter((c) =>
-    (CARD_DEFINITIONS[c.defId] as CreatureDefinition).keywords.includes("ranged"),
-  );
+  // Duel (DESIGN.md §17): mark the toughest reachable enemy creature before
+  // attacking, if a Duel creature is available and hasn't already marked
+  // something still alive on the board — the live Attack/HP bonus and
+  // Vanguard/Taunt bypass only helps once the mark is set.
+  for (const card of alive(player.board.vanguard)) {
+    const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
+    if (!def.keywords.includes("duel") || !def.duel) continue;
+    if (card.markedTargetId && boardCreatures(state.players[otherPlayer(AI)].board).some((c) => c.instanceId === card.markedTargetId)) {
+      continue; // already has a live mark
+    }
+    if (player.energy.current < def.duel.activateCost) continue;
+    const candidates = targetableBoardCreatures(state.players[otherPlayer(AI)].board);
+    if (candidates.length === 0) continue;
+    const strongest = candidates.reduce((a, b) => (getEffectiveCreatureAttack(state, otherPlayer(AI), a) >= getEffectiveCreatureAttack(state, otherPlayer(AI), b) ? a : b));
+    if (declareDuelMark(state, AI, card.instanceId, strongest.instanceId).ok) {
+      yield { kind: "activateCard", instanceId: card.instanceId };
+      if (state.winner) return;
+    }
+  }
 
-  for (const card of [...vanguardAttackers, ...supportAttackers]) {
-    if (!creatureCanAttack(state, card)) continue;
+  // A single pass over each attacker isn't enough once Double Strike exists
+  // (DESIGN.md §17) — a creature can remain attackable after its first
+  // swing, so repeatedly pick the next attacker still able to act instead
+  // of visiting each card exactly once.
+  for (;;) {
+    const vanguardAttackers = alive(player.board.vanguard);
+    const supportAttackers = alive(player.board.support).filter((c) =>
+      (CARD_DEFINITIONS[c.defId] as CreatureDefinition).keywords.includes("ranged"),
+    );
+    const card = [...vanguardAttackers, ...supportAttackers].find((c) => creatureCanAttack(state, c));
+    if (!card) break;
     const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
     const reach = reachProfileOf(def);
     const target = chooseAttackTarget(state, reach, getEffectiveCreatureAttack(state, AI, card), card.currentHp ?? 0);

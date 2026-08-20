@@ -1,18 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { cardFrameUrl } from "../../data/cardFrames";
 import { CARD_DEFINITIONS } from "../../data/cards";
-import {
-  ARCHETYPE_LABELS,
-  costPoolIcon,
-  ELEMENT_LABELS,
-  FACTION_LABELS,
-  KEYWORD_ICONS,
-  KEYWORD_LABELS,
-  RACE_LABELS,
-  RARITY_LABELS,
-} from "../../data/taxonomy";
-import type { CardDefinition, CardInstance, CreatureDefinition, HeroCardDefinition, Keyword } from "../../engine/types";
+import { ELEMENT_LABELS, RACE_LABELS, STATUS_ICONS } from "../../data/taxonomy";
+import type { CardDefinition, CardInstance, CreatureDefinition, HeroCardDefinition } from "../../engine/types";
 
 interface CardViewProps {
   instance: CardInstance;
@@ -107,12 +97,16 @@ export function CardView({
     setZoomPos(null);
   }
 
-  // The detailed frame layout (name/cost/art window/rarity bar/rules text)
-  // only ever appears in the hover-zoom popup now — see below. The compact
-  // face (board/hand/collection/etc.) is deliberately minimal: art plus
-  // attack/health, Hearthstone-minion-style, so a full row of cards stays
-  // readable at a glance instead of needing to hover each one.
-  const frameUrl = cardFrameUrl(def.archetype);
+  // The card art is the card now (per the Neutral Core Set art pass): every
+  // archetype's image already bakes in its own name/cost/rarity/type/text/
+  // stats, so CardView never draws a name/cost/rules-text overlay for
+  // anything except Hero — Hero art is deliberately bare character art with
+  // no stats baked in (Guard/Health/Attack come from Equipment), so it's
+  // the one archetype that still needs a text layout here. Every other
+  // archetype, at every size (compact/full/zoom), shows only *live* state
+  // that isn't and can't be baked into a static image: current Attack/HP,
+  // status effects, and (for Spell/Ability) charges remaining.
+  const isHero = def.archetype === "hero";
 
   const baseClasses = ["card", `card--${def.archetype}`, `card--rarity-${def.rarity}`];
   if (highlighted) baseClasses.push("card--highlight");
@@ -120,17 +114,9 @@ export function CardView({
   if (def.art) baseClasses.push("card--has-art");
   if (acting) baseClasses.push(`card--ai-${acting}`);
 
-  // "full" variant reuses the exact same detailed layout the hover-zoom
-  // popup renders (see detailedContent below) — inline instead of on hover.
-  if (variant === "full") {
-    baseClasses.push("card--full");
-    if (frameUrl) baseClasses.push("card--framed");
-  }
-
+  if (variant === "full") baseClasses.push("card--full");
   const zoomClasses = [...baseClasses.filter((c) => c !== "card--full"), "card--zoom"];
-  if (frameUrl && !zoomClasses.includes("card--framed")) zoomClasses.push("card--framed");
 
-  const keywords: Keyword[] = def.archetype === "creature" ? def.keywords : [];
   const art = def.art && (
     <div className="card__art" style={{ backgroundImage: `url("${def.art}")` }} aria-hidden="true" />
   );
@@ -163,7 +149,7 @@ export function CardView({
     <>
       {instance.statuses.map((s, i) => (
         <span key={i} className={`status status--${s.type}`}>
-          {s.type === "burn" ? "🔥" : "☠"}
+          {STATUS_ICONS[s.type]}
           {s.amount}
         </span>
       ))}
@@ -171,51 +157,16 @@ export function CardView({
   );
 
   let detailedContent: ReactNode;
-  if (frameUrl) {
-    const cost = "cost" in def ? def.cost : null;
-    const metaBarParts = [RARITY_LABELS[def.rarity]];
-    if (def.faction) metaBarParts.push(FACTION_LABELS[def.faction]);
-    metaBarParts.push(def.race ? RACE_LABELS[def.race] : ARCHETYPE_LABELS[def.archetype]);
-
-    detailedContent = (
-      <>
-        <div className="frame__name">{def.name}</div>
-        {cost !== null && <div className="frame__cost">{cost}</div>}
-        <div className="frame__pool-icon" aria-hidden="true">
-          {costPoolIcon(def.archetype)}
-        </div>
-        {def.art && <div className="frame__art" style={{ backgroundImage: `url("${def.art}")` }} aria-hidden="true" />}
-        <div className="frame__meta-bar">{metaBarParts.join(" ◆ ")}</div>
-        <div className="frame__text">
-          {keywords.length > 0 && (
-            <div className="card__keyword-icons">
-              {keywords.map((k) => (
-                <span key={k} className="card__keyword-icon" title={KEYWORD_LABELS[k]}>
-                  {KEYWORD_ICONS[k]}
-                </span>
-              ))}
-            </div>
-          )}
-          {def.text}
-        </div>
-        {compactAttack !== null && <div className="frame__stat frame__stat--left">{compactAttack}</div>}
-        {compactRightStat !== null && <div className="frame__stat frame__stat--right">{compactRightStat}</div>}
-        {statuses && <div className="card__statuses">{statuses}</div>}
-      </>
-    );
-  } else {
+  if (isHero) {
     const metaParts: string[] = [];
     if (def.race) metaParts.push(RACE_LABELS[def.race]);
     if (def.element) metaParts.push(ELEMENT_LABELS[def.element]);
     const topRow = (
       <div className="card__top">
-        {"cost" in def && def.archetype !== "hero" && <div className="card__cost">{def.cost}</div>}
         <div className="card__name">{def.name}</div>
       </div>
     );
 
-    // Only Hero and Equipment ever reach this plain layout (cardFrameUrl
-    // covers every other archetype) — Equipment has no stats surfaced here today.
     detailedContent = (
       <>
         {art}
@@ -225,14 +176,26 @@ export function CardView({
         {def.text && <div className="card__text">{def.text}</div>}
         <div className="card__spacer" />
         <div className="card__bottom">
-          {def.archetype === "hero" && (
-            <>
-              <span className="stat stat--attack">{(def as HeroCardDefinition).attack}</span>
-              <span className="stat stat--hp">{(def as HeroCardDefinition).hp}</span>
-            </>
-          )}
+          <span className="stat stat--attack">{(def as HeroCardDefinition).attack}</span>
+          <span className="stat stat--hp">{(def as HeroCardDefinition).hp}</span>
         </div>
         {statuses && <div className="card__statuses">{statuses}</div>}
+      </>
+    );
+  } else {
+    // Same live-state-only content as the compact face, just rendered
+    // bigger by the card--full/card--zoom CSS sizing — see compactContent.
+    detailedContent = (
+      <>
+        {art}
+        {rarityDot}
+        {compactAttack !== null && <span className="card__corner-stat card__corner-stat--left">{compactAttack}</span>}
+        {compactRightStat !== null && (
+          <span className={`card__corner-stat card__corner-stat--right card__corner-stat--${compactRightKind}`}>
+            {compactRightStat}
+          </span>
+        )}
+        {statuses && <div className="card__statuses card__statuses--compact">{statuses}</div>}
       </>
     );
   }
@@ -256,7 +219,6 @@ export function CardView({
       <div
         ref={cardRef}
         className={baseClasses.join(" ")}
-        style={variant === "full" && frameUrl ? { backgroundImage: `url("${frameUrl}")` } : undefined}
         onClick={onClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
@@ -274,7 +236,6 @@ export function CardView({
               top: zoomPos.top,
               left: zoomPos.left,
               width: ZOOM_WIDTH,
-              ...(frameUrl ? { backgroundImage: `url("${frameUrl}")` } : {}),
             }}
           >
             {detailedContent}

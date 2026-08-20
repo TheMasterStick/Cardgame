@@ -40,6 +40,17 @@ export function createCardInstance(defId: string, owner: PlayerId): CardInstance
   if (def.archetype === "spell" || def.archetype === "ability") {
     instance.chargesRemaining = def.charges;
   }
+  // Recruitment Station-style Building abilities (`ability.charges`) and
+  // Cloak of Shadows-style Equipment (`charges`) reuse the same generic
+  // `chargesRemaining` field Spells/Abilities already use — undefined for
+  // any card that doesn't set one, which every existing caller already
+  // treats as "no charge limit."
+  if (def.archetype === "building" && def.ability?.charges !== undefined) {
+    instance.chargesRemaining = def.ability.charges;
+  }
+  if (def.archetype === "equipment" && def.charges !== undefined) {
+    instance.chargesRemaining = def.charges;
+  }
   return instance;
 }
 
@@ -91,7 +102,7 @@ export function createInitialPlayerState(
     id,
     hero: createHeroInstance(heroDefId),
     guard: { current: startingGuard, max: startingGuard },
-    resources: { current: resourceCap, cap: resourceCap },
+    resources: { current: resourceCap, cap: resourceCap, income: 1 },
     mana: { current: manaCap, cap: manaCap },
     energy: { current: energyCap, cap: energyCap },
     deck,

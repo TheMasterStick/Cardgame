@@ -30,6 +30,33 @@ export function getBearerDamageReduction(state: GameState, owner: PlayerId, bear
   return (CARD_DEFINITIONS[item.defId] as EquipmentDefinition).damageReduction;
 }
 
+/** Whether the Hero currently has Vanish from an equipped item (Cloak of Shadows) — checked separately from `hasKeyword`, which only reads Creature/Building definitions. */
+export function heroHasVanish(state: GameState, owner: PlayerId): boolean {
+  const item = findBearerEquipment(state, owner, { kind: "hero" });
+  if (!item) return false;
+  return ((CARD_DEFINITIONS[item.defId] as EquipmentDefinition).keywords ?? []).includes("vanish");
+}
+
+/**
+ * Cloak of Shadows: any Hero-equipped item with a `charges` count ticks
+ * down once per Hero attack, discarding itself (back to the discard pile,
+ * unassigned from the Hero) at 0 — generalized rather than hardcoded to one
+ * card, in case a future item wants the same "N Hero attacks" expiry.
+ */
+export function tickEquipmentChargesOnHeroAttack(state: GameState, owner: PlayerId): void {
+  const player = state.players[owner];
+  for (let i = 0; i < player.board.equipment.length; i++) {
+    const item = player.board.equipment[i];
+    if (!item || item.equipmentBearer?.kind !== "hero" || typeof item.chargesRemaining !== "number") continue;
+    item.chargesRemaining -= 1;
+    if (item.chargesRemaining <= 0) {
+      player.board.equipment[i] = null;
+      player.discard.push(item);
+      state.log.push(`${item.defId} (${owner}) ran out of charges and was discarded.`);
+    }
+  }
+}
+
 function findOwnCreature(state: GameState, owner: PlayerId, instanceId: string): CardInstance | null {
   const board = state.players[owner].board;
   for (const row of [board.vanguard, board.support]) {

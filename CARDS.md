@@ -108,6 +108,20 @@ of a match; its stats become the starting Hero HP/Attack (see DESIGN.md
 - `keywords`: array — see "Keywords" below for the full list and what
   each one does.
 - `triggers`: array of `{ "on": TriggerName, "effect": CardEffect }` — see below. Omit or use `[]` for a vanilla creature.
+- `creatureType` *(optional)*: `CreatureType[]` — a combat-role tag
+  (Fighter/Ranger/Defender/Beast/Elemental/Mage/Ogre/Giant/Dragon/
+  Support/Creature), printed as e.g. "Defender • Elemental" for a
+  dual-typed card, stored as an array of 1-2 values. Distinct from
+  `race` (which drives Faction/Allegiance, not this). Formation
+  (`formationBonus`) checks whether an adjacent creature shares one of
+  these tags — see "Keywords" below.
+- `flankBonus`/`formationBonus`/`bloodiedBonus`/`frenzyBonus`/
+  `deadeyeBonus`: `{ "attackDelta": N, "hpDelta"?: N }` — pair with the
+  matching keyword. See "Keywords" below for what each one does.
+- `enrageBonus`: `{ "attackPerMissingHp": N }` — pair with `enrage`.
+- `resistantAmount`: number — pair with `resistant`.
+- `crowdPleaserBonus`: `{ "attackPerCreature": N, "hpPerCreature": N, "attackCap": N, "hpCap": N }` — pair with `crowdPleaser`.
+- `duel`: `{ "activateCost": N, "bonus": { "attackDelta": N, "hpDelta"?: N } }` — pair with `duel`.
 
 **Building** (`archetype: "building"`) — same as Creature minus `attack`/`keywords`, plus two optional fields for its battlefield-object behavior (DESIGN.md §11):
 ```json
@@ -126,17 +140,24 @@ of a match; its stats become the starting Hero HP/Attack (see DESIGN.md
     "hp": 5, "race": "beast", "text": "Passive: your Beast creatures have +2 Attack.",
     "passive": { "kind": "auraBuff", "filter": { "race": "beast" }, "attackDelta": 2 } }
   ```
-- `ability` *(optional)*: an activated ability — `{ "effect": CardEffect, "activateCost": number, "pool": "resource" | "mana" | "energy" }`.
+- `ability` *(optional)*: an activated ability — `{ "effect": CardEffect, "activateCost": number, "pool": "resource" | "mana" | "energy", "charges"?: number }`.
   `pool` defaults to `"resource"` (Resources) when omitted, per §11; a
   specific card can spend Mana or Energy instead, like Demon Gate here.
-  Unlike a Spell/Ability card, there's **no `charges` field and no cap**
-  — a Building's ability stays activatable every turn for as long as
-  its owner can pay `activateCost`.
+  Unlike a Spell/Ability card, `charges` — when given — is a *lifetime*
+  activation cap: the Building itself stays on the board once it's
+  exhausted, only the ability stops working (Recruitment Station: 2).
+  Omit `charges` for the original unlimited-while-affordable default.
   ```json
   { "id": "demon-gate", "name": "Demon Gate", "archetype": "building", "cost": 4, "rarity": "epic",
     "hp": 6, "race": "demon", "text": "Activate (3 Mana): summon a Flame Imp.",
     "ability": { "effect": { "kind": "summonCreature", "creatureId": "flame-imp" }, "activateCost": 3, "pool": "mana" } }
   ```
+- `spellAmplify` *(optional)*: number — an Ancient Mage Tower-style aura:
+  while this Building stands, every damage/heal/status-amount instance
+  from the *controller's Spell cards* is increased by this much. Baked
+  into the amount once, when the Spell's own effect resolves (including
+  into a Poison/Bleed/Burn status's stored amount) — not re-checked
+  live on every later status tick if the Tower is destroyed mid-effect.
 - `triggers`: same On Construction / onAttack / onDeath / startOfTurn /
   endOfTurn triggers a Creature can have. A Building only ever uses
   `triggers` OR `ability` in practice — nothing stops both being
@@ -144,8 +165,13 @@ of a match; its stats become the starting Hero HP/Attack (see DESIGN.md
 
 **Spell** (`archetype: "spell"`, costs Mana) / **Ability** (`archetype: "ability"`, costs Energy):
 
-A Spell also needs a `spellForm` (DESIGN.md §1a) — Abilities don't;
-they're always the Ritual/Charged shape, Energy instead of Mana.
+A Spell needs `spellForm` (DESIGN.md §1a); an Ability needs the
+equivalent `abilityForm` (`"instant" | "activated"`) — the same
+Instant/(Ritual|Charged) split, just with `"activated"` covering what
+used to be an Ability's only shape. `"instant"` resolves immediately
+on play for `cost` Energy, no slot, no `activateCost`/`charges`
+(Exercise, Executioner's Strike); `"activated"` is the original
+placed-in-a-slot, separately-activated shape.
 
 - **Instant** — cast straight from hand for `cost` Mana, resolves
   immediately, never touches a Spell/Ability slot. No `activateCost`/
@@ -172,16 +198,19 @@ they're always the Ritual/Charged shape, Energy instead of Mana.
     "effect": { "kind": "damage", "amount": 2, "target": "allEnemyCreatures" }
   }
   ```
-- `activateCost`: Mana (spell) or Energy (ability) cost per activation — omit only for an Instant Spell.
-- `charges`: a number, or the string `"unlimited"` — omit only for an Instant Spell.
+- `activateCost`: Mana (spell) or Energy (ability) cost per activation — omit only for an Instant Spell/Ability.
+- `charges`: a number, or the string `"unlimited"` — omit only for an Instant Spell/Ability.
 - `effect`: a single `CardEffect` (see below) — the card's one activated effect.
 - A creature with the **Immune** keyword blocks Spell-archetype
   activations that target it (see "Keywords" below) — Ability
   activations and creature/building triggers are unaffected.
-- An Instant cast, or a Ritual/Charged card that fizzles out of
-  charges, goes to `discard` — not the `graveyard`, which is reserved
-  for creature/building deaths (see DESIGN.md §17's Phase C
+- An Instant cast, or a Ritual/Charged/Activated card that fizzles out
+  of charges, goes to `discard` — not the `graveyard`, which is
+  reserved for creature/building deaths (see DESIGN.md §17's Phase C
   implementation-status note for why).
+- Focus's/Rally's printed card faces have no `×N`/`∞` use marker — the
+  built-in cards default that to `"unlimited"` (an explicit Open
+  default, not a guess at a specific number).
 
 **Equipment** (`archetype: "equipment"`, plays into a 4-slot player-owned zone — DESIGN.md §12):
 ```json
@@ -196,6 +225,14 @@ they're always the Ritual/Charged shape, Energy instead of Mana.
   Armiger creature's effective Attack (§7's `armiger` keyword — a plain creature can't hold
   Equipment at all without it).
 - `damageReduction`: subtracted from all damage the bearer takes while equipped.
+- `keywords` *(optional)*: `Keyword[]` — grants the listed keyword(s) to
+  the Hero while this item is equipped to them (checked separately from
+  a creature/building's own `hasKeyword`, since Equipment isn't a
+  Creature). Cloak of Shadows uses this for Vanish.
+- `charges` *(optional)*: number — total charges before this item
+  auto-discards, decrementing once per Hero attack while equipped
+  (Cloak of Shadows: 3 charges / 3 attacks). Omit for the default
+  no-expiry behavior.
 - A card played from hand always enters the zone **Unassigned**. Assigning it to a bearer (the
   Hero, or an on-board Armiger creature) — first assignment or later reassignment alike — is a
   separate action costing 1 Energy; each bearer holds at most 1 item, and assigning a second
@@ -217,19 +254,29 @@ Only meaningful on Creature cards (`keywords: Keyword[]`). See DESIGN.md
 | `infiltrate` | Can strike enemy Buildings directly regardless of the enemy board's row state, and is the one thing that lets an attacker bypass a Taunt creature to hit the Hero. Doesn't grant Support-row targeting by itself — pair with Reach/Ranged on the same card for that. |
 | `charge` | Can attack the same turn it's played, ignoring summoning sickness. |
 | `warcry` | *(renamed from `battlecry` in Phase D — no card ever shipped with the old value, so there was nothing to migrate.)* Marks a card whose `onPlay` trigger represents a Warcry effect (fires when played). Purely a label — the actual effect still comes from a `triggers: [{ on: "onPlay", ... }]` entry. |
-| `taunt` | While alive, forces enemy attackers to target it first among the creatures in whichever row is actually being attacked — a Vanguard Taunt gates Vanguard-tier attacks; a Support Taunt gates Support-tier attacks the same way, for any attacker that can currently reach Support (Reach/Ranged always, Base once enemy Vanguard is empty — see the combat ladder below). Also gates Hero-targeting for any attacker that can reach the row it's in, the same way — bypassed only by Infiltrate. Doesn't affect Building targeting or Spell/Ability targeting (neither is gated by Taunt at all). |
+| `taunt` | While alive, forces enemy attackers to target it first among the creatures in whichever row is actually being attacked — a Vanguard Taunt gates Vanguard-tier attacks; a Support Taunt gates Support-tier attacks the same way, for any attacker that can currently reach Support (Reach/Ranged always, Base once enemy Vanguard is empty — see the combat ladder below). Also gates Hero-targeting for any attacker that can reach the row it's in, the same way — bypassed only by Infiltrate or a Duel mark on that specific target. Doesn't affect Building targeting or Spell/Ability targeting (neither is gated by Taunt at all). |
 | `counter` | Marks a card whose `onDefend` trigger fires when it's attacked (pair with a `triggers: [{ on: "onDefend", ... }]` entry, e.g. reflect damage back at the attacker). |
 | `revenge` | Marks a card whose `onDeath` trigger fires when it dies (pair with a `triggers: [{ on: "onDeath", ... }]` entry). |
-| `frenzy` | Every time this creature takes damage and survives, its Attack permanently increases by the damage amount taken. Built into the engine — no trigger needed, just the keyword. |
+| `frenzy` | Pair with `frenzyBonus: { attackDelta: N }`. Every time this creature attacks — regardless of whether the hit lands or the target survives — it permanently gains +N Attack, stored on `attackDelta`. (Renamed semantics as of Phase K/the Neutral Core Set spec: the old damage-triggered "gains Attack equal to damage taken" behavior is now **Enrage**, below.) |
+| `enrage` | Pair with `enrageBonus: { attackPerMissingHp: N }`. Live Attack bonus equal to `N × (current missing HP)` — re-evaluated on every Attack read, never stored, so healing this creature reduces the bonus back down. |
 | `immune` | Blocks Spell-archetype activated effects from targeting this creature (see Spell note above). Does not block Ability effects or other creatures' triggers. |
-| `poison` | When this creature attacks, it applies a Poison damage-over-time status to whatever it hit, in addition to its normal combat damage. Built into the engine — no trigger needed, just the keyword. |
+| `poison` | When this creature attacks and the hit lands, it applies a Poison damage-over-time status to whatever it hit, in addition to its normal combat damage. Built into the engine (`fireOnAttackTrigger`, wired into `declareCreatureAttack` as of Phase K — it existed but was never actually called before that) — pair with an `onAttack` trigger, e.g. `{ "on": "onAttack", "effect": { "kind": "applyStatus", "status": "poison", "amount": 1, "duration": 3, "target": "targetCreature" } }`. |
+| `bleed` | Same shape and wiring as `poison`, a separate DOT status that can coexist with it. |
+| `burn` | Same DOT status shape — typically paired with **both** an `onAttack` trigger (Burn the creature this attacks) **and** an `onDefend` trigger (Burn whatever attacks this), e.g. Fire Golem. |
+| `frostArmor` | Label for an `onDefend` trigger that applies the `freeze` status to the attacker, e.g. `{ "on": "onDefend", "effect": { "kind": "applyStatus", "status": "freeze", "amount": 0, "duration": 1, "target": "targetCreature" } }`. |
+| `resistant` | Pair with `resistantAmount: N`. Reduces every incoming hit (from any source) by N, floored at 0 — stacks additively with any bearer Armor `damageReduction`. |
+| `deadeye` | Pair with `deadeyeBonus: { attackDelta: N }`. Adds +N Attack only while resolving an attack against a target currently in the enemy's Support row — attack-instance-scoped: not live-recomputed, not permanently stored, applies to that one attack only. |
+| `doubleStrike` | Can attack up to twice per turn instead of once. `hasAttackedThisTurn` still means "fully exhausted" for every other purpose — the second-swing bookkeeping is internal (`CardInstance.attacksUsedThisTurn`). |
+| `duel` | Pair with `duel: { activateCost, bonus }` on the card (see Creature fields above). An Energy-costed player/AI action (`declareDuelMark` in `combat.ts`, not a `CardEffect` — deliberately bespoke, single-card logic) marks one enemy creature; while it remains on the board, this creature gets `bonus` live and may attack it bypassing the Vanguard ladder and Taunt. Re-marking overwrites the old mark ("only one target" falls out naturally); no cleanup needed when the mark dies, the live check just stops finding it. |
+| `crowdPleaser` | Pair with `crowdPleaserBonus: { attackPerCreature, hpPerCreature, attackCap, hpCap }`. Live Attack/HP bonus scaling with the number of *other* creatures currently on the board — **both sides count** (an Open default; the spec doesn't say "friendly") — each stat capped independently. |
+| `massive` | Descriptive tag alongside `spaceCost` (see below) — `spaceCost` is what actually drives multi-slot placement; the keyword is just for card-face/UI recognition. |
 | `protector` | When an attack targets an allied creature in the same row, the engine may automatically redirect it onto this creature instead — a heuristic stand-in for the "defender's manual choice" DESIGN.md §5 describes; it only fires when the original target would otherwise die to the hit. No `triggers` entry needed. |
 | `flank` | Pair with `flankBonus: { attackDelta: N }` on the card. Grants +N Attack while this creature occupies column 1 or 5 (0-indexed 0 or 4) of its row — live, re-evaluated on every Attack read, not a stored delta. |
-| `formation` | Pair with `formationBonus: { attackDelta: N }`. Grants +N Attack while an allied creature occupies an adjacent column, same row — also live. |
-| `advance` | Lets a Support creature spend 1 Energy to move into the same-column Vanguard slot instead of attacking (`declareAdvance` in `combat.ts`). Uses the same Ready/summoning-sickness gate as attacking, and exhausts the creature the same way. No `triggers` entry needed — it's a player action, not a trigger. |
+| `formation` | Pair with `formationBonus: { attackDelta: N, hpDelta?: N }`. Grants the bonus while an adjacent, same-row creature shares one of this creature's `creatureType` tags (type-conditional as of Phase K — previously any adjacent ally qualified) — also live. The optional `hpDelta` is a display-only bonus (see `getEffectiveCreatureMaxHp`) — it never affects `currentHp`, death checks, or the heal cap. |
+| `advance` | Lets a Support creature spend 1 Energy to move into the same-column Vanguard slot instead of attacking (`declareAdvance` in `combat.ts`). Uses the same Ready/summoning-sickness gate as attacking (also blocked by Freeze), and exhausts the creature the same way. No `triggers` entry needed — it's a player action, not a trigger. |
 | `push` | When this creature's attack damages an enemy Vanguard creature and it survives, and that column's Support slot is empty, the defender gets moved there automatically. Doesn't apply to Massive defenders (they don't fit in one Support slot). No `triggers` entry needed. |
-| `stealth` | Can't be chosen as the target of an enemy attack, or of a hostile Spell/Ability that targets a specific creature — still hit by AOE effects (`allEnemyCreatures`), same scoping as Immune. Broken permanently the moment this creature attacks (there's no "Reveal" effect yet to break it early). Enforced in the engine (`combat.ts`'s `validateTarget`, `effects.ts`'s `resolveEffect`), the UI (a Stealthed creature is never highlighted as clickable, and a Spell/Ability whose only legal target is Stealthed fizzles rather than leaving the player stuck), and the AI's targeting heuristics. |
-| `ward` | Negates the next hostile Spell or Ability that directly targets this creature — one-time, then consumed (`card.wardConsumed`). Doesn't stop AOE effects or plain combat damage, same scoping as Stealth/Immune. Checked after Stealth/Immune, so a creature that's already blocking the hit some other way doesn't burn its Ward for free. |
+| `vanish` | *(replaces `stealth` as of Phase K — same keyword, new name and simpler rule: the old "breaks once this creature attacks" condition is gone.)* Can't be chosen as the target of an enemy attack, or of a hostile Spell/Ability that targets a specific creature — still hit by AOE effects (`allEnemyCreatures`), same scoping as Immune. Enforced in the engine (`combat.ts`'s `validateTarget`, `effects.ts`'s `resolveEffect`), the UI (a Vanished creature is never highlighted as clickable, and a Spell/Ability whose only legal target has Vanish fizzles rather than leaving the player stuck), and the AI's targeting heuristics. Equipment can also grant this to the Hero via its own `keywords` field (see Equipment above). |
+| `ward` | Negates the next hostile Spell or Ability that directly targets this creature — one-time, then consumed (`card.wardConsumed`). Doesn't stop AOE effects or plain combat damage, same scoping as Vanish/Immune. Checked after Vanish/Immune, so a creature that's already blocking the hit some other way doesn't burn its Ward for free. |
 | `cleave` | On attack against a creature, also deals the same damage to enemy creatures in the columns directly adjacent to the primary target, same row — no retaliation, redirect, or Push from the splash hits, just damage. Doesn't trigger against Building/Hero targets (there's no "row" to splash into). |
 | `drain` | Every time this creature deals *combat* damage (attacking or retaliating, including once per Cleave splash hit), its controller's Hero regains that much Guard, capped at Guard's current max — no overflow into Hero HP, and no effect on Guard's cap itself (that's what `gainCap`/`gainGuard` are for). |
 | `bloodied` | Pair with `bloodiedBonus: { attackDelta: N }` on the card. Grants +N Attack while `currentHp * 2 <= maxHp` (at or below half Health) — live, re-evaluated on every Attack read same as `flank`/`formation`, not a stored delta or a discrete trigger. See `wounded-berserker`. |
@@ -240,19 +287,32 @@ Only meaningful on Creature cards (`keywords: Keyword[]`). See DESIGN.md
 matching `triggers` entry (`onPlay`, `onDefend`, `onDeath`
 respectively) — the keyword itself doesn't do anything without the
 trigger. `summon` is the same idea, paired with a `summonCreature`
-effect instead of a specific trigger name. `taunt`, `frenzy`, `immune`,
-`poison`, `protector`, `push`, `stealth`, and `drain` are fully handled
-by the engine from the keyword alone. `ranged`, `reach`, `infiltrate`,
-and `charge` are also engine-handled, no trigger needed. `flank`/
-`formation`/`bloodied` each need their matching `flankBonus`/
-`formationBonus`/`bloodiedBonus` field to actually do anything, same
-as `ward` needing nothing extra (its one-time-use state lives on the
-`CardInstance`, not the definition). `advance` is invoked as a player
-action (`declareAdvance`), not through a trigger or effect.
+effect instead of a specific trigger name. `poison`/`bleed`/`burn`/
+`frostArmor` pair with an `onAttack`/`onDefend` trigger the same way.
+`taunt`, `immune`, `protector`, `push`, `vanish`, `drain`, `frenzy`
+(with `frenzyBonus`), `enrage` (with `enrageBonus`), `resistant` (with
+`resistantAmount`), `deadeye` (with `deadeyeBonus`), `duel` (with
+`duel`), and `crowdPleaser` (with `crowdPleaserBonus`) are fully
+handled by the engine from the keyword + its matching field alone —
+none of them need a `triggers` entry. `ranged`, `reach`, `infiltrate`,
+`charge`, and `doubleStrike` are also engine-handled, no trigger or
+extra field needed. `flank`/`formation`/`bloodied` each need their
+matching `flankBonus`/`formationBonus`/`bloodiedBonus` field to
+actually do anything, same as `ward` needing nothing extra (its
+one-time-use state lives on the `CardInstance`, not the definition).
+`advance` and `duel`'s mark are invoked as a player/AI action
+(`declareAdvance`/`declareDuelMark`), not through a trigger or effect.
 
-**Massive creatures** (`spaceCost: N` on a `CreatureDefinition`, no
-keyword needed — it's a numeric field since it needs a magnitude, per
-DESIGN.md §5) occupy `N` contiguous same-row slots instead of the
+**Freeze** is a status, not a keyword — see "Status effects" below.
+It's applied via an `applyStatus` effect (e.g. Frost Armor's
+`onDefend` trigger, or Frost Nova's Spell effect) and gates
+`creatureCanAttack`/`heroCanAttack`/Advance/Duel-activation while it
+holds, checked via a shared `isFrozen` helper (`status.ts`).
+
+**Massive creatures** (`spaceCost: N` on a `CreatureDefinition`, driving
+the actual multi-slot behavior — pair with the `massive` keyword tag
+for card-face recognition, though the keyword itself is descriptive
+only) occupy `N` contiguous same-row slots instead of the
 default 1. The engine stores the same `CardInstance` object in every
 slot it occupies — damage/buffs/status mutate the one shared instance
 regardless of which slot is looked up, and death/AOE-effect code
@@ -330,6 +390,30 @@ the Hero fields above). Valid values: `beast`, `demon`, `dragon`,
 `pixie`, `ogre`, `giant`, `dark-elf`, `angel`, `orc`, `gnome`, `troll`,
 `dryad`, `fairy`, `harpy`, `fiend`, `vampire`.
 
+## CreatureType
+
+A combat-role tag for Creature cards only (`creatureType:
+CreatureType[]`, see the Creature fields above) — separate from `race`,
+which drives Faction/Allegiance and predates this field; the two don't
+cross-reference each other. Drives Formation's type-conditional check
+(see "Keywords" above). A card can carry more than one tag (printed as
+e.g. "Defender • Elemental"), stored as an array. Valid values:
+`fighter`, `ranger`, `defender`, `beast`, `elemental`, `mage`, `ogre`,
+`giant`, `dragon`, `support`, `creature` (a generic catch-all, used
+when a card's printed Type is literally "Creature").
+
+## Status effects
+
+Applied via `applyStatus`, ticking once per affected-player turn-start
+(`StatusType`: `"poison" | "bleed" | "burn" | "freeze"`). Poison,
+Bleed, and Burn are damage-over-time — different types coexist, but
+two applications of the *same* type don't stack (the newer application
+just refreshes amount/duration to the higher of the two). Freeze is a
+control status instead (`amount` is always 0) — see "Keywords" above
+for what it gates. Every status now normally carries an explicit
+`duration` (turns until it expires); omitting it lets a status persist
+indefinitely, which no shipped card currently does.
+
 ---
 
 ## Effects (`CardEffect`)
@@ -341,11 +425,15 @@ Used in a spell/ability's `effect` field, and in any creature/building
 |---|---|---|
 | `damage` | `amount`, `target` | Deals damage. |
 | `heal` | `amount`, `target` | Restores HP. |
-| `applyStatus` | `status` (`"burn"\|"poison"`), `amount`, `target`, `duration` (optional, burn only) | Applies a DOT. |
+| `applyStatus` | `status` (`StatusType`), `amount`, `target`, `duration`? | Applies a status — see "Status effects" above. Supports the AOE `target` values (`allEnemyCreatures`/`allFriendlyCreatures`) same as `damage`/`buff`. |
 | `buff` | `target`, `attackDelta`? , `hpDelta`? | Permanent stat change (negative deltas work too — a debuff). |
 | `drawCard` | `amount` | Draws for the acting player. No `target`. |
 | `gainGuard` | `amount` | Grants Guard to the acting player. No `target`. |
 | `gainCap` | `pool` (`"resource"\|"mana"\|"energy"`), `amount` | Raises a resource cap (and current amount) for the acting player. No `target`. |
+| `gainIncome` | `amount` | Permanently raises the acting player's per-turn Resources trickle (`ResourcePool.income`, default 1) — distinct from `gainCap`, which raises the ceiling, not the regen rate. Farm/Gold Mine. No `target`. |
+| `drawCreature` | `amount` | Draws the first *creature* card found in the acting player's deck (not necessarily the top card) instead of a plain `drawCard`. Fizzles silently if the deck has no creature left. No `target`. |
+| `devour` | `target` | Destroys the targeted creature (bypasses Armor/Resistant — a removal effect, not hostile damage) and buffs *the creature whose trigger produced this effect* by half the destroyed creature's own printed Attack/HP, rounded down. Needs `resolveEffect`'s internal `selfInstanceId` — only usable from a creature's own `onPlay` trigger (threaded automatically when played from hand, summoned, or transformed in). Elder Flame Imp. |
+| `multi` | `effects` (`CardEffect[]`) | Resolves each listed effect in order, against the same target/source. **Scope note:** every sub-effect must be one that doesn't need its own separate UI target selection — a self-contained AOE/self/selfHero shape. Frost Nova (damage + Freeze, both `allEnemyCreatures`) is the only card using this today. |
 | `summonCreature` | `creatureId` (must match an existing Creature card's `id`), `count`? (Swarm, default 1) | Creates `count` copies of that Creature on the acting player's own board — Vanguard preferred, falling back to Support, respecting the summoned creature's own `spaceCost`. Each copy fizzles silently (no crash, nothing created) if there's no room left, so a Swarm effect can partially land. The new creature(s) have ordinary summoning sickness and fire their own `onPlay` triggers. No `target`. |
 | `consume` | `target`, `attackDelta`?, `hpDelta`? | Force-destroys the targeted creature (bypasses Armor/damage-reduction — this is a sacrifice, not hostile damage) and then applies `attackDelta`/`hpDelta` as a permanent buff to every *other* friendly creature on the acting player's board. |
 | `transform` | `target`, `creatureId` (must match an existing Creature card's `id`) | Replaces the targeted creature in place with a fresh instance of `creatureId`, re-finding room for its `spaceCost` (its own occupied slot(s) count as vacated, so a same-size or smaller upgrade always fits, and a Massive upgrade can too if adjacent space is free) — fizzles silently if there's no room. The new form keeps the old instance's summoning-sickness/exhaustion state and any active statuses (same battle-hardened unit), but its stats reset to the new definition's base (any prior `buff`/Consume deltas are lost) and it fires its own `onPlay` triggers. |
@@ -353,14 +441,22 @@ Used in a spell/ability's `effect` field, and in any creature/building
 
 `target` (on the kinds that need one) is one of:
 `"targetCreature"`, `"targetBuilding"`, `"targetCreatureOrBuilding"`,
-`"targetAny"`, `"targetPlayer"`, `"allEnemyCreatures"`,
-`"allFriendlyCreatures"`, `"selfHero"`. The first five are picked by
-whoever activates the card (the UI asks for a target when needed); the
-last three resolve automatically. See DESIGN.md §4/§6 for how targeting
+`"targetAny"`, `"targetCreatureOrPlayer"`, `"targetPlayer"`,
+`"targetRow"`, `"allEnemyCreatures"`, `"allFriendlyCreatures"`,
+`"selfHero"`. `targetCreatureOrPlayer` is like `targetAny` but excludes
+Buildings (Lightning Bolt, Renewal, Toxic Cloud). `targetRow` lets the
+caster pick an enemy row (Vanguard or Backline) instead of a single
+creature — Black Dragon (`{ kind: "row"; owner; row: "vanguard" |
+"support" }` as the resolved target ref) — every creature in that row
+takes the effect. The explicit-pick values (everything except the last
+three) are picked by whoever activates the card (the UI asks for a
+target when needed); `allEnemyCreatures`/`allFriendlyCreatures`/
+`selfHero` resolve automatically. See DESIGN.md §4/§6 for how targeting
 actually plays out on the board — including how Taunt creatures can
 force a different target than the one picked. `consume`/`transform`/
-`garrison` are UI-scoped to the acting player's own creatures (see
-`ui/targeting.ts`), since all three act on a friendly creature.
+`garrison`/`devour` are UI-scoped to the acting player's own creatures
+or the enemy's, per each effect's own hostile/friendly direction (see
+`ui/targeting.ts`'s `effectTargetSide`).
 
 `triggers` (creatures/buildings only) fire on: `"onPlay"`, `"onAttack"`,
 `"onDeath"`, `"onDefend"` (fires on the defending creature, pairs with
@@ -373,6 +469,16 @@ Counter), `"startOfTurn"`, `"endOfTurn"`.
 **Card art (Creature/Hero/Building/Spell/Ability/Equipment):** every
 card image is normalized to **512×776** — a portrait card-art aspect
 ratio — regardless of the source image's original size or shape.
+
+**As of Phase K, the art *is* the card face for every archetype except
+Hero.** `CardView` no longer draws a frame, name, cost, rarity, or
+rules-text overlay for Creature/Building/Spell/Ability/Equipment — the
+`art` image is expected to already show all of that, and only *live*
+state (current Attack/HP, status badges, charges remaining) renders on
+top of it. Hero art is the one exception and stays bare character art
+by design (a Hero's Attack/Health come from Equipment, not printed
+stats), so Hero cards still show a text layout (name/meta/rules
+text/base stats).
 
 - **Admin Panel:** pick any image file; it's automatically resized
   (cover-fit crop, not stretched — think "object-fit: cover") to

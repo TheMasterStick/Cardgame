@@ -7,12 +7,14 @@ import {
   KEYWORD_OPTIONS,
   RACE_OPTIONS,
   RARITY_OPTIONS,
+  STATUS_OPTIONS,
   ELEMENT_LABELS,
   EQUIPMENT_CATEGORY_LABELS,
   FACTION_LABELS,
   RACE_LABELS,
   RARITY_LABELS,
   KEYWORD_LABELS,
+  STATUS_LABELS,
 } from "../../data/taxonomy";
 import { saveRemoteCard, uploadCardArt } from "../../lib/adminCards";
 import type { Collection } from "../../engine/collection";
@@ -28,6 +30,7 @@ import type {
   Keyword,
   Race,
   Rarity,
+  StatusType,
   Trigger,
   TriggerName,
 } from "../../engine/types";
@@ -82,6 +85,7 @@ interface CardDraft {
   hp: number;
   keywords: Keyword[];
   spellForm: "instant" | "ritual" | "charged";
+  abilityForm: "instant" | "activated";
   activateCost: number;
   charges: number | "unlimited";
   attackBonus: number;
@@ -91,7 +95,7 @@ interface CardDraft {
   effectKind: CardEffect["kind"] | "none";
   effectAmount: number;
   effectTarget: (typeof TARGET_OPTIONS)[number];
-  effectStatus: "burn" | "poison";
+  effectStatus: StatusType;
   effectDuration: number;
   effectAttackDelta: number;
   effectHpDelta: number;
@@ -122,6 +126,7 @@ function emptyDraft(): CardDraft {
     hp: 1,
     keywords: [],
     spellForm: "ritual",
+    abilityForm: "activated",
     activateCost: 1,
     charges: 1,
     attackBonus: 0,
@@ -228,8 +233,9 @@ function draftFromCard(def: CardDefinition): CardDraft {
     if (def.charges !== undefined) draft.charges = def.charges;
     loadEffectIntoDraft(draft, def.effect);
   } else if (def.archetype === "ability") {
-    draft.activateCost = def.activateCost;
-    draft.charges = def.charges;
+    draft.abilityForm = def.abilityForm;
+    if (typeof def.activateCost === "number") draft.activateCost = def.activateCost;
+    if (def.charges !== undefined) draft.charges = def.charges;
     loadEffectIntoDraft(draft, def.effect);
   } else if (def.archetype === "equipment") {
     draft.attackBonus = def.attackBonus;
@@ -250,7 +256,7 @@ function buildEffect(draft: CardDraft): CardEffect | null {
         kind: "applyStatus",
         status: draft.effectStatus,
         amount: draft.effectAmount,
-        duration: draft.effectStatus === "burn" ? draft.effectDuration : undefined,
+        duration: draft.effectDuration,
         target: draft.effectTarget,
       };
     case "buff":
@@ -347,7 +353,10 @@ function buildCardDefinition(draft: CardDraft): CardDefinition | { error: string
   if (draft.archetype === "ability") {
     const effect = buildEffect(draft);
     if (!effect) return { error: "Choose an effect for this Ability." };
-    return { ...base, archetype: "ability", activateCost: draft.activateCost, charges: draft.charges, effect };
+    if (draft.abilityForm === "instant") {
+      return { ...base, archetype: "ability", abilityForm: "instant", effect };
+    }
+    return { ...base, archetype: "ability", abilityForm: "activated", activateCost: draft.activateCost, charges: draft.charges, effect };
   }
   // equipment
   return {
@@ -752,7 +761,20 @@ export function AdminPanel({ collection, userId, onSetCoins, onCardsChanged, onB
                 </select>
               </label>
             )}
-            {((draft.archetype === "spell" && draft.spellForm !== "instant") || draft.archetype === "ability") && (
+            {draft.archetype === "ability" && (
+              <label>
+                Ability Form
+                <select
+                  value={draft.abilityForm}
+                  onChange={(e) => setDraft((d) => ({ ...d, abilityForm: e.target.value as CardDraft["abilityForm"] }))}
+                >
+                  <option value="instant">Instant — resolves on play, like On Play</option>
+                  <option value="activated">Activated — placed in a slot, manually activated</option>
+                </select>
+              </label>
+            )}
+            {((draft.archetype === "spell" && draft.spellForm !== "instant") ||
+              (draft.archetype === "ability" && draft.abilityForm !== "instant")) && (
               <>
                 <label>
                   Activate Cost ({draft.archetype === "spell" ? "Mana" : "Energy"})
@@ -898,22 +920,24 @@ export function AdminPanel({ collection, userId, onSetCoins, onCardsChanged, onB
                       Status
                       <select
                         value={draft.effectStatus}
-                        onChange={(e) => setDraft((d) => ({ ...d, effectStatus: e.target.value as "burn" | "poison" }))}
+                        onChange={(e) => setDraft((d) => ({ ...d, effectStatus: e.target.value as StatusType }))}
                       >
-                        <option value="poison">Poison</option>
-                        <option value="burn">Burn</option>
+                        {STATUS_OPTIONS.map((s) => (
+                          <option key={s} value={s}>
+                            {STATUS_LABELS[s]}
+                          </option>
+                        ))}
                       </select>
                     </label>
-                    {draft.effectStatus === "burn" && (
-                      <label>
-                        Duration (turns)
-                        <input
-                          type="number"
-                          value={draft.effectDuration}
-                          onChange={(e) => setDraft((d) => ({ ...d, effectDuration: Number(e.target.value) }))}
-                        />
-                      </label>
-                    )}
+                    <label>
+                      Duration (turns)
+                      <input
+                        type="number"
+                        value={draft.effectDuration}
+                        onChange={(e) => setDraft((d) => ({ ...d, effectDuration: Number(e.target.value) }))}
+                      />
+                      <span className="admin-hint">Leave the default if this status should persist indefinitely instead.</span>
+                    </label>
                   </>
                 )}
                 {(draft.effectKind === "buff" || draft.effectKind === "consume") && (

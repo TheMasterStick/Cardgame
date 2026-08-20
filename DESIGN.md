@@ -244,6 +244,166 @@ restriction at all, so nothing already in Fighter/Mage/Rogue's decks
 became illegal. Archivist's Passive uses `auraBuff`'s `{faction}`
 filter for the first time (previously only `{race}` and `"all"` had a
 real card), Hero Power draws a card, Signature raises max Mana.
+**Phase K adopted an external, authoritative "Neutral Core Set" spec** —
+three documents the user supplied (59 mechanically-defined cards:
+34 Creatures, 10 Buildings, 6 Spells, 6 Abilities, 3 Equipment) — as
+the source of truth for every card in that set, on top of the engine
+built through Phase J, which the user explicitly asked to leave alone
+rather than reconcile against the new spec. **The card art itself is
+now the card face**: every non-Hero archetype's art already bakes in
+name/cost/rarity/type/rules text/stats, so the UI no longer draws a
+frame or text overlay for Creature/Building/Spell/Ability/Equipment —
+only *live* state that can't be baked into a static image (current
+Attack/HP, status badges, Spell/Ability charges remaining) renders on
+top of the art, at every size (compact/full/zoom). Hero art stays bare
+character art by original design (Guard/Health/Attack come from
+Equipment, not the art), so Hero is the one archetype that still shows
+a text layout. `src/data/cardFrames.ts` and its `card--framed`/
+`frame__*` CSS were removed as dead code once nothing referenced them.
+`arrow-archer` (id kept stable for existing deck references) is now
+just displayed as "Archer".
+
+New mechanics landed to match the spec's keyword glossary, each
+following the project's existing "live-recompute vs. permanently-
+stored vs. attack-instance-scoped" bonus taxonomy (§5/§7) rather than
+inventing a fourth pattern where an existing one already fit:
+**Vanish** replaces **Stealth** outright (same untargetable-by-
+targeted-Spell/Ability/attack behavior, but the old "breaks once this
+attacks" condition is gone — the user's explicit call when Stealth and
+the spec's Vanish turned out to be the same keyword under two names);
+**Enrage** (Berserking Ogre) is live-recomputed Attack equal to
+current missing HP, so healing brings it back down and it's never
+stored on the `CardInstance` — this absorbed the *keyword name*
+"frenzy" freed up by the next mechanic; **Frenzy** (Cimbar Berserker,
+a new, different card from the one that used to hold this keyword) is
+a permanent +Attack stored via `attackDelta`, applied once per
+declared attack regardless of whether the hit lands or the target
+survives; **Resistant** (Stone Golem) is a flat per-hit damage
+reduction on the defender's own `CreatureDefinition`, additive with
+any bearer Armor, floored at 0 in `damageCard`; **Deadeye** (Longbow
+Sniper) is the one genuinely new bonus *shape* — attack-instance-
+scoped, not live-recomputed and not permanently stored, added only
+while resolving one specific attack against a Backline target;
+**Double Strike** (Golden Company Captain) tracks
+`CardInstance.attacksUsedThisTurn` internally while every other caller
+keeps reading `hasAttackedThisTurn` as "exhausted" exactly as before;
+**Duel** (Lorthaine Elite Veteran) is deliberately bespoke, single-card
+logic (`declareDuelMark` in `combat.ts`) rather than a generic
+CardEffect — matching the project's existing Hero-Rule-Breaks
+precedent that a one-off mechanic is one-off code, not a new system —
+marking one enemy creature (`CardInstance.markedTargetId`) grants a
+live Attack/HP bonus and an Infiltrate-equivalent targeting bypass
+(Vanguard ladder + Taunt) while the mark holds, with no explicit
+cleanup needed when the marked creature dies since the live lookup
+just stops finding it; **Crowd Pleaser** (Pit Fighter of Klamet) is a
+live, capped Attack/HP bonus scaled by other creatures currently on
+the board — **Open default:** both sides count (the spec just says "on
+the board," no "friendly" qualifier); **Bleed** and **Burn-on-hit**
+(Grey Wolf, Fire Golem) reuse the exact onAttack-trigger pattern Plague
+Rat's Poison always should have used — which surfaced a genuine
+pre-existing bug: `fireOnAttackTrigger` was fully built but never
+actually called from `declareCreatureAttack`, so Poison-on-hit had
+never fired in real play since the keyword was introduced; it's wired
+in now, firing against whichever creature actually took the damage
+(honoring a Protector redirect) and only when a hit actually lands.
+**Freeze** is a new control status (`StatusType`, amount always 0) that
+gates `creatureCanAttack`/`heroCanAttack`/Advance/Duel-activation via a
+shared `isFrozen` helper in `status.ts`; `status.ts`'s tick/duration
+logic was generalized from "only Burn decrements" to "any status with
+a `turnsRemaining` decrements," so Poison/Bleed/Burn/Freeze all now
+carry an explicit duration the same way instead of Poison being the
+one that persisted forever. **Formation became type-conditional**: a
+new `creatureType?: CreatureType[]` field (Fighter/Ranger/Defender/
+Beast/Elemental/Mage/Ogre/Giant/Dragon/Support/Creature — printed as
+e.g. "Defender • Elemental" for a dual-typed card, stored as an array)
+replaces the old any-adjacent-ally check with "shares a `creatureType`
+tag with the neighbor," a deliberately separate field from the
+existing `Race` (which still only drives Faction/Allegiance and aura
+filters — the two systems don't cross-reference each other). Farm/Gold
+Mine's "+N Resource income per turn" needed a genuinely new concept
+distinct from the existing cap-raising `gainCap`: `ResourcePool.income`
+(defaults to 1, matching the pre-existing hardcoded regen) and a new
+`gainIncome` CardEffect that raises it permanently. Recruitment
+Station's "draw a creature" is a new `drawCreature` CardEffect (finds
+the first creature card in the deck, not necessarily the top card);
+its "2 total activations" needed `BuildingActivatedAbility.charges`, a
+concept Buildings never had before (unlike a Spell/Ability's charges,
+the Building itself stays on the board once its ability runs out, only
+the activation stops working) — reusing `CardInstance.chargesRemaining`
+rather than adding a parallel field. Elder Flame Imp's "destroy target,
+gain half its printed stats" needed a new `devour` CardEffect plus a
+`resolveEffect(..., selfInstanceId)` parameter (threaded through every
+onPlay-trigger call site) so the effect can identify *which* creature
+its own trigger belongs to — the first real use of the "self" concept
+the `EffectTarget` union had a placeholder for but nothing used yet.
+Frost Nova's "damage + Freeze" needed a `multi` CardEffect that just
+resolves a list of sub-effects against the same target/source in
+order — **scope note:** every sub-effect used this way must be one
+that doesn't need its own separate UI target selection (Frost Nova's
+two sub-effects are both `allEnemyCreatures`), not a general multi-
+target system. Fixing this surfaced a second genuine pre-existing bug:
+`applyStatus`'s CardEffect resolution never had an `allEnemyCreatures`/
+`allFriendlyCreatures` branch at all (unlike `damage`/`buff`, which
+always did), so an AOE status effect silently did nothing before this
+pass. Black Dragon's "choose Vanguard or Backline, damage that row"
+needed a new `targetRow` `EffectTarget` and a matching
+`{kind:"row"; owner; row}` `EffectTargetRef` variant. Lightning Bolt/
+Renewal/Toxic Cloud's "creature or Hero, never a Building" needed a new
+`targetCreatureOrPlayer` `EffectTarget`, wired through `targeting.ts`'s
+UI click-restriction the same way the existing `targetCreatureOrBuilding`
+already was. Ancient Mage Tower's "+2 to every instance of damage/
+healing from your Spell cards" is a new `BuildingDefinition.spellAmplify`
+field, applied inside `resolveEffect` whenever `sourceArchetype ===
+"spell"` — **Open default:** the bonus is baked into the amount once,
+at the moment the Spell's effect resolves (including into a Poison/
+Bleed/Burn status's stored `amount`, so its remaining ticks keep the
+bonus), rather than re-checked live on every future status tick if the
+Tower is later destroyed mid-effect — the simpler of two readings the
+spec's own worked example left ambiguous. Abilities gained the same
+Instant/Activated split Spells already had (`abilityForm`) so Exercise
+and Executioner's Strike (both "On Play," no separate activation step)
+fit the existing Spell-form pattern instead of a new one; Focus and
+Rally's un-printed use counts default to unlimited (an explicit "Open
+default," per the spec's own "don't invent a number" instruction).
+Equipment gained `keywords?: Keyword[]` (Cloak of Shadows grants the
+Hero Vanish while equipped, checked via a new `heroHasVanish` rather
+than the existing creature/building-only `hasKeyword`) and `charges?:
+number`, decremented once per Hero attack while equipped
+(`tickEquipmentChargesOnHeroAttack`) and auto-discarding at 0 — a
+generalized mechanism, not hardcoded to the one card that needs it
+today. Two spec-mandated stat/effect corrections worth calling out
+since they're easy to miss in a diff: Iron Sword's printed +2 Attack
+had never actually been wired into `attackBonus` (silently 0 since it
+shipped), and Cloak of Shadows previously carried a +3 Attack bonus
+the new spec doesn't give it at all (Vanish + charges only) — both
+fixed to match the spec exactly. `getEffectiveCreatureMaxHp` (new,
+`combat.ts`) is a display-only overlay for Crowd Pleaser/Duel/
+Formation's optional HP components — `currentHp`, death checks, and
+`healCard`'s cap are computed from base HP only and never consult it,
+so losing a live bonus can never retroactively kill a creature; it's
+exported for the UI but not yet wired into a display that shows a
+live max alongside current HP (today's corner-badge layout only has
+room for one HP number, so this is a known gap, not a design decision).
+**Two more known gaps, both flagged rather than silently shipped:**
+Duel's activation (`declareDuelMark`) has no player-facing UI button
+yet — the AI uses it, a human can't trigger it through the interface
+in this pass; and Bulletin Board's "look at the top 3, keep 1, bottom 2
+in any order" is approximated as a plain extra draw, since a genuine
+reveal-then-choose interaction doesn't exist anywhere in the engine
+yet and building one is a bigger investment than this one Common card
+justifies on its own. Starter decks were **not** reworked to weave in
+the 11 new cards (Line Infantry, Grey Wolf, Fire Golem, Golden Company
+Captain, Pit Fighter of Klamet, Frost Golem, Lorthaine Elite Veteran,
+Elder Flame Imp, Black Dragon, Ancient Mage Tower, Warhorn of
+Gestmane) beyond the one mandatory fix (`call-to-arms`, a pre-spec
+placeholder Building, replaced by `warhorn-of-gestmane` in the Fighter
+deck since both did "gain Guard at start of turn"); every new card
+exists and is fully functional but most are only reachable via the
+Deck Builder or Admin Panel, not a starter deck, in this pass. The
+Fighter/Mage/Rogue Hero cards were explicitly left untouched — the
+spec itself says their stats aren't finalized yet and says not to
+invent them.
+
 CARDS.md/BACKEND.md describe what's live today; check them (not just
 this doc) for current schema.
 
@@ -780,6 +940,7 @@ Suggested build order, each phase individually shippable/testable:
 | **H — Closing flagged gaps** ✅ *(live)* | Not a pre-planned phase — a cleanup pass over three items earlier phases had explicitly left open, none needing new design decisions: Bloodied's trigger mechanism decided (continuous live check, `wounded-berserker`), a shipped Rule-Breaks Hero (`grand-marshal`), and a documentation correction (Siege/Sabotage's column-protection bypass was already live since Phase B1, the Phase E note was just stale). See the implementation-status note above. |
 | **I — Garrison (§16)** ✅ *(live)* | A `garrison` CardEffect (single-target, resolved the same way as Consume/Transform) moves a friendly creature into `CardInstance.garrisonedCreature` on a Building, off the battlefield and untargetable, ejected back out (or destroyed) when that Building dies. `garrison-post` demonstrates it in the Fighter starter deck. With this, every §16 Board-as-resource pattern that's actually part of the game is live — Mount was decided against, not deferred; see the implementation-status note above. |
 | **J — Allegiance made live (§10)** ✅ *(live)* | Not a pre-planned phase — Allegiance (§10) was built and unit-tested back in Phase C but never actually restricted a real deck, since no starter Hero carried a Faction. `archivist` (`faction: "arcane-industries"`) ships with a real 30-card starter deck, so the restriction now genuinely bites. See the implementation-status note above. |
+| **K — Neutral Core Set adoption + card-art-is-the-card UI** ✅ *(live)* | Adopted an external 59-card spec as ground truth for the Neutral Core Set; every existing Phase A-J mechanic was explicitly kept, not reconciled against the new spec. Vanish replaces Stealth; new keywords Enrage, Frenzy (reassigned to a new card), Resistant, Deadeye, Double Strike, Duel, Crowd Pleaser, Bleed, Burn(-on-hit), Frost Armor, Massive; new `creatureType` field drives type-conditional Formation; new `gainIncome`/`drawCreature`/`devour`/`multi` CardEffect kinds; new `targetRow`/`targetCreatureOrPlayer` targeting; Building ability charges; Equipment keywords/charges; Ability gained the Instant/Activated split Spells already had. The card frame/text overlay was removed for every non-Hero archetype — the art itself now carries that information. Two genuine pre-existing bugs surfaced and fixed along the way: the onAttack trigger was built but never wired into combat, and `applyStatus` never supported AOE targets. See the implementation-status note above for the full list, the Open defaults, and the known gaps (no Duel UI button yet, Bulletin Board's scrying simplified, decks not reworked to include the 11 new cards). |
 
 Each phase gets the same verification pass as prior work: `tsc
 --noEmit`, `eslint`, `vitest`, `vite build`, plus a Playwright smoke

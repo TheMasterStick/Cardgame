@@ -1,4 +1,4 @@
-import type { CardArchetype, Element, EquipmentCategory, Faction, Keyword, Race, Rarity } from "../engine/types";
+import type { CardArchetype, CreatureType, Element, EquipmentCategory, Faction, Keyword, Race, Rarity, StatusType } from "../engine/types";
 
 export const ELEMENT_LABELS: Record<Element, string> = {
   frost: "Frost",
@@ -91,13 +91,23 @@ export const KEYWORD_LABELS: Record<Keyword, string> = {
   formation: "Formation",
   advance: "Advance",
   push: "Push",
-  stealth: "Stealth",
+  vanish: "Vanish",
   ward: "Ward",
   cleave: "Cleave",
   drain: "Drain",
   bloodied: "Bloodied",
   summon: "Summon",
   armiger: "Armiger",
+  enrage: "Enrage",
+  doubleStrike: "Double Strike",
+  resistant: "Resistant",
+  deadeye: "Deadeye",
+  duel: "Duel",
+  crowdPleaser: "Crowd Pleaser",
+  bleed: "Bleed",
+  burn: "Burn",
+  frostArmor: "Frost Armor",
+  massive: "Massive",
 };
 
 /** Small glyphs shown on the compact card face so keyworded cards are recognizable at a glance. */
@@ -118,14 +128,54 @@ export const KEYWORD_ICONS: Record<Keyword, string> = {
   formation: "🤝",
   advance: "⏩",
   push: "🫸",
-  stealth: "🌫️",
+  vanish: "🌫️",
   ward: "🧿",
   cleave: "🪓",
   drain: "🩸",
   bloodied: "💔",
   summon: "🌀",
   armiger: "🎒",
+  enrage: "😡",
+  doubleStrike: "⚔️",
+  resistant: "🪨",
+  deadeye: "🎯",
+  duel: "🗡️",
+  crowdPleaser: "🎉",
+  bleed: "🩹",
+  burn: "🔥",
+  frostArmor: "❄️",
+  massive: "🐘",
 };
+
+export const CREATURE_TYPE_LABELS: Record<CreatureType, string> = {
+  fighter: "Fighter",
+  ranger: "Ranger",
+  defender: "Defender",
+  beast: "Beast",
+  elemental: "Elemental",
+  mage: "Mage",
+  ogre: "Ogre",
+  giant: "Giant",
+  dragon: "Dragon",
+  support: "Support",
+  creature: "Creature",
+};
+export const CREATURE_TYPE_OPTIONS = Object.keys(CREATURE_TYPE_LABELS) as CreatureType[];
+
+export const STATUS_LABELS: Record<StatusType, string> = {
+  poison: "Poison",
+  bleed: "Bleed",
+  burn: "Burn",
+  freeze: "Freeze",
+};
+
+export const STATUS_ICONS: Record<StatusType, string> = {
+  poison: "☠",
+  bleed: "🩹",
+  burn: "🔥",
+  freeze: "❄️",
+};
+export const STATUS_OPTIONS = Object.keys(STATUS_LABELS) as StatusType[];
 
 export const EQUIPMENT_CATEGORY_LABELS: Record<EquipmentCategory, string> = {
   weapon: "Weapon",

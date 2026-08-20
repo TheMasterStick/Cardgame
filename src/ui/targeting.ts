@@ -8,6 +8,7 @@ const EXPLICIT_TARGET_CATEGORIES: EffectTarget[] = [
   "targetBuilding",
   "targetCreatureOrBuilding",
   "targetAny",
+  "targetCreatureOrPlayer",
   "targetPlayer",
 ];
 
@@ -22,7 +23,7 @@ export function effectNeedsExplicitTarget(effect: CardEffect): boolean {
 
 /** Which side of the board an effect's target must come from, for UI click-restriction purposes. */
 export function effectTargetSide(effect: CardEffect): "own" | "enemy" | null {
-  if (effect.kind === "damage" || effect.kind === "applyStatus") return "enemy";
+  if (effect.kind === "damage" || effect.kind === "applyStatus" || effect.kind === "devour") return "enemy";
   if (effect.kind === "heal" || effect.kind === "buff" || effect.kind === "consume" || effect.kind === "transform" || effect.kind === "garrison") return "own";
   return null;
 }
@@ -33,7 +34,8 @@ export function effectAllowsBuildingTarget(effect: CardEffect): boolean {
 }
 
 export function effectAllowsPortraitTarget(effect: CardEffect): boolean {
-  return effectTargetCategory(effect) === "targetAny" || effectTargetCategory(effect) === "targetPlayer";
+  const category = effectTargetCategory(effect);
+  return category === "targetAny" || category === "targetPlayer" || category === "targetCreatureOrPlayer";
 }
 
 /**
@@ -47,18 +49,20 @@ export function effectAllowsPortraitTarget(effect: CardEffect): boolean {
  */
 export function effectHasLegalTarget(state: GameState, effect: CardEffect, sourceArchetype?: CardArchetype): boolean {
   const category = effectTargetCategory(effect);
-  if (category === null || category === "targetPlayer" || category === "targetAny") return true;
+  if (category === null || category === "targetPlayer" || category === "targetAny" || category === "targetCreatureOrPlayer") {
+    return true;
+  }
 
   const side = effectTargetSide(effect);
   const targetOwner: PlayerId = side === "own" ? "player" : "opponent";
   const board = state.players[targetOwner].board;
-  // A Spell/Ability can't target a Stealthed creature (DESIGN.md §7) — if
-  // every candidate creature is Stealthed, treat it the same as no creature
-  // being out at all, so the card still fizzles instead of entering a
-  // pending-target state with nothing left to click.
-  const isBlockedBySpellOrAbilityStealth = sourceArchetype === "spell" || sourceArchetype === "ability";
+  // A Spell/Ability can't target a Vanished creature (DESIGN.md §7/§17) —
+  // if every candidate creature has Vanish, treat it the same as no
+  // creature being out at all, so the card still fizzles instead of
+  // entering a pending-target state with nothing left to click.
+  const isBlockedBySpellOrAbilityVanish = sourceArchetype === "spell" || sourceArchetype === "ability";
   const hasCreature = [...board.vanguard, ...board.support].some(
-    (c) => c !== null && !(isBlockedBySpellOrAbilityStealth && hasKeyword(c, "stealth") && !c.stealthBroken),
+    (c) => c !== null && !(isBlockedBySpellOrAbilityVanish && hasKeyword(c, "vanish")),
   );
   const hasBuilding = board.buildings.some((c) => c !== null);
 
@@ -118,7 +122,7 @@ export function getPendingEffect(state: GameState, pending: PendingAction | null
  * (as opposed to a creature/building Warcry, or a Hero Power/Signature,
  * neither of which are Spell/Ability archetype cards) — mirrors the
  * `sourceArchetype` engine.ts's resolveEffect is given, needed here so the
- * UI's Stealth exclusion (below) only applies where DESIGN.md §7 actually
+ * UI's Vanish exclusion (below) only applies where DESIGN.md §7/§17 actually
  * scopes it: "a targeted enemy Spell or Ability", not any hostile effect.
  */
 export function pendingEffectSourceArchetype(state: GameState, pending: PendingAction): CardArchetype | undefined {
@@ -150,8 +154,7 @@ export function isEffectTargetable(
     side === "creature" &&
     card &&
     (sourceArchetype === "spell" || sourceArchetype === "ability") &&
-    hasKeyword(card, "stealth") &&
-    !card.stealthBroken
+    hasKeyword(card, "vanish")
   ) {
     return false;
   }

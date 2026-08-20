@@ -1,7 +1,7 @@
 import { CARD_DEFINITIONS } from "../data/cards";
 import { findOpenContiguousSlots, findTransformSlots } from "./board";
 import { drawCard } from "./deck";
-import { getBearerDamageReduction, unassignEquipmentFrom } from "./equipment";
+import { getBearerDamageReduction, heroHasVanish, unassignEquipmentFrom } from "./equipment";
 import { createCardInstance } from "./factory";
 import { applyStatus } from "./status";
 import {
@@ -28,15 +28,27 @@ function isImmuneToSpell(card: CardInstance, sourceArchetype: CardArchetype | un
 }
 
 /**
- * Stealth (DESIGN.md §7) can't be chosen as the target of a hostile Spell or
- * Ability — creature/building triggers (onPlay/onAttack/etc., no
+ * Vanish (DESIGN.md §7/§17) can't be chosen as the target of a hostile
+ * Spell or Ability — creature/building triggers (onPlay/onAttack/etc., no
  * sourceArchetype) aren't scoped by this, matching how Immune is also only
  * a Spell-archetype concern. AOE effects never reach this check at all
- * (they don't go through a single-target CardInstance lookup), so Stealth
- * staying vulnerable to `allEnemyCreatures` falls out naturally.
+ * (they don't go through a single-target CardInstance lookup), so Vanish
+ * staying vulnerable to `allEnemyCreatures` falls out naturally. Unlike the
+ * old Stealth, there's no break-on-attack condition — it's just "does this
+ * creature currently have the keyword."
  */
-function isStealthedFromTargeting(card: CardInstance, sourceArchetype: CardArchetype | undefined): boolean {
-  return (sourceArchetype === "spell" || sourceArchetype === "ability") && hasKeyword(card, "stealth") && !card.stealthBroken;
+function isVanishedFromTargeting(card: CardInstance, sourceArchetype: CardArchetype | undefined): boolean {
+  return (sourceArchetype === "spell" || sourceArchetype === "ability") && hasKeyword(card, "vanish");
+}
+
+/** Ancient Mage Tower-style Spell-damage/heal amplification (DESIGN.md §17) — see BuildingDefinition.spellAmplify's doc comment for the "baked in once" Open default. */
+function spellAmplifiedAmount(state: GameState, actingPlayer: PlayerId, amount: number, sourceArchetype: CardArchetype | undefined): number {
+  if (sourceArchetype !== "spell") return amount;
+  let bonus = 0;
+  for (const building of state.players[actingPlayer].board.buildings) {
+    if (building) bonus += (CARD_DEFINITIONS[building.defId] as BuildingDefinition).spellAmplify ?? 0;
+  }
+  return amount + bonus;
 }
 
 /**
@@ -76,6 +88,8 @@ function allBoardCreatures(rows: { vanguard: (CardInstance | null)[]; support: (
 export type EffectTargetRef =
   | { kind: "card"; owner: PlayerId; instanceId: string }
   | { kind: "player"; owner: PlayerId }
+  /** Black Dragon (DESIGN.md §17): the caster picks an enemy row at play-time instead of a single creature. */
+  | { kind: "row"; owner: PlayerId; row: "vanguard" | "support" }
   | null;
 
 function findCard(
@@ -152,15 +166,16 @@ export function killCardIfDead(state: GameState, owner: PlayerId, instanceId: st
 export function damageCard(state: GameState, owner: PlayerId, instanceId: string, amount: number): number {
   const found = findCard(state, owner, instanceId);
   if (!found || found.card.currentHp === undefined) return 0;
-  const reduction = getBearerDamageReduction(state, owner, { kind: "creature", instanceId });
+  const armorReduction = getBearerDamageReduction(state, owner, { kind: "creature", instanceId });
+  const def = CARD_DEFINITIONS[found.card.defId] as CreatureDefinition | BuildingDefinition;
+  // Resistant (DESIGN.md §17): a creature's own innate flat reduction, on
+  // top of any bearer Armor — the two stack additively, floored at 0.
+  const resistant = def.archetype === "creature" ? (def.resistantAmount ?? 0) : 0;
+  const reduction = armorReduction + resistant;
   const reduced = Math.max(0, amount - reduction);
   found.card.currentHp -= reduced;
-  if (found.card.currentHp > 0 && hasKeyword(found.card, "frenzy")) {
-    found.card.attackDelta += reduced;
-    state.log.push(`${found.card.defId} (${owner}) Frenzies, gaining +${reduced} Attack.`);
-  }
   state.log.push(
-    `${found.card.defId} (${owner}) took ${reduced} damage${reduction > 0 ? ` (${amount} reduced by ${reduction} Armor)` : ""}.`,
+    `${found.card.defId} (${owner}) took ${reduced} damage${reduction > 0 ? ` (${amount} reduced by ${reduction})` : ""}.`,
   );
   killCardIfDead(state, owner, instanceId);
   return reduced;
@@ -270,62 +285,84 @@ export function resolveEffect(
   effect: CardEffect,
   target: EffectTargetRef,
   sourceArchetype?: CardArchetype,
+  /** The creature/building whose trigger produced this effect, if any — only Devour (Elder Flame Imp) currently needs it. */
+  selfInstanceId?: string,
 ): void {
   switch (effect.kind) {
     case "damage": {
+      const amount = spellAmplifiedAmount(state, actingPlayer, effect.amount, sourceArchetype);
       if (effect.target === "allEnemyCreatures" || effect.target === "allFriendlyCreatures") {
         const owner = effect.target === "allEnemyCreatures" ? otherPlayer(actingPlayer) : actingPlayer;
         for (const c of allBoardCreatures(state.players[owner].board)) {
-          if (!isImmuneToSpell(c, sourceArchetype)) damageCard(state, owner, c.instanceId, effect.amount);
+          if (!isImmuneToSpell(c, sourceArchetype)) damageCard(state, owner, c.instanceId, amount);
         }
         return;
       }
       if (effect.target === "selfHero") {
-        damageHeroDirect(state, actingPlayer, effect.amount);
+        damageHeroDirect(state, actingPlayer, amount);
         return;
       }
       if (!target) return;
+      if (target.kind === "row") {
+        for (const c of allBoardCreatures({ vanguard: state.players[target.owner].board[target.row], support: [] })) {
+          damageCard(state, target.owner, c.instanceId, amount);
+        }
+        return;
+      }
       if (target.kind === "player") {
-        damagePlayer(state, target.owner, effect.amount);
+        if (heroHasVanish(state, target.owner) && (sourceArchetype === "spell" || sourceArchetype === "ability")) return;
+        damagePlayer(state, target.owner, amount);
       } else {
         const found = findCard(state, target.owner, target.instanceId);
-        if (found && isStealthedFromTargeting(found.card, sourceArchetype)) return;
+        if (found && isVanishedFromTargeting(found.card, sourceArchetype)) return;
         if (found && isImmuneToSpell(found.card, sourceArchetype)) return;
         if (found && tryConsumeWard(state, target.owner, found.card, sourceArchetype)) return;
-        damageCard(state, target.owner, target.instanceId, effect.amount);
+        damageCard(state, target.owner, target.instanceId, amount);
       }
       return;
     }
     case "heal": {
+      const amount = spellAmplifiedAmount(state, actingPlayer, effect.amount, sourceArchetype);
       if (effect.target === "selfHero") {
-        healHero(state, actingPlayer, effect.amount);
+        healHero(state, actingPlayer, amount);
         return;
       }
       if (!target) return;
+      if (target.kind === "row") return;
       if (target.kind === "player") {
-        healHero(state, target.owner, effect.amount);
+        healHero(state, target.owner, amount);
       } else {
         const found = findCard(state, target.owner, target.instanceId);
         if (found && isImmuneToSpell(found.card, sourceArchetype)) return;
-        healCard(state, target.owner, target.instanceId, effect.amount);
+        healCard(state, target.owner, target.instanceId, amount);
       }
       return;
     }
     case "applyStatus": {
+      const amount = spellAmplifiedAmount(state, actingPlayer, effect.amount, sourceArchetype);
+      if (effect.target === "allEnemyCreatures" || effect.target === "allFriendlyCreatures") {
+        const owner = effect.target === "allEnemyCreatures" ? otherPlayer(actingPlayer) : actingPlayer;
+        for (const c of allBoardCreatures(state.players[owner].board)) {
+          if (!isImmuneToSpell(c, sourceArchetype)) applyStatus(c, effect.status, amount, effect.duration);
+        }
+        return;
+      }
       if (effect.target === "selfHero") {
-        applyStatus(state.players[actingPlayer].hero, effect.status, effect.amount, effect.duration);
+        applyStatus(state.players[actingPlayer].hero, effect.status, amount, effect.duration);
         return;
       }
       if (!target) return;
+      if (target.kind === "row") return;
       if (target.kind === "player") {
-        applyStatus(state.players[target.owner].hero, effect.status, effect.amount, effect.duration);
+        if (heroHasVanish(state, target.owner) && (sourceArchetype === "spell" || sourceArchetype === "ability")) return;
+        applyStatus(state.players[target.owner].hero, effect.status, amount, effect.duration);
         return;
       }
       const found = findCard(state, target.owner, target.instanceId);
-      if (!found || isStealthedFromTargeting(found.card, sourceArchetype)) return;
+      if (!found || isVanishedFromTargeting(found.card, sourceArchetype)) return;
       if (isImmuneToSpell(found.card, sourceArchetype)) return;
       if (tryConsumeWard(state, target.owner, found.card, sourceArchetype)) return;
-      applyStatus(found.card, effect.status, effect.amount, effect.duration);
+      applyStatus(found.card, effect.status, amount, effect.duration);
       return;
     }
     case "buff": {
@@ -354,6 +391,22 @@ export function resolveEffect(
       gainCap(state, actingPlayer, effect.pool, effect.amount);
       return;
     }
+    case "gainIncome": {
+      const player = state.players[actingPlayer];
+      player.resources.income = (player.resources.income ?? 1) + effect.amount;
+      state.log.push(`${actingPlayer}'s Resource income increases by ${effect.amount}.`);
+      return;
+    }
+    case "drawCreature": {
+      const player = state.players[actingPlayer];
+      for (let i = 0; i < effect.amount; i++) {
+        const index = player.deck.findIndex((c) => CARD_DEFINITIONS[c.defId]?.archetype === "creature");
+        if (index === -1) return; // no creature left in the deck — fizzles, like drawing from an empty deck
+        const [card] = player.deck.splice(index, 1);
+        player.hand.push(card);
+      }
+      return;
+    }
     case "summonCreature": {
       const def = CARD_DEFINITIONS[effect.creatureId];
       if (!def || def.archetype !== "creature") return;
@@ -373,7 +426,7 @@ export function resolveEffect(
         for (const s of slots) player.board[row][s] = summoned;
         state.log.push(`${effect.creatureId} (${actingPlayer}) is summoned.`);
         for (const trigger of def.triggers) {
-          if (trigger.on === "onPlay") resolveEffect(state, actingPlayer, trigger.effect, null);
+          if (trigger.on === "onPlay") resolveEffect(state, actingPlayer, trigger.effect, null, undefined, summoned.instanceId);
         }
       }
       return;
@@ -416,7 +469,7 @@ export function resolveEffect(
       for (const s of slots) row[s] = transformed;
       state.log.push(`${old.defId} (${target.owner}) transforms into ${effect.creatureId}.`);
       for (const trigger of newDef.triggers) {
-        if (trigger.on === "onPlay") resolveEffect(state, target.owner, trigger.effect, null);
+        if (trigger.on === "onPlay") resolveEffect(state, target.owner, trigger.effect, null, undefined, transformed.instanceId);
       }
       return;
     }
@@ -433,6 +486,24 @@ export function resolveEffect(
       }
       building.garrisonedCreature = found.card;
       state.log.push(`${found.card.defId} (${target.owner}) garrisons inside ${building.defId}.`);
+      return;
+    }
+    case "devour": {
+      if (!target || target.kind !== "card" || !selfInstanceId) return;
+      const found = findCard(state, target.owner, target.instanceId);
+      if (!found || found.card.currentHp === undefined) return;
+      const targetDef = CARD_DEFINITIONS[found.card.defId] as CreatureDefinition | BuildingDefinition;
+      const attackGain = Math.floor(("attack" in targetDef ? targetDef.attack : 0) / 2);
+      const hpGain = Math.floor(targetDef.hp / 2);
+      // A destroy, not a hostile hit — bypasses Armor/Resistant entirely, same as Consume.
+      found.card.currentHp = 0;
+      killCardIfDead(state, target.owner, target.instanceId);
+      const self = findCard(state, actingPlayer, selfInstanceId);
+      if (self) applyStatBuff(self.card, attackGain, hpGain);
+      return;
+    }
+    case "multi": {
+      for (const sub of effect.effects) resolveEffect(state, actingPlayer, sub, target, sourceArchetype, selfInstanceId);
       return;
     }
   }

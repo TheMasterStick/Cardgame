@@ -82,7 +82,7 @@ export function startTurn(state: GameState): void {
   // already owning a Resources-generating Building (DESIGN.md §2).
   player.mana.current = player.mana.cap;
   player.energy.current = player.energy.cap;
-  player.resources.current = Math.min(player.resources.cap, player.resources.current + 1);
+  player.resources.current = Math.min(player.resources.cap, player.resources.current + (player.resources.income ?? 1));
 
   // The player who goes first skips their turn-1 draw (standard alternating-turn balancing).
   if (state.turnNumber > 1) {
@@ -150,20 +150,22 @@ export function playCardFromHand(
   const card = player.hand[handIndex];
   const def = CARD_DEFINITIONS[card.defId];
 
-  // Instant Spells (DESIGN.md §1a) never touch a Spell/Ability slot — they
-  // resolve immediately off a (possibly discounted) Mana cost and go to the
-  // discard pile. Discard rather than DESIGN.md's literal "Graveyard": the
-  // graveyard array is reserved for creature/building deaths (see the
-  // Raise Dead Signature example in DESIGN.md §9), matching the existing
-  // charge-exhaustion behavior below in activateSlotCard.
-  if (def.archetype === "spell" && def.spellForm === "instant") {
-    const cost = peekSpellDiscount(state, owner, def.cost);
-    if (player.mana.current < cost) {
-      return { ok: false, reason: "Not enough Mana." };
+  // Instant Spells/Abilities (DESIGN.md §1a/§17) never touch a Spell/Ability
+  // slot — they resolve immediately off a (possibly Mana-discounted, for
+  // Spells only) cost and go to the discard pile. Discard rather than
+  // DESIGN.md's literal "Graveyard": the graveyard array is reserved for
+  // creature/building deaths (see the Raise Dead Signature example in
+  // DESIGN.md §9), matching the existing charge-exhaustion behavior below
+  // in activateSlotCard.
+  if ((def.archetype === "spell" && def.spellForm === "instant") || (def.archetype === "ability" && def.abilityForm === "instant")) {
+    const { pool, label } = costPoolFor(player, def.archetype);
+    const cost = def.archetype === "spell" ? peekSpellDiscount(state, owner, def.cost) : def.cost;
+    if (pool.current < cost) {
+      return { ok: false, reason: `Not enough ${label}.` };
     }
-    player.mana.current -= applySpellDiscount(state, owner, def.cost);
+    pool.current -= def.archetype === "spell" ? applySpellDiscount(state, owner, def.cost) : def.cost;
     player.hand.splice(handIndex, 1);
-    resolveEffect(state, owner, def.effect, options.target ?? null, "spell");
+    resolveEffect(state, owner, def.effect, options.target ?? null, def.archetype);
     player.discard.push(card);
     return { ok: true };
   }
@@ -213,7 +215,7 @@ export function playCardFromHand(
     // which slot is looked up; death cleanup clears every occupied slot.
     for (const s of creatureSlots) player.board[creatureRow][s] = card;
     for (const trigger of def.triggers) {
-      if (trigger.on === "onPlay") resolveEffect(state, owner, trigger.effect, options.target ?? null);
+      if (trigger.on === "onPlay") resolveEffect(state, owner, trigger.effect, options.target ?? null, undefined, card.instanceId);
     }
   } else if (def.archetype === "building") {
     player.board.buildings[slot] = card;
@@ -248,9 +250,10 @@ export function activateSlotCard(
   if (def.archetype !== "spell" && def.archetype !== "ability") {
     return { ok: false, reason: "Not an activatable card." };
   }
-  // Only an Instant Spell can lack activateCost, and Instant Spells never
-  // reach a slot (playCardFromHand casts them straight from hand) — this
-  // check exists to satisfy the type narrowing below, not a real path.
+  // Only an Instant Spell/Ability can lack activateCost, and Instant
+  // cards never reach a slot (playCardFromHand resolves them straight from
+  // hand) — this check exists to satisfy the type narrowing below, not a
+  // real path.
   if (def.activateCost === undefined) {
     return { ok: false, reason: "This card cannot be activated." };
   }
