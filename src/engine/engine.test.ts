@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { activateBuildingAbility } from "./building";
 import { declareAdvance, declareCreatureAttack, getEffectiveCreatureAttack, getHeroAttack, heroCanAttack } from "./combat";
 import { CARD_DEFINITIONS } from "../data/cards";
@@ -808,9 +808,31 @@ describe("Push", () => {
 });
 
 describe("Advance", () => {
+  // No shipped card currently carries the "advance" keyword (Vanguard Scout,
+  // the sole exemplar, was removed from the card pool) — the mechanism
+  // itself is still fully built and tested here via a test-only definition,
+  // the same pattern used elsewhere for a keyword/effect with no live card.
+  const testScoutId = "test-advance-scout";
+  beforeEach(() => {
+    CARD_DEFINITIONS[testScoutId] = {
+      id: testScoutId,
+      name: "Test Advance Scout",
+      archetype: "creature",
+      cost: 2,
+      rarity: "common",
+      attack: 2,
+      hp: 3,
+      keywords: ["advance"],
+      triggers: [],
+    };
+  });
+  afterEach(() => {
+    delete CARD_DEFINITIONS[testScoutId];
+  });
+
   it("moves an Advance-keyword Support creature into the same-column empty Vanguard slot", () => {
     const state = makeState();
-    const scout = createCardInstance("vanguard-scout", "player");
+    const scout = createCardInstance(testScoutId, "player");
     scout.summonedTurn = 0;
     state.players.player.board.support[2] = scout;
     const energyBefore = state.players.player.energy.current;
@@ -835,7 +857,7 @@ describe("Advance", () => {
 
   it("fails when the same-column Vanguard slot is occupied", () => {
     const state = makeState();
-    const scout = createCardInstance("vanguard-scout", "player");
+    const scout = createCardInstance(testScoutId, "player");
     scout.summonedTurn = 0;
     state.players.player.board.support[0] = scout;
     state.players.player.board.vanguard[0] = createCardInstance("footman", "player");
@@ -846,7 +868,7 @@ describe("Advance", () => {
 
   it("fails for a creature that already acted this turn", () => {
     const state = makeState();
-    const scout = createCardInstance("vanguard-scout", "player");
+    const scout = createCardInstance(testScoutId, "player");
     scout.summonedTurn = 0;
     scout.hasAttackedThisTurn = true;
     state.players.player.board.support[0] = scout;
