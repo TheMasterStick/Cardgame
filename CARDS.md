@@ -73,9 +73,17 @@ of a match; its stats become the starting Hero HP/Attack (see DESIGN.md
   - `extraFactions: Faction[]` — additional Factions allowed alongside the Hero's own.
   - `neutralRaces: Race[]` — creatures of a listed Race count as in-Faction regardless of their own Faction tag.
   - `unrestricted: true` — no Faction restriction at all, despite the Hero having a Faction.
+- `ruleBreaks` *(optional, Legendary-tier — DESIGN.md §9)*: a curated
+  menu of numeric deltas applied once at match start —
+  `extraSpellAbilitySlots`, `extraBuildingSlots`, `vanguardSlotDelta`,
+  `supportSlotDelta`, `startingGuardDelta`, `resourceCapDelta`,
+  `manaCapDelta`, `energyCapDelta` (all optional numbers; omit any you
+  don't need). See `grand-marshal` (`{ "vanguardSlotDelta": 1,
+  "supportSlotDelta": 1 }`, a wider battlefront).
 - Any string id works as long as it's referenced by a key in
   `STARTER_DECKS` (`src/data/decks.ts`) if you want it selectable from
-  Quick Play with a ready-made deck.
+  Quick Play with a ready-made deck — a Hero without one is still
+  selectable in the Deck Builder for a custom deck.
 
 **Creature** (`archetype: "creature"`)
 ```json
@@ -224,7 +232,7 @@ Only meaningful on Creature cards (`keywords: Keyword[]`). See DESIGN.md
 | `ward` | Negates the next hostile Spell or Ability that directly targets this creature — one-time, then consumed (`card.wardConsumed`). Doesn't stop AOE effects or plain combat damage, same scoping as Stealth/Immune. Checked after Stealth/Immune, so a creature that's already blocking the hit some other way doesn't burn its Ward for free. |
 | `cleave` | On attack against a creature, also deals the same damage to enemy creatures in the columns directly adjacent to the primary target, same row — no retaliation, redirect, or Push from the splash hits, just damage. Doesn't trigger against Building/Hero targets (there's no "row" to splash into). |
 | `drain` | Every time this creature deals *combat* damage (attacking or retaliating, including once per Cleave splash hit), its controller's Hero regains that much Guard, capped at Guard's current max — no overflow into Hero HP, and no effect on Guard's cap itself (that's what `gainCap`/`gainGuard` are for). |
-| `bloodied` | Label for a card whose printed effect only applies below 50% Health — not yet wired to any actual trigger mechanism in the engine (DESIGN.md §7 deliberately defers that decision until a real Bloodied card needs it). Safe to put on a card today; it just won't do anything yet. |
+| `bloodied` | Pair with `bloodiedBonus: { attackDelta: N }` on the card. Grants +N Attack while `currentHp * 2 <= maxHp` (at or below half Health) — live, re-evaluated on every Attack read same as `flank`/`formation`, not a stored delta or a discrete trigger. See `wounded-berserker`. |
 | `summon` | Label for a trigger whose effect creates another creature via the `summonCreature` CardEffect (see Effects below) — pair with whichever `TriggerName` fits the card (`onPlay` for a Warcry-style summon, `onDeath` for a death-rattle one, etc.). |
 | `armiger` | This creature is an eligible Equipment bearer (DESIGN.md §12) — without it, a creature can't hold any Equipment at all, only the Hero can. Doesn't grant anything by itself; the equipped item's `attackBonus`/`damageReduction` is what actually does something once assigned. |
 
@@ -236,11 +244,11 @@ effect instead of a specific trigger name. `taunt`, `frenzy`, `immune`,
 `poison`, `protector`, `push`, `stealth`, and `drain` are fully handled
 by the engine from the keyword alone. `ranged`, `reach`, `infiltrate`,
 and `charge` are also engine-handled, no trigger needed. `flank`/
-`formation` need their matching `flankBonus`/`formationBonus` field to
-actually do anything, same as `ward` needing nothing extra (its
-one-time-use state lives on the `CardInstance`, not the definition).
-`advance` is invoked as a player action (`declareAdvance`), not through
-a trigger or effect. `bloodied` doesn't do anything yet — see above.
+`formation`/`bloodied` each need their matching `flankBonus`/
+`formationBonus`/`bloodiedBonus` field to actually do anything, same
+as `ward` needing nothing extra (its one-time-use state lives on the
+`CardInstance`, not the definition). `advance` is invoked as a player
+action (`declareAdvance`), not through a trigger or effect.
 
 **Massive creatures** (`spaceCost: N` on a `CreatureDefinition`, no
 keyword needed — it's a numeric field since it needs a magnitude, per
@@ -428,8 +436,8 @@ drop its JSON output straight into the array in
 > `triggers` (array of `{on, effect}`, `on` one of
 > `onPlay`/`onAttack`/`onDeath`/`onDefend`/`startOfTurn`/`endOfTurn`).
 > Creatures can optionally add `spaceCost` (number, Massive — default
-> 1), `flankBonus`/`formationBonus` (`{ attackDelta: number }`, paired
-> with the `flank`/`formation` keywords).
+> 1), `flankBonus`/`formationBonus`/`bloodiedBonus` (`{ attackDelta:
+> number }`, paired with the `flank`/`formation`/`bloodied` keywords).
 > Buildings need `hp` and `triggers`, and can optionally add `passive`
 > (`{ kind: "auraBuff", filter: "all" | { race } | { faction },
 > attackDelta: number }`) and/or `ability` (`{ effect: CardEffect,

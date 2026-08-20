@@ -1601,4 +1601,45 @@ describe("Hero Rule-Breaks (DESIGN.md §9)", () => {
     expect(player.guard.current).toBe(STARTING_GUARD);
     expect(player.resources.cap).toBe(STARTING_POOL);
   });
+
+  it("the shipped Grand Marshal Hero widens Vanguard and Support by 1 each", () => {
+    const state = createInitialGameState("grand-marshal", [], "fighter", []);
+    const player = state.players.player;
+    expect(player.board.vanguard).toHaveLength(VANGUARD_SIZE + 1);
+    expect(player.board.support).toHaveLength(SUPPORT_SIZE + 1);
+    expect(player.board.buildings).toHaveLength(BUILDING_SLOTS);
+    expect(player.board.spellAbilitySlots).toHaveLength(SPELL_ABILITY_SLOTS);
+  });
+});
+
+describe("Bloodied (DESIGN.md §7)", () => {
+  it("does not grant its bonus at full Health", () => {
+    const state = makeState();
+    const berserker = createCardInstance("wounded-berserker", "player"); // base 2 attack, +4 bloodiedBonus, +1 Fighter aura
+    state.players.player.board.vanguard[0] = berserker;
+    expect(getEffectiveCreatureAttack(state, "player", berserker)).toBe(3);
+  });
+
+  it("does not grant its bonus above half Health", () => {
+    const state = makeState();
+    const berserker = createCardInstance("wounded-berserker", "player");
+    berserker.currentHp = 4; // 4/6 — above half
+    state.players.player.board.vanguard[0] = berserker;
+    expect(getEffectiveCreatureAttack(state, "player", berserker)).toBe(3);
+  });
+
+  it("grants its bonus at exactly half Health", () => {
+    const state = makeState();
+    const berserker = createCardInstance("wounded-berserker", "player");
+    berserker.currentHp = 3; // 3/6 — exactly half
+    state.players.player.board.vanguard[0] = berserker;
+    expect(getEffectiveCreatureAttack(state, "player", berserker)).toBe(7);
+  });
+
+  it("grants its bonus below half Health, and still applies off-board", () => {
+    const state = makeState();
+    const berserker = createCardInstance("wounded-berserker", "player");
+    berserker.currentHp = 1;
+    expect(getEffectiveCreatureAttack(state, "player", berserker)).toBe(7);
+  });
 });

@@ -78,6 +78,18 @@ const heroes: HeroCardDefinition[] = [
       text: "Deal 6 damage to a creature.",
     },
   },
+  {
+    id: "grand-marshal",
+    name: "Grand Marshal",
+    archetype: "hero",
+    cost: 0,
+    rarity: "legendary",
+    hp: 22,
+    attack: 0,
+    text: "Rule-Break: commands a wider battlefront — +1 Vanguard slot, +1 Support slot (DESIGN.md §9). Hero Power (2 Energy): gain 2 Guard.",
+    ruleBreaks: { vanguardSlotDelta: 1, supportSlotDelta: 1 },
+    heroPower: { effect: { kind: "gainGuard", amount: 2 }, activateCost: 2, text: "Gain 2 Guard." },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -654,6 +666,19 @@ const creatures: CreatureDefinition[] = [
     spaceCost: 2,
     keywords: ["charge"],
     text: "Massive (2 slots). Charge. Reached mainly via Transformation (DESIGN.md §16), not played from hand.",
+    triggers: [],
+  },
+  {
+    id: "wounded-berserker",
+    name: "Wounded Berserker",
+    archetype: "creature",
+    cost: 3,
+    rarity: "rare",
+    attack: 2,
+    hp: 6,
+    keywords: ["bloodied"],
+    bloodiedBonus: { attackDelta: 4 },
+    text: "Bloodied: while at half Health or below, +4 Attack.",
     triggers: [],
   },
 ];

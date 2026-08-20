@@ -69,14 +69,15 @@ function cleaveSplashTargets(row: (CardInstance | null)[], targetColumns: number
 }
 
 /**
- * Live Attack including Flank/Formation bonuses (DESIGN.md §5) and any
- * auraBuff Passives from the controller's Hero (§9) or Buildings (§11).
- * All of these are continuously re-evaluated from current board/hero
- * state, never stored on the CardInstance — this is the function anything
+ * Live Attack including Flank/Formation/Bloodied bonuses (DESIGN.md §5, §7)
+ * and any auraBuff Passives from the controller's Hero (§9) or Buildings
+ * (§11). All of these are continuously re-evaluated from current board/hero/
+ * HP state, never stored on the CardInstance — this is the function anything
  * actually dealing or previewing combat damage should call instead of the
  * bare getCreatureAttack. Falls back to base + auras if the creature isn't
  * currently on a board row at all (Flank/Formation need row/column context;
- * the aura bonuses don't).
+ * Bloodied only needs currentHp/maxHp, so it still applies off-board; the
+ * aura bonuses don't need board context either).
  */
 export function getEffectiveCreatureAttack(state: GameState, owner: PlayerId, card: CardInstance): number {
   const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
@@ -86,6 +87,14 @@ export function getEffectiveCreatureAttack(state: GameState, owner: PlayerId, ca
     getAuraAttackBonus(state, owner, card) +
     getBuildingAuraAttackBonus(state, owner, card) +
     getBearerAttackBonus(state, owner, { kind: "creature", instanceId: card.instanceId });
+  if (
+    def.bloodiedBonus &&
+    def.keywords.includes("bloodied") &&
+    card.currentHp !== undefined &&
+    card.currentHp * 2 <= def.hp + card.hpDelta
+  ) {
+    attack += def.bloodiedBonus.attackDelta;
+  }
   const located = locateOnBoard(state, owner, card.instanceId);
   if (!located) return attack;
   if (def.flankBonus && def.keywords.includes("flank") && isFlanking(located.row, located.columns)) {

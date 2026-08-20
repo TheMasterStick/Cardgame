@@ -87,10 +87,11 @@ for a different job). `summonCreature` places into the controller's
 Vanguard, falling back to Support, and simply fizzles (like a Warcry
 with no legal target) if neither row has room; a summoned creature
 gets normal summoning sickness and fires its own onPlay triggers.
-Bloodied landed as a keyword label only, per its own §7 "Open default"
-note — no card built yet needs its trigger mechanism decided, so
-nothing forces that decision prematurely. Separately, this pass also
-fixed `src/data/loadCustomCards.ts`'s keyword validator (it guards
+Bloodied landed as a keyword label only in this pass, per its own §7
+"Open default" note — its trigger mechanism wasn't decided until the
+Phase H cleanup below authored the first card that needed it.
+Separately, this pass also fixed `src/data/loadCustomCards.ts`'s
+keyword validator (it guards
 `customCards.json`), which had been silently accepting only `ranged`/
 `charge` on custom creatures since Phase A — every other keyword now
 round-trips correctly, not just the six new ones.
@@ -179,17 +180,32 @@ all three live in the Rogue starter deck as a demonstrable combo.
 Hero Rule-Breaks (`HeroCardDefinition.ruleBreaks`, applied once in
 `createInitialPlayerState`) can resize the Vanguard/Support/Building/
 Spell-Ability arrays and adjust starting Guard and the three pool
-caps — engine-tested directly, but **no shipped Hero actually sets
-one yet**, the same "mechanism built, no concrete card exercises it"
-status Allegiance had after Phase C; authoring an actual Legendary-
-tier Hero is a content decision for whenever one is designed, not
-bundled into wiring up the system itself. **Garrison and Mount are
-deliberately not built** — DESIGN.md itself (§16) flags both as
-needing genuinely new state-shape concepts (a Building-side "housed
-creature" slot; a composite-creature-instance format) that haven't
-been designed yet, so building them now would mean inventing that
-design under time pressure instead of when a concrete card actually
-needs it — the same reasoning Bloodied got in Phase D.
+caps. **Garrison and Mount are deliberately not built** — DESIGN.md
+itself (§16) flags both as needing genuinely new state-shape concepts
+(a Building-side "housed creature" slot; a composite-creature-instance
+format) that haven't been designed yet, so building them now would
+mean inventing that design under time pressure instead of when a
+concrete card actually needs it.
+**A follow-up cleanup pass (call it Phase H) closed three gaps this
+doc had flagged, none of which needed new design decisions:**
+(1) Bloodied's trigger mechanism was left open in Phase D ("decided
+when the first Bloodied card is actually authored") — it's now a
+`bloodiedBonus: PositionalBonus` field on `CreatureDefinition`, live-
+recomputed in `getEffectiveCreatureAttack` exactly like Flank/Formation
+(active whenever `currentHp * 2 <= maxHp`, no board-position needed so
+it still applies off-board), demonstrated by `wounded-berserker` (base
+2/6, +4 Attack once at half Health or below). (2) Hero Rule-Breaks now
+has a shipped card exercising it — `grand-marshal`, a Legendary Hero
+with `vanguardSlotDelta: 1, supportSlotDelta: 1` (a wider battlefront),
+engine-tested end to end via `createInitialGameState`. (3) The
+Siege/Sabotage "ignore column protection" escape hatch this doc's
+Phase E row called spec-only was actually already live and tested
+since **Phase B1** — Infiltrate already bypasses column protection for
+Building attacks (`shadow-infiltrator`, tested in `combat.ts`'s
+`validateTarget`), and Spells/Abilities targeting a Building were never
+subject to column protection in the first place (`targeting.ts` never
+checks it) — that Phase E note was simply stale, not a real gap; no
+code changed for this third item, just the documentation.
 CARDS.md/BACKEND.md describe what's live today; check them (not just
 this doc) for current schema.
 
@@ -464,7 +480,7 @@ rebuild itself).
 | **Immune** | Unchanged from v1: blocks hostile Spell effects from landing on this creature. Abilities and triggers are unaffected. |
 | **Poison** | Unchanged from v1: a tag conventionally paired with an `onAttack` trigger that applies the Poison status (§13) to whatever was hit. |
 | **Summon** | Label for a trigger whose effect creates another specified creature (new `summonCreature` effect kind — needs adding to the effects system; see §17 Phase D). |
-| **Bloodied** | Label for a card whose printed effect only applies below 50% Health. **Open default:** exact trigger mechanism (continuous check vs. a dedicated `onBloodied`-style hook) gets decided when the first Bloodied card is actually authored — not needed to lock the whole engine now. |
+| **Bloodied** | Label for a card whose printed effect only applies below 50% Health. Pair with `bloodiedBonus: { attackDelta: N }` on the card. **Resolved (was Open default):** a continuous live check, same pattern as Flank/Formation — re-evaluated in `getEffectiveCreatureAttack` off `currentHp * 2 <= maxHp`, not a discrete `onBloodied` hook. See `wounded-berserker`. |
 
 `spaceCost` (Massive) is a numeric field, not a boolean keyword, since
 it needs a magnitude — see §5.
@@ -491,7 +507,7 @@ A Hero card carries:
 | Passive | An always-on effect. **Open default:** built from a small curated set of templates (aura buff to a matching Faction/Race/Class, a first-spell-cheaper-per-turn discount, an on-reveal-enemy-card effect, etc.) rather than a free-form scripting language — matches how `CardEffect` is already a fixed set of `kind`s, not arbitrary code. The template set grows as new Heroes need new patterns. |
 | Hero Power | An activated effect using the same `CardEffect` shape as a Spell/Ability, Energy-costed, usable **once per turn** (not charge-based). |
 | Signature Ability *(optional)* | Same shape as Hero Power, but a stronger effect gated to a small number of uses **per match** (e.g. 1) instead of per turn. |
-| Rule-Breaks *(optional, Legendary-tier)* | A curated menu of numeric deltas a Hero can carry: extra Spell slots, extra Building slots, Vanguard/Support slot count changes, starting Guard delta, max Energy/Mana/Resources cap delta. **Open default:** only numeric-delta modifiers are supported at first; a fully bespoke rule-break (e.g. "Harpies may overfill Support by forming Flocks") is one-off card-specific code, done when that specific card is actually built, not a general system. **Implementation status (Phase G):** the mechanism is live and engine-tested — `HeroCardDefinition.ruleBreaks` is applied once at match start — but no shipped Hero card sets it yet, the same inert-until-exercised state Allegiance was left in after Phase C. |
+| Rule-Breaks *(optional, Legendary-tier)* | A curated menu of numeric deltas a Hero can carry: extra Spell slots, extra Building slots, Vanguard/Support slot count changes, starting Guard delta, max Energy/Mana/Resources cap delta. **Open default:** only numeric-delta modifiers are supported at first; a fully bespoke rule-break (e.g. "Harpies may overfill Support by forming Flocks") is one-off card-specific code, done when that specific card is actually built, not a general system. **Implementation status:** live and engine-tested — `HeroCardDefinition.ruleBreaks` is applied once at match start. `grand-marshal` (Legendary, +1 Vanguard/+1 Support slot) is the first shipped Hero to exercise it. |
 
 **Example Signature Ability — Raise Dead** (a Necromancer-archetype
 Mage Hero): reveal the top 3 creatures in your Graveyard; play one of
@@ -719,9 +735,10 @@ Suggested build order, each phase individually shippable/testable:
 | **B2 — Reach & position, wave 2** ✅ *(live)* | Protector, Flank, Formation, Advance, Push, Massive. Protector's redirect is heuristic-automatic rather than a live prompt (see the implementation-status note above); everything else matches this section as written. |
 | **C — Spell forms & Hero rework** ✅ *(live)* | Instant/Ritual/Charged split for Spells. Hero Passive/Power/Signature. Allegiance deckbuilding validation. See the implementation-status note above for the discard-vs-graveyard deviation and Allegiance's currently-inert status. |
 | **D — Keyword expansion** ✅ *(live)* | Stealth, Ward, Cleave, Drain, Bloodied, Summon (+ the `summonCreature` effect kind), Warcry rename. See the implementation-status note above for scoping details and the loadCustomCards.ts validator fix. |
-| **E — Buildings as objects** ✅ *(live)* | Durability/attackability, activated abilities, On Construction triggers, enemy interaction (Siege/Sabotage). Durability/column-protection/Graveyard/On Construction were already live from earlier phases; this wave added the passive (auraBuff-only) and activated ability (no usage cap). Siege/Sabotage-style "ignore column protection" effects remain spec-only — no card exercises that escape hatch yet. See the implementation-status note above. |
+| **E — Buildings as objects** ✅ *(live)* | Durability/attackability, activated abilities, On Construction triggers, enemy interaction (Siege/Sabotage). Durability/column-protection/Graveyard/On Construction were already live from earlier phases; this wave added the passive (auraBuff-only) and activated ability (no usage cap). The Siege/Sabotage "ignore column protection" escape hatch is live and tested — Infiltrate bypasses it for attacks (`shadow-infiltrator`, since Phase B1), and Spells/Abilities targeting a Building were never subject to it at all. See the implementation-status note above. |
 | **F — Equipment rework** ✅ *(live)* | 4-slot zone, categories, assign/reassign for Energy, survives-death/Unassigned flow. Equipment always enters the zone Unassigned when played (the free immediate-assign-at-play path isn't built); a second item assigned to an already-equipped bearer auto-bumps the old one rather than being refused; bearer category restriction isn't enforced. See the implementation-status note above. |
 | **G — Board-as-resource (§16)** ✅ *(live, in part)* | Swarm (`summonCreature` count), Consume, Transformation, plus the Hero Rule-Breaks (§9) mechanism. Garrison and Mount remain spec-only — they need new state-shape concepts (a Building-side "housed creature" slot, a composite-creature-instance) not yet designed. See the implementation-status note above. |
+| **H — Closing flagged gaps** ✅ *(live)* | Not a pre-planned phase — a cleanup pass over three items earlier phases had explicitly left open, none needing new design decisions: Bloodied's trigger mechanism decided (continuous live check, `wounded-berserker`), a shipped Rule-Breaks Hero (`grand-marshal`), and a documentation correction (Siege/Sabotage's column-protection bypass was already live since Phase B1, the Phase E note was just stale). See the implementation-status note above. |
 
 Each phase gets the same verification pass as prior work: `tsc
 --noEmit`, `eslint`, `vitest`, `vite build`, plus a Playwright smoke

@@ -333,6 +333,8 @@ export interface CreatureDefinition extends CardDefinitionBase {
   flankBonus?: PositionalBonus;
   /** Requires the `formation` keyword. Active only while an allied creature occupies an adjacent column, same row (DESIGN.md §5). */
   formationBonus?: PositionalBonus;
+  /** Requires the `bloodied` keyword. Active only while currentHp is at or below half of maxHp (DESIGN.md §7) — live, re-evaluated the same way as flank/formation, never stored on the CardInstance. */
+  bloodiedBonus?: PositionalBonus;
 }
 
 /**
