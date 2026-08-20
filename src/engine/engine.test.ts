@@ -1643,3 +1643,101 @@ describe("Bloodied (DESIGN.md §7)", () => {
     expect(getEffectiveCreatureAttack(state, "player", berserker)).toBe(7);
   });
 });
+
+describe("Garrison (DESIGN.md §16)", () => {
+  it("moves the targeted creature off the battlefield into the first friendly Building with room", () => {
+    const state = makeState();
+    const mine = createCardInstance("gold-mine", "player");
+    state.players.player.board.buildings[0] = mine;
+    const footman = createCardInstance("footman", "player");
+    state.players.player.board.vanguard[0] = footman;
+
+    resolveEffect(
+      state,
+      "player",
+      { kind: "garrison", target: "targetCreature" },
+      { kind: "card", owner: "player", instanceId: footman.instanceId },
+    );
+
+    expect(state.players.player.board.vanguard).not.toContain(footman);
+    expect(state.players.player.board.support).not.toContain(footman);
+    expect(mine.garrisonedCreature).toBe(footman);
+  });
+
+  it("fizzles without crashing when there's no target", () => {
+    const state = makeState();
+    const mine = createCardInstance("gold-mine", "player");
+    state.players.player.board.buildings[0] = mine;
+    expect(() => resolveEffect(state, "player", { kind: "garrison", target: "targetCreature" }, null)).not.toThrow();
+    expect(mine.garrisonedCreature).toBeUndefined();
+  });
+
+  it("fizzles when no friendly Building has an open housing slot", () => {
+    const state = makeState();
+    const mine = createCardInstance("gold-mine", "player");
+    mine.garrisonedCreature = createCardInstance("footman", "player"); // already housing someone
+    state.players.player.board.buildings[0] = mine;
+    const footman = createCardInstance("footman", "player");
+    state.players.player.board.vanguard[0] = footman;
+
+    resolveEffect(
+      state,
+      "player",
+      { kind: "garrison", target: "targetCreature" },
+      { kind: "card", owner: "player", instanceId: footman.instanceId },
+    );
+
+    expect(state.players.player.board.vanguard[0]).toBe(footman); // untouched — no room to garrison into
+  });
+
+  it("ejects the garrisoned creature back onto the battlefield when its Building is destroyed and there's room", () => {
+    const state = makeState();
+    const mine = createCardInstance("gold-mine", "player");
+    state.players.player.board.buildings[0] = mine;
+    const footman = createCardInstance("footman", "player");
+    state.players.player.board.vanguard[0] = footman;
+    resolveEffect(
+      state,
+      "player",
+      { kind: "garrison", target: "targetCreature" },
+      { kind: "card", owner: "player", instanceId: footman.instanceId },
+    );
+    expect(mine.garrisonedCreature).toBe(footman);
+
+    damageCard(state, "player", mine.instanceId, 3); // gold-mine has 3 hp — this destroys it
+
+    expect(state.players.player.graveyard).toContain(mine);
+    const onBoard = [...state.players.player.board.vanguard, ...state.players.player.board.support];
+    expect(onBoard).toContain(footman);
+    expect(state.players.player.graveyard).not.toContain(footman);
+  });
+
+  it("destroys the garrisoned creature alongside its Building when there's no room to eject it", () => {
+    const state = makeState();
+    const mine = createCardInstance("gold-mine", "player");
+    state.players.player.board.buildings[0] = mine;
+    const footman = createCardInstance("footman", "player");
+    state.players.player.board.vanguard[0] = footman;
+    resolveEffect(
+      state,
+      "player",
+      { kind: "garrison", target: "targetCreature" },
+      { kind: "card", owner: "player", instanceId: footman.instanceId },
+    );
+    expect(mine.garrisonedCreature).toBe(footman);
+
+    // Fill every other Vanguard/Support slot so there's nowhere to eject to.
+    for (let i = 0; i < VANGUARD_SIZE; i++) {
+      if (!state.players.player.board.vanguard[i]) state.players.player.board.vanguard[i] = createCardInstance("footman", "player");
+    }
+    for (let i = 0; i < SUPPORT_SIZE; i++) {
+      state.players.player.board.support[i] = createCardInstance("footman", "player");
+    }
+
+    damageCard(state, "player", mine.instanceId, 3);
+
+    expect(state.players.player.graveyard).toContain(footman);
+    const onBoard = [...state.players.player.board.vanguard, ...state.players.player.board.support];
+    expect(onBoard).not.toContain(footman);
+  });
+});

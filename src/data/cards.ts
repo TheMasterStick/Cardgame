@@ -862,6 +862,17 @@ const abilities: AbilityDefinition[] = [
     text: "Activate (2 Energy): Consume — destroy an allied creature; your other creatures gain +1/+1.",
     effect: { kind: "consume", target: "targetCreature", attackDelta: 1, hpDelta: 1 },
   },
+  {
+    id: "garrison-post",
+    name: "Garrison Post",
+    archetype: "ability",
+    cost: 2,
+    rarity: "rare",
+    activateCost: 1,
+    charges: "unlimited",
+    text: "Activate (1 Energy): Garrison — shelter a friendly creature inside one of your Buildings, off the battlefield and safe from attack, until that Building falls.",
+    effect: { kind: "garrison", target: "targetCreature" },
+  },
 ];
 
 // ---------------------------------------------------------------------------

@@ -53,6 +53,7 @@ const EFFECT_KINDS: CardEffect["kind"][] = [
   "summonCreature",
   "consume",
   "transform",
+  "garrison",
 ];
 const CREATURE_TRIGGER_NAMES: TriggerName[] = ["onPlay", "onAttack", "onDeath", "onDefend", "startOfTurn", "endOfTurn"];
 const TARGET_OPTIONS = [
@@ -173,6 +174,8 @@ function loadEffectIntoDraft(draft: CardDraft, effect: CardEffect): void {
   } else if (effect.kind === "transform") {
     draft.effectTarget = effect.target as CardDraft["effectTarget"];
     draft.effectCreatureId = effect.creatureId;
+  } else if (effect.kind === "garrison") {
+    draft.effectTarget = effect.target as CardDraft["effectTarget"];
   }
 }
 
@@ -278,6 +281,8 @@ function buildEffect(draft: CardDraft): CardEffect | null {
       return draft.effectCreatureId.trim()
         ? { kind: "transform", target: draft.effectTarget, creatureId: draft.effectCreatureId.trim() }
         : null;
+    case "garrison":
+      return { kind: "garrison", target: draft.effectTarget };
     default:
       return null;
   }
@@ -856,7 +861,8 @@ export function AdminPanel({ collection, userId, onSetCoins, onCardsChanged, onB
                   draft.effectKind === "applyStatus" ||
                   draft.effectKind === "buff" ||
                   draft.effectKind === "consume" ||
-                  draft.effectKind === "transform") && (
+                  draft.effectKind === "transform" ||
+                  draft.effectKind === "garrison") && (
                   <label>
                     Target
                     <select

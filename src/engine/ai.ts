@@ -83,12 +83,12 @@ function weakestOwnCreature(state: GameState, owner: PlayerId): CardInstance | n
 /**
  * Picks a reasonable target for an onPlay trigger. Most onPlay effects
  * (damage/applyStatus, the classic Warcry shape) want the weakest enemy
- * creature; Consume/Transform are ally-only (DESIGN.md §16) and need the
- * opposite side entirely, so this needs to know which effect it's picking
- * for rather than always assuming "hostile."
+ * creature; Consume/Transform/Garrison are ally-only (DESIGN.md §16) and
+ * need the opposite side entirely, so this needs to know which effect it's
+ * picking for rather than always assuming "hostile."
  */
 function pickOnPlayTarget(state: GameState, owner: PlayerId, effect?: CardEffect): EffectTargetRef {
-  if (effect?.kind === "consume" || effect?.kind === "transform") {
+  if (effect?.kind === "consume" || effect?.kind === "transform" || effect?.kind === "garrison") {
     const weakest = weakestOwnCreature(state, owner);
     return weakest ? { kind: "card", owner, instanceId: weakest.instanceId } : null;
   }
@@ -147,6 +147,14 @@ function pickActivationTarget(state: GameState, effect: CardEffect): EffectTarge
     }
     case "consume":
     case "transform": {
+      const weakest = weakestOwnCreature(state, AI);
+      return weakest ? { kind: "card", owner: AI, instanceId: weakest.instanceId } : "skip";
+    }
+    case "garrison": {
+      // Not worth the activation if no Building has an open housing slot —
+      // it would just fizzle (DESIGN.md §16).
+      const hasRoom = state.players[AI].board.buildings.some((b) => b && !b.garrisonedCreature);
+      if (!hasRoom) return "skip";
       const weakest = weakestOwnCreature(state, AI);
       return weakest ? { kind: "card", owner: AI, instanceId: weakest.instanceId } : "skip";
     }

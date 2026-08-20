@@ -180,10 +180,10 @@ all three live in the Rogue starter deck as a demonstrable combo.
 Hero Rule-Breaks (`HeroCardDefinition.ruleBreaks`, applied once in
 `createInitialPlayerState`) can resize the Vanguard/Support/Building/
 Spell-Ability arrays and adjust starting Guard and the three pool
-caps. **Garrison and Mount are deliberately not built** — DESIGN.md
-itself (§16) flags both as needing genuinely new state-shape concepts
-(a Building-side "housed creature" slot; a composite-creature-instance
-format) that haven't been designed yet, so building them now would
+caps. **Mount remains deliberately not built** — it needs a genuinely
+new state-shape concept (a composite-creature-instance format: how do
+two merged creatures share one board position, one Attack/HP, one set
+of keywords?) that hasn't been designed yet, so building it now would
 mean inventing that design under time pressure instead of when a
 concrete card actually needs it.
 **A follow-up cleanup pass (call it Phase H) closed three gaps this
@@ -206,6 +206,26 @@ Building attacks (`shadow-infiltrator`, tested in `combat.ts`'s
 subject to column protection in the first place (`targeting.ts` never
 checks it) — that Phase E note was simply stale, not a real gap; no
 code changed for this third item, just the documentation.
+**Garrison is also live (call it Phase I)**: a new `garrison` CardEffect
+moves a targeted friendly creature off the battlefield into the first
+friendly Building with an open "housed creature" slot
+(`CardInstance.garrisonedCreature`) — the Building-side state-shape
+concept §16 called for, resolved in the end as a single-target
+CardEffect exactly like Consume/Transform rather than a bespoke new
+player action, so it reuses all the existing targeting/pending UI
+plumbing for free. A garrisoned creature can't attack, be attacked, or
+be targeted by anything — it isn't in any board row array, so the
+existing combat/targeting code simply can't see it, no new exclusion
+checks needed anywhere. It's ejected back onto the battlefield (or
+destroyed, if there's no room) when its Building is destroyed
+(`killCardIfDead`). Fizzles if no friendly Building has room, same
+"Warcry with no legal target" philosophy as everywhere else. **Open
+default:** every Building can house at most 1 creature, no per-Building
+restriction (matches Equipment's 1-item-per-bearer cap); there's no
+manual un-garrison action in this pass, only ejection on the Building's
+death. Example card: `garrison-post` (an Ability, 1 Energy), in the
+Fighter starter deck. Mount remains the one deliberately-deferred item
+— see above.
 CARDS.md/BACKEND.md describe what's live today; check them (not just
 this doc) for current schema.
 
@@ -693,19 +713,20 @@ Unchanged from v1, plus Allegiance validation (§10):
 Documented now so future card design has a target, but **not required
 for the v2 engine rebuild** (§17 Phase E+) — these are card-effect
 patterns layered on top of a working positional board, not core rules.
-**Swarm, Consume, and Transformation are live as of Phase G** — see
-the implementation-status note near the top of this document for the
-exact mechanics and example cards. Garrison and Mount remain spec
-only, deliberately: both need a genuinely new state-shape concept
-(below) that hasn't been designed yet, so they're left for whenever a
-concrete card actually needs one, not built speculatively now.
+**Swarm, Consume, and Transformation are live as of Phase G, and
+Garrison as of Phase I** — see the implementation-status note near the
+top of this document for the exact mechanics and example cards. Mount
+remains spec only, deliberately: it needs a genuinely new state-shape
+concept (below) that hasn't been designed yet, so it's left for
+whenever a concrete card actually needs it, not built speculatively
+now.
 
 - **Swarm** ✅ *(live)*: effects that create several small units at
   once, filling the board fast.
 - **Consume** ✅ *(live)*: destroy an allied creature to free its slot
   and empower another (an explicit new effect kind).
-- **Garrison**: place a creature *inside* a Building instead of
-  occupying a battlefield space (needs a Building-side "housed
+- **Garrison** ✅ *(live)*: place a creature *inside* a Building instead
+  of occupying a battlefield space (needs a Building-side "housed
   creature" slot concept).
 - **Mount**: two creatures merge into one board position (needs a
   composite-creature-instance concept).
@@ -739,6 +760,7 @@ Suggested build order, each phase individually shippable/testable:
 | **F — Equipment rework** ✅ *(live)* | 4-slot zone, categories, assign/reassign for Energy, survives-death/Unassigned flow. Equipment always enters the zone Unassigned when played (the free immediate-assign-at-play path isn't built); a second item assigned to an already-equipped bearer auto-bumps the old one rather than being refused; bearer category restriction isn't enforced. See the implementation-status note above. |
 | **G — Board-as-resource (§16)** ✅ *(live, in part)* | Swarm (`summonCreature` count), Consume, Transformation, plus the Hero Rule-Breaks (§9) mechanism. Garrison and Mount remain spec-only — they need new state-shape concepts (a Building-side "housed creature" slot, a composite-creature-instance) not yet designed. See the implementation-status note above. |
 | **H — Closing flagged gaps** ✅ *(live)* | Not a pre-planned phase — a cleanup pass over three items earlier phases had explicitly left open, none needing new design decisions: Bloodied's trigger mechanism decided (continuous live check, `wounded-berserker`), a shipped Rule-Breaks Hero (`grand-marshal`), and a documentation correction (Siege/Sabotage's column-protection bypass was already live since Phase B1, the Phase E note was just stale). See the implementation-status note above. |
+| **I — Garrison (§16)** ✅ *(live)* | The last of §16's Board-as-resource patterns that didn't need a genuinely new UI flow — a `garrison` CardEffect (single-target, resolved the same way as Consume/Transform) moves a friendly creature into `CardInstance.garrisonedCreature` on a Building, off the battlefield and untargetable, ejected back out (or destroyed) when that Building dies. `garrison-post` demonstrates it in the Fighter starter deck. Mount is the one remaining deferred pattern — see the implementation-status note above. |
 
 Each phase gets the same verification pass as prior work: `tsc
 --noEmit`, `eslint`, `vitest`, `vite build`, plus a Playwright smoke

@@ -13,7 +13,6 @@ const FIGHTER_DECK: DeckList = [
   ["shield-bearer", 1],
   ["royal-squire", 1],
   ["berserker", 1],
-  ["young-wolf", 1],
   ["stone-golem", 1],
   ["assassin", 1],
   ["cleric", 1],
@@ -38,6 +37,7 @@ const FIGHTER_DECK: DeckList = [
   ["iron-sword", 1],
   ["battle-shield", 1],
   ["steel-barding", 1],
+  ["garrison-post", 1],
 ];
 
 const MAGE_DECK: DeckList = [

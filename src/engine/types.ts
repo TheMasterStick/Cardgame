@@ -197,6 +197,25 @@ export interface TransformEffect {
   creatureId: string;
 }
 
+/**
+ * Garrison (DESIGN.md §16): a targeted allied creature is moved off the
+ * battlefield into the first friendly Building with an open "housed
+ * creature" slot (`CardInstance.garrisonedCreature`), freeing its board
+ * slot. A garrisoned creature can't attack, be attacked, or be targeted —
+ * it isn't in any board row array, so all existing targeting/combat code
+ * simply can't see it, no extra exclusion checks needed. It's ejected back
+ * onto the battlefield (or destroyed, if there's no room) if its Building
+ * is destroyed — see `killCardIfDead`. Fizzles if no friendly Building has
+ * room. **Open default:** every Building can house at most 1 creature, no
+ * per-Building restriction (matches Equipment's 1-item-per-bearer cap);
+ * there's no manual un-garrison action in this pass, only ejection on the
+ * Building's death.
+ */
+export interface GarrisonEffect {
+  kind: "garrison";
+  target: EffectTarget;
+}
+
 export type CardEffect =
   | DamageEffect
   | HealEffect
@@ -207,7 +226,8 @@ export type CardEffect =
   | GainCapEffect
   | SummonCreatureEffect
   | ConsumeEffect
-  | TransformEffect;
+  | TransformEffect
+  | GarrisonEffect;
 
 export type TriggerName =
   | "onPlay"
@@ -438,6 +458,8 @@ export interface CardInstance {
   chargesRemaining?: number | "unlimited";
   /** Equipment only: who this item is currently equipped to. null = sitting Unassigned in the zone (DESIGN.md §12). */
   equipmentBearer?: EquipmentBearer | null;
+  /** Building only: a creature housed inside via Garrison (DESIGN.md §16) — off the battlefield entirely, not in any board row array. null/undefined = not garrisoning anyone. */
+  garrisonedCreature?: CardInstance | null;
 }
 
 export interface ResourcePool {

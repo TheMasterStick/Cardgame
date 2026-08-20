@@ -115,6 +115,24 @@ export function killCardIfDead(state: GameState, owner: PlayerId, instanceId: st
     // Equipment survives its bearer's death — it returns to Unassigned in
     // the zone rather than being destroyed alongside them (DESIGN.md §12).
     unassignEquipmentFrom(state, owner, instanceId);
+    // Garrison (DESIGN.md §16): a housed creature is ejected back onto the
+    // battlefield if its Building is destroyed, or destroyed alongside it
+    // if there's no room — same "fizzles if no room" philosophy as Swarm.
+    if (found.card.garrisonedCreature) {
+      const garrisoned = found.card.garrisonedCreature;
+      const gdef = CARD_DEFINITIONS[garrisoned.defId] as CreatureDefinition;
+      const spaceCost = gdef.spaceCost ?? 1;
+      const vanguardSlots = findOpenContiguousSlots(player.board.vanguard, spaceCost);
+      const ejectRow = vanguardSlots ? "vanguard" : "support";
+      const slots = vanguardSlots ?? findOpenContiguousSlots(player.board.support, spaceCost);
+      if (slots) {
+        for (const s of slots) player.board[ejectRow][s] = garrisoned;
+        state.log.push(`${garrisoned.defId} (${owner}) is ejected onto the battlefield.`);
+      } else {
+        player.graveyard.push(garrisoned);
+        state.log.push(`${garrisoned.defId} (${owner}) had nowhere to go and was destroyed too.`);
+      }
+    }
     const def = CARD_DEFINITIONS[found.card.defId] as CreatureDefinition | BuildingDefinition;
     for (const trigger of def.triggers) {
       if (trigger.on === "onDeath") resolveEffect(state, owner, trigger.effect, null);
@@ -400,6 +418,21 @@ export function resolveEffect(
       for (const trigger of newDef.triggers) {
         if (trigger.on === "onPlay") resolveEffect(state, target.owner, trigger.effect, null);
       }
+      return;
+    }
+    case "garrison": {
+      if (!target || target.kind !== "card") return;
+      const found = findCard(state, target.owner, target.instanceId);
+      if (!found || (found.row !== "vanguard" && found.row !== "support")) return;
+      const buildings = state.players[target.owner].board.buildings;
+      const building = buildings.find((b) => b && !b.garrisonedCreature);
+      if (!building) return; // no friendly Building has an open housing slot — fizzles
+      const row = state.players[target.owner].board[found.row];
+      for (let i = 0; i < row.length; i++) {
+        if (row[i]?.instanceId === found.card.instanceId) row[i] = null;
+      }
+      building.garrisonedCreature = found.card;
+      state.log.push(`${found.card.defId} (${target.owner}) garrisons inside ${building.defId}.`);
       return;
     }
   }

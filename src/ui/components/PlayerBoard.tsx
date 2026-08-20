@@ -160,6 +160,14 @@ export function PlayerBoard({
                   acting={aiActing(card.instanceId)}
                 />
               )}
+              {card?.garrisonedCreature && (
+                <div
+                  className="building-garrison-badge"
+                  title={`Garrisoning ${CARD_DEFINITIONS[card.garrisonedCreature.defId].name} — off the battlefield, safe until this Building falls.`}
+                >
+                  🏠
+                </div>
+              )}
             </Slot>
           );
         })}

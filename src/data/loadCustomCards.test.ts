@@ -314,4 +314,32 @@ describe("custom card validation", () => {
     });
     expect(card).toBeNull();
   });
+
+  it("accepts a Garrison effect targeting an allied creature", () => {
+    const card = validateCard({
+      id: "x",
+      name: "X",
+      archetype: "ability",
+      cost: 2,
+      rarity: "rare",
+      activateCost: 1,
+      charges: "unlimited",
+      effect: { kind: "garrison", target: "targetCreature" },
+    });
+    expect(card).not.toBeNull();
+  });
+
+  it("rejects a Garrison effect missing target", () => {
+    const card = validateCard({
+      id: "x",
+      name: "X",
+      archetype: "ability",
+      cost: 2,
+      rarity: "rare",
+      activateCost: 1,
+      charges: "unlimited",
+      effect: { kind: "garrison" },
+    });
+    expect(card).toBeNull();
+  });
 });
