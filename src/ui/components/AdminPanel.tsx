@@ -38,7 +38,16 @@ interface AdminPanelProps {
 }
 
 const ARCHETYPES: CardArchetype[] = ["hero", "creature", "building", "spell", "ability", "equipment"];
-const EFFECT_KINDS: CardEffect["kind"][] = ["damage", "heal", "applyStatus", "buff", "drawCard", "gainGuard", "gainCap"];
+const EFFECT_KINDS: CardEffect["kind"][] = [
+  "damage",
+  "heal",
+  "applyStatus",
+  "buff",
+  "drawCard",
+  "gainGuard",
+  "gainCap",
+  "summonCreature",
+];
 const CREATURE_TRIGGER_NAMES: TriggerName[] = ["onPlay", "onAttack", "onDeath", "onDefend", "startOfTurn", "endOfTurn"];
 const TARGET_OPTIONS = [
   "targetCreature",
@@ -79,6 +88,7 @@ interface CardDraft {
   effectAttackDelta: number;
   effectHpDelta: number;
   effectPool: "resource" | "mana" | "energy";
+  effectCreatureId: string;
 }
 
 function emptyDraft(): CardDraft {
@@ -110,6 +120,7 @@ function emptyDraft(): CardDraft {
     effectAttackDelta: 1,
     effectHpDelta: 1,
     effectPool: "resource",
+    effectCreatureId: "",
   };
 }
 
@@ -132,6 +143,8 @@ function loadEffectIntoDraft(draft: CardDraft, effect: CardEffect): void {
   } else if (effect.kind === "gainCap") {
     draft.effectAmount = effect.amount;
     draft.effectPool = effect.pool;
+  } else if (effect.kind === "summonCreature") {
+    draft.effectCreatureId = effect.creatureId;
   }
 }
 
@@ -208,6 +221,8 @@ function buildEffect(draft: CardDraft): CardEffect | null {
       return { kind: "gainGuard", amount: draft.effectAmount };
     case "gainCap":
       return { kind: "gainCap", pool: draft.effectPool, amount: draft.effectAmount };
+    case "summonCreature":
+      return draft.effectCreatureId.trim() ? { kind: "summonCreature", creatureId: draft.effectCreatureId.trim() } : null;
     default:
       return null;
   }
@@ -717,6 +732,18 @@ export function AdminPanel({ collection, userId, onSetCoins, onCardsChanged, onB
                       <option value="mana">Mana</option>
                       <option value="energy">Energy</option>
                     </select>
+                  </label>
+                )}
+                {draft.effectKind === "summonCreature" && (
+                  <label>
+                    Creature to summon (card ID)
+                    <input
+                      type="text"
+                      value={draft.effectCreatureId}
+                      onChange={(e) => setDraft((d) => ({ ...d, effectCreatureId: e.target.value }))}
+                      placeholder="e.g. militia-recruit"
+                    />
+                    <span className="admin-hint">Must match an existing Creature card's ID exactly.</span>
                   </label>
                 )}
               </fieldset>

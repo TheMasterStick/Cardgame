@@ -15,7 +15,30 @@ import rawCustomCards from "./customCards.json";
 
 const VALID_ARCHETYPES: CardArchetype[] = ["creature", "building", "spell", "ability", "equipment"];
 const VALID_RARITIES: Rarity[] = ["common", "rare", "epic", "legendary"];
-const VALID_KEYWORDS: Keyword[] = ["ranged", "charge"];
+const VALID_KEYWORDS: Keyword[] = [
+  "ranged",
+  "reach",
+  "infiltrate",
+  "charge",
+  "warcry",
+  "counter",
+  "revenge",
+  "frenzy",
+  "immune",
+  "poison",
+  "taunt",
+  "protector",
+  "flank",
+  "formation",
+  "advance",
+  "push",
+  "stealth",
+  "ward",
+  "cleave",
+  "drain",
+  "bloodied",
+  "summon",
+];
 const VALID_TRIGGER_NAMES: TriggerName[] = ["onPlay", "onAttack", "onDeath", "startOfTurn", "endOfTurn"];
 const EFFECT_KINDS_NEEDING_TARGET = new Set(["damage", "heal", "applyStatus", "buff"]);
 
@@ -32,6 +55,7 @@ function isValidEffect(effect: unknown): effect is CardEffect {
   if (kind === "applyStatus" && (typeof effect.status !== "string" || typeof effect.amount !== "number")) return false;
   if ((kind === "drawCard" || kind === "gainGuard") && typeof effect.amount !== "number") return false;
   if (kind === "gainCap" && (typeof effect.pool !== "string" || typeof effect.amount !== "number")) return false;
+  if (kind === "summonCreature" && (typeof effect.creatureId !== "string" || !effect.creatureId)) return false;
 
   return true;
 }

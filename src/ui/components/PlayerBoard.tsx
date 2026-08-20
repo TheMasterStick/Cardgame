@@ -5,7 +5,7 @@ import { canAttack, creatureCanAttack, getEffectiveCreatureAttack, heroCanAttack
 import { peekSpellDiscount } from "../../engine/hero";
 import type { CardInstance, CreatureDefinition, GameState, HeroCardDefinition, PlayerId } from "../../engine/types";
 import { BOARD_THEME, cssImage } from "../../data/theme";
-import { getPendingEffect, isEffectTargetable, type AiHighlight, type PendingAction } from "../targeting";
+import { getPendingEffect, isEffectTargetable, pendingEffectSourceArchetype, type AiHighlight, type PendingAction } from "../targeting";
 import { CardView } from "./CardView";
 
 /** The first slot index a creature occupies in this row — a Massive creature (DESIGN.md §5) spans more than one. */
@@ -57,6 +57,7 @@ export function PlayerBoard({
 }: PlayerBoardProps) {
   const playerState = state.players[owner];
   const pendingEffect = getPendingEffect(state, pending);
+  const pendingSourceArchetype = pending ? pendingEffectSourceArchetype(state, pending) : undefined;
   const heroDef = CARD_DEFINITIONS[playerState.hero.defId] as HeroCardDefinition | undefined;
 
   /** "actor" if this card is the one the AI is currently acting with, "target" if it's on the receiving end. */
@@ -227,7 +228,7 @@ export function PlayerBoard({
               owner === "opponent" &&
               canAttack(state, "player", pending.attackerId, { type: "creature", instanceId: card.instanceId });
           } else if (pending && pendingEffect) {
-            clickable = isEffectTargetable(pendingEffect, "creature", owner);
+            clickable = isEffectTargetable(pendingEffect, "creature", owner, card, pendingSourceArchetype);
           } else if (canInitiate) {
             const keywords = (CARD_DEFINITIONS[card.defId] as CreatureDefinition).keywords;
             const isRanged = keywords.includes("ranged");
@@ -262,7 +263,7 @@ export function PlayerBoard({
               owner === "opponent" &&
               canAttack(state, "player", pending.attackerId, { type: "creature", instanceId: card.instanceId });
           } else if (pending && pendingEffect) {
-            clickable = isEffectTargetable(pendingEffect, "creature", owner);
+            clickable = isEffectTargetable(pendingEffect, "creature", owner, card, pendingSourceArchetype);
           } else if (canInitiate) {
             clickable = creatureCanAttack(state, card);
           }

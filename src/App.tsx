@@ -225,7 +225,7 @@ export default function App() {
     const def = CARD_DEFINITIONS[card.defId];
 
     if (def.archetype === "spell" && def.spellForm === "instant") {
-      if (effectNeedsExplicitTarget(def.effect) && effectHasLegalTarget(state, def.effect)) {
+      if (effectNeedsExplicitTarget(def.effect) && effectHasLegalTarget(state, def.effect, "spell")) {
         setPending({ kind: "playCard", instanceId });
         return;
       }
@@ -282,7 +282,7 @@ export default function App() {
     const cost = def.archetype === "spell" ? peekSpellDiscount(state, "player", def.activateCost) : def.activateCost;
     if (pool.current < cost || card.chargesRemaining === 0) return;
 
-    if (effectNeedsExplicitTarget(def.effect) && effectHasLegalTarget(state, def.effect)) {
+    if (effectNeedsExplicitTarget(def.effect) && effectHasLegalTarget(state, def.effect, def.archetype)) {
       setPending({ kind: "activate", slotIndex });
       return;
     }

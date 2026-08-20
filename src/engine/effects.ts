@@ -1,5 +1,7 @@
 import { CARD_DEFINITIONS } from "../data/cards";
+import { findOpenContiguousSlots } from "./board";
 import { drawCard } from "./deck";
+import { createCardInstance } from "./factory";
 import { applyStatus } from "./status";
 import {
   MAX_POOL,
@@ -22,6 +24,34 @@ export function hasKeyword(card: CardInstance, keyword: Keyword): boolean {
 /** Immune blocks any spell effect from landing on the creature — not abilities or creature-native triggers. */
 function isImmuneToSpell(card: CardInstance, sourceArchetype: CardArchetype | undefined): boolean {
   return sourceArchetype === "spell" && hasKeyword(card, "immune");
+}
+
+/**
+ * Stealth (DESIGN.md §7) can't be chosen as the target of a hostile Spell or
+ * Ability — creature/building triggers (onPlay/onAttack/etc., no
+ * sourceArchetype) aren't scoped by this, matching how Immune is also only
+ * a Spell-archetype concern. AOE effects never reach this check at all
+ * (they don't go through a single-target CardInstance lookup), so Stealth
+ * staying vulnerable to `allEnemyCreatures` falls out naturally.
+ */
+function isStealthedFromTargeting(card: CardInstance, sourceArchetype: CardArchetype | undefined): boolean {
+  return (sourceArchetype === "spell" || sourceArchetype === "ability") && hasKeyword(card, "stealth") && !card.stealthBroken;
+}
+
+/**
+ * Ward (DESIGN.md §7) negates the next hostile Spell or Ability that
+ * directly targets this creature — one-time, then consumed. Only called
+ * from the damage/applyStatus branches (the "hostile" CardEffect kinds);
+ * heal/buff never reach here since they're friendly-targeted. Checked
+ * after Immune, so a creature with both just eats the Immune block for
+ * free rather than burning its Ward.
+ */
+function tryConsumeWard(state: GameState, owner: PlayerId, card: CardInstance, sourceArchetype: CardArchetype | undefined): boolean {
+  if (sourceArchetype !== "spell" && sourceArchetype !== "ability") return false;
+  if (!hasKeyword(card, "ward") || card.wardConsumed) return false;
+  card.wardConsumed = true;
+  state.log.push(`${card.defId} (${owner})'s Ward negates the effect.`);
+  return true;
 }
 
 /**
@@ -152,6 +182,12 @@ export function gainGuard(state: GameState, target: PlayerId, amount: number): v
   player.guard.current += amount;
 }
 
+/** Restores lost Guard back up to its current max — no cap increase, no overflow into Hero HP (Drain keyword, DESIGN.md §7). */
+export function restoreGuard(state: GameState, target: PlayerId, amount: number): void {
+  const player = state.players[target];
+  player.guard.current = Math.min(player.guard.max, player.guard.current + amount);
+}
+
 export function gainCap(
   state: GameState,
   target: PlayerId,
@@ -210,7 +246,9 @@ export function resolveEffect(
         damagePlayer(state, target.owner, effect.amount);
       } else {
         const found = findCard(state, target.owner, target.instanceId);
+        if (found && isStealthedFromTargeting(found.card, sourceArchetype)) return;
         if (found && isImmuneToSpell(found.card, sourceArchetype)) return;
+        if (found && tryConsumeWard(state, target.owner, found.card, sourceArchetype)) return;
         damageCard(state, target.owner, target.instanceId, effect.amount);
       }
       return;
@@ -241,7 +279,9 @@ export function resolveEffect(
         return;
       }
       const found = findCard(state, target.owner, target.instanceId);
-      if (!found || isImmuneToSpell(found.card, sourceArchetype)) return;
+      if (!found || isStealthedFromTargeting(found.card, sourceArchetype)) return;
+      if (isImmuneToSpell(found.card, sourceArchetype)) return;
+      if (tryConsumeWard(state, target.owner, found.card, sourceArchetype)) return;
       applyStatus(found.card, effect.status, effect.amount, effect.duration);
       return;
     }
@@ -276,6 +316,24 @@ export function resolveEffect(
     }
     case "gainCap": {
       gainCap(state, actingPlayer, effect.pool, effect.amount);
+      return;
+    }
+    case "summonCreature": {
+      const def = CARD_DEFINITIONS[effect.creatureId];
+      if (!def || def.archetype !== "creature") return;
+      const player = state.players[actingPlayer];
+      const spaceCost = def.spaceCost ?? 1;
+      const vanguardSlots = findOpenContiguousSlots(player.board.vanguard, spaceCost);
+      const row = vanguardSlots ? "vanguard" : "support";
+      const slots = vanguardSlots ?? findOpenContiguousSlots(player.board.support, spaceCost);
+      if (!slots) return; // no room in either row — fizzles, like a Warcry with no legal target
+      const summoned = createCardInstance(effect.creatureId, actingPlayer);
+      summoned.summonedTurn = state.turnNumber;
+      for (const s of slots) player.board[row][s] = summoned;
+      state.log.push(`${effect.creatureId} (${actingPlayer}) is summoned.`);
+      for (const trigger of def.triggers) {
+        if (trigger.on === "onPlay") resolveEffect(state, actingPlayer, trigger.effect, null);
+      }
       return;
     }
   }

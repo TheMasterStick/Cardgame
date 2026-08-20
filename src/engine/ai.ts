@@ -51,6 +51,20 @@ function boardCreatures(board: BoardState): CardInstance[] {
   return alive([...board.vanguard, ...board.support]);
 }
 
+function hasStealth(card: CardInstance): boolean {
+  return hasKeyword(card, "stealth") && !card.stealthBroken;
+}
+
+/**
+ * Same as boardCreatures, minus Stealthed ones — used for picking a Spell/
+ * Ability/Hero Power/Signature target (DESIGN.md §7: Stealth can't be
+ * chosen). Not used for Warcry (onPlay trigger) targeting, which Stealth
+ * doesn't scope to.
+ */
+function targetableBoardCreatures(board: BoardState): CardInstance[] {
+  return boardCreatures(board).filter((c) => !hasStealth(c));
+}
+
 /** How much a targetPlayer/targetAny hit against this player would be reduced by their equipped weapon, if any. */
 function equipmentDamageReduction(state: GameState, owner: PlayerId): number {
   const equipment = state.players[owner].board.equipment;
@@ -58,7 +72,7 @@ function equipmentDamageReduction(state: GameState, owner: PlayerId): number {
   return (CARD_DEFINITIONS[equipment.defId] as EquipmentDefinition).damageReduction;
 }
 
-/** Picks a reasonable target for an onPlay battlecry-style effect: the weakest enemy creature, from either row. */
+/** Picks a reasonable target for an onPlay Warcry-style effect: the weakest enemy creature, from either row. */
 function pickOnPlayTarget(state: GameState, owner: PlayerId): EffectTargetRef {
   const enemy = otherPlayer(owner);
   const enemyCreatures = boardCreatures(state.players[enemy].board);
@@ -81,7 +95,7 @@ function pickActivationTarget(state: GameState, effect: CardEffect): EffectTarge
         // burning the activation on if their weapon reduces it to nothing.
         return effect.amount > equipmentDamageReduction(state, enemy) ? { kind: "player", owner: enemy } : "skip";
       }
-      const enemyCreatures = boardCreatures(state.players[enemy].board);
+      const enemyCreatures = targetableBoardCreatures(state.players[enemy].board);
       if (enemyCreatures.length > 0) {
         const weakest = enemyCreatures.reduce((a, b) => ((a.currentHp ?? Infinity) <= (b.currentHp ?? Infinity) ? a : b));
         return { kind: "card", owner: enemy, instanceId: weakest.instanceId };
@@ -96,7 +110,7 @@ function pickActivationTarget(state: GameState, effect: CardEffect): EffectTarge
       return "skip"; // Creature-only with no enemy creature out (or a face hit their weapon would fully absorb) — not worth burning the activation on a no-op
     }
     case "applyStatus": {
-      const enemyCreatures = boardCreatures(state.players[enemy].board);
+      const enemyCreatures = targetableBoardCreatures(state.players[enemy].board);
       if (enemyCreatures.length === 0) return "skip";
       return { kind: "card", owner: enemy, instanceId: enemyCreatures[0].instanceId };
     }
@@ -116,6 +130,7 @@ function pickActivationTarget(state: GameState, effect: CardEffect): EffectTarge
     case "drawCard":
     case "gainGuard":
     case "gainCap":
+    case "summonCreature":
       return null;
   }
 }
@@ -222,14 +237,23 @@ const NO_REACH: ReachProfile = { reach: false, ranged: false, infiltrate: false 
  * Reach/Ranged can already reach Support even while Vanguard is populated.
  */
 function reachableCreatures(enemyBoard: BoardState, reach: ReachProfile): CardInstance[] {
+  // Stealth (DESIGN.md §7) can't be chosen as an attack target at all — same
+  // treatment as it simply not being on the board for targeting/gating
+  // purposes. Filtered before the Taunt gate so a (currently hypothetical)
+  // Stealthed Taunt creature can't gate out every other target.
+  const notStealthed = (row: CardInstance[]) => row.filter((c) => !hasStealth(c));
   const gateByTaunt = (row: CardInstance[]): CardInstance[] => {
     const taunts = row.filter((c) => hasKeyword(c, "taunt"));
     return taunts.length > 0 ? taunts : row;
   };
-  const vanguard = gateByTaunt(alive(enemyBoard.vanguard));
-  const canReachSupport = reach.reach || reach.ranged || vanguard.length === 0;
+  // Whether Vanguard blocks Support-reach is about the *actual* board state
+  // (matches combat.ts's validateTarget), not which creatures the AI is
+  // still allowed to pick — an all-Stealthed Vanguard still isn't "empty".
+  const rawVanguard = alive(enemyBoard.vanguard);
+  const vanguard = gateByTaunt(notStealthed(rawVanguard));
+  const canReachSupport = reach.reach || reach.ranged || rawVanguard.length === 0;
   if (!canReachSupport) return vanguard;
-  return [...vanguard, ...gateByTaunt(alive(enemyBoard.support))];
+  return [...vanguard, ...gateByTaunt(notStealthed(alive(enemyBoard.support)))];
 }
 
 /** Buildings whose own column is clear on both rows — attackable without Infiltrate (DESIGN.md §11). */

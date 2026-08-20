@@ -996,3 +996,175 @@ describe("Hero Passive/Power/Signature (DESIGN.md §9)", () => {
     expect(third.ok).toBe(false);
   });
 });
+
+describe("Stealth (DESIGN.md §7)", () => {
+  it("cannot be chosen as the target of an enemy attack", () => {
+    const state = makeState();
+    const attacker = createCardInstance("footman", "player");
+    attacker.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = attacker;
+    const stalker = createCardInstance("shadow-stalker", "opponent");
+    state.players.opponent.board.vanguard[0] = stalker;
+
+    const result = declareCreatureAttack(state, "player", attacker.instanceId, {
+      type: "creature",
+      instanceId: stalker.instanceId,
+    });
+    expect(result.ok).toBe(false);
+  });
+
+  it("is permanently lost once the Stealthed creature attacks", () => {
+    const state = makeState();
+    const stalker = createCardInstance("shadow-stalker", "player");
+    stalker.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = stalker;
+    const bystander = createCardInstance("footman", "opponent");
+    state.players.opponent.board.vanguard[1] = bystander;
+
+    declareCreatureAttack(state, "player", stalker.instanceId, { type: "player" });
+    expect(stalker.stealthBroken).toBe(true);
+
+    // Now targetable, from the opponent's side.
+    const counterAttacker = createCardInstance("footman", "opponent");
+    counterAttacker.summonedTurn = 0;
+    state.players.opponent.board.vanguard[2] = counterAttacker;
+    const result = declareCreatureAttack(state, "opponent", counterAttacker.instanceId, {
+      type: "creature",
+      instanceId: stalker.instanceId,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("blocks a targeted Spell effect but not an AOE effect", () => {
+    const state = makeState();
+    const stalker = createCardInstance("shadow-stalker", "opponent");
+    state.players.opponent.board.vanguard[0] = stalker;
+
+    resolveEffect(
+      state,
+      "player",
+      { kind: "damage", amount: 5, target: "targetCreature" },
+      { kind: "card", owner: "opponent", instanceId: stalker.instanceId },
+      "spell",
+    );
+    expect(stalker.currentHp).toBe(2); // untouched — base HP, the hit was blocked
+
+    resolveEffect(state, "player", { kind: "damage", amount: 1, target: "allEnemyCreatures" }, null, "spell");
+    expect(stalker.currentHp).toBe(1); // AOE still lands
+  });
+});
+
+describe("Ward (DESIGN.md §7)", () => {
+  it("negates the next hostile targeted Spell/Ability hit, then is consumed", () => {
+    const state = makeState();
+    const acolyte = createCardInstance("warded-acolyte", "opponent");
+    state.players.opponent.board.vanguard[0] = acolyte;
+
+    resolveEffect(
+      state,
+      "player",
+      { kind: "damage", amount: 2, target: "targetCreature" },
+      { kind: "card", owner: "opponent", instanceId: acolyte.instanceId },
+      "spell",
+    );
+    expect(acolyte.currentHp).toBe(3); // untouched — Ward ate the hit
+    expect(acolyte.wardConsumed).toBe(true);
+
+    resolveEffect(
+      state,
+      "player",
+      { kind: "damage", amount: 2, target: "targetCreature" },
+      { kind: "card", owner: "opponent", instanceId: acolyte.instanceId },
+      "spell",
+    );
+    expect(acolyte.currentHp).toBe(1); // Ward already spent — this one lands
+  });
+});
+
+describe("Cleave (DESIGN.md §7)", () => {
+  it("also damages enemy creatures in adjacent columns, same row as the primary target", () => {
+    const state = makeState();
+    const brawler = createCardInstance("warhammer-brawler", "player"); // 3 attack, cleave
+    brawler.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = brawler;
+
+    const primary = createCardInstance("stone-golem", "opponent"); // 7 HP, survives 4 (3 base + 1 Fighter aura)
+    const leftFlank = createCardInstance("stone-golem", "opponent");
+    const rightFlank = createCardInstance("stone-golem", "opponent");
+    const untouched = createCardInstance("stone-golem", "opponent");
+    state.players.opponent.board.vanguard[0] = leftFlank;
+    state.players.opponent.board.vanguard[1] = primary;
+    state.players.opponent.board.vanguard[2] = rightFlank;
+    state.players.opponent.board.vanguard[4] = untouched; // column 3 is empty — not adjacent to anything
+
+    declareCreatureAttack(state, "player", brawler.instanceId, { type: "creature", instanceId: primary.instanceId });
+    expect(leftFlank.currentHp).toBe(3); // 7 - 4 (3 base + 1 Fighter aura)
+    expect(rightFlank.currentHp).toBe(3);
+    expect(untouched.currentHp).toBe(7); // out of splash range, untouched
+  });
+});
+
+describe("Drain (DESIGN.md §7)", () => {
+  it("restores the attacker's controller's Guard, capped at max, on combat damage dealt", () => {
+    const state = makeState();
+    const leech = createCardInstance("blood-leech", "player"); // 2 attack, drain
+    leech.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = leech;
+    state.players.player.guard.current = 50; // damaged below max (100) so restoration is visible
+
+    declareCreatureAttack(state, "player", leech.instanceId, { type: "player" });
+    // Fighter's +1 aura makes this 3 Attack, not 2 — restored Guard should match the actual damage dealt.
+    expect(state.players.player.guard.current).toBe(53);
+  });
+
+  it("does not overflow past the current Guard max", () => {
+    const state = makeState();
+    const leech = createCardInstance("blood-leech", "player");
+    leech.summonedTurn = 0;
+    state.players.player.board.vanguard[0] = leech;
+    state.players.player.guard.current = state.players.player.guard.max; // already full
+
+    declareCreatureAttack(state, "player", leech.instanceId, { type: "player" });
+    expect(state.players.player.guard.current).toBe(state.players.player.guard.max);
+  });
+});
+
+describe("Summon (DESIGN.md §7 — summonCreature effect)", () => {
+  it("creates a copy of the named creature in an open Vanguard slot", () => {
+    const state = makeState();
+    resolveEffect(state, "player", { kind: "summonCreature", creatureId: "militia-recruit" }, null);
+    const summoned = state.players.player.board.vanguard[0];
+    expect(summoned?.defId).toBe("militia-recruit");
+    expect(summoned?.summonedTurn).toBe(state.turnNumber); // has summoning sickness like any other freshly-played creature
+  });
+
+  it("falls back to Support when Vanguard is full", () => {
+    const state = makeState();
+    for (let i = 0; i < state.players.player.board.vanguard.length; i++) {
+      state.players.player.board.vanguard[i] = createCardInstance("footman", "player");
+    }
+    resolveEffect(state, "player", { kind: "summonCreature", creatureId: "militia-recruit" }, null);
+    expect(state.players.player.board.support[0]?.defId).toBe("militia-recruit");
+  });
+
+  it("fizzles without crashing when neither row has room", () => {
+    const state = makeState();
+    for (const row of [state.players.player.board.vanguard, state.players.player.board.support]) {
+      for (let i = 0; i < row.length; i++) row[i] = createCardInstance("footman", "player");
+    }
+    expect(() => resolveEffect(state, "player", { kind: "summonCreature", creatureId: "militia-recruit" }, null)).not.toThrow();
+  });
+
+  it("fires via Spider Matriarch's onDeath trigger", () => {
+    const state = makeState();
+    const matriarch = createCardInstance("spider-matriarch", "player");
+    matriarch.currentHp = 1;
+    state.players.player.board.vanguard[0] = matriarch;
+
+    damageCard(state, "player", matriarch.instanceId, 99);
+    expect(state.players.player.graveyard).toContain(matriarch);
+    // Matriarch's own slot clears before onDeath fires, so the Summon lands
+    // right back in the now-open column 0 rather than needing a new one.
+    expect(state.players.player.board.vanguard[0]?.defId).toBe("militia-recruit");
+  });
+});

@@ -1,5 +1,5 @@
 import { CARD_DEFINITIONS } from "../data/cards";
-import { damageCard, damagePlayer, hasKeyword, resolveEffect, type EffectTargetRef } from "./effects";
+import { damageCard, damagePlayer, hasKeyword, resolveEffect, restoreGuard, type EffectTargetRef } from "./effects";
 import { getAuraAttackBonus } from "./hero";
 import {
   otherPlayer,
@@ -50,6 +50,20 @@ function hasFormationAlly(row: (CardInstance | null)[], columns: number[], insta
   const left = leftIndex >= 0 ? row[leftIndex] : null;
   const right = rightIndex < row.length ? row[rightIndex] : null;
   return (left !== null && left.instanceId !== instanceId) || (right !== null && right.instanceId !== instanceId);
+}
+
+/** Stealth (DESIGN.md §7), until broken by this creature attacking or (not yet built) a Reveal effect. */
+function hasStealth(card: CardInstance): boolean {
+  return hasKeyword(card, "stealth") && !card.stealthBroken;
+}
+
+/** Cleave (DESIGN.md §7): the creatures directly adjacent, same row, to whatever columns the primary target occupies. */
+function cleaveSplashTargets(row: (CardInstance | null)[], targetColumns: number[]): CardInstance[] {
+  const leftIndex = Math.min(...targetColumns) - 1;
+  const rightIndex = Math.max(...targetColumns) + 1;
+  const left = leftIndex >= 0 ? row[leftIndex] : null;
+  const right = rightIndex < row.length ? row[rightIndex] : null;
+  return [left, right].filter((c): c is CardInstance => c !== null);
 }
 
 /**
@@ -166,6 +180,11 @@ function validateTarget(
   const defenderBoard = state.players[defenderOwner].board;
 
   if (target.type === "creature") {
+    const stealthed = [...defenderBoard.vanguard, ...defenderBoard.support].find(
+      (c): c is CardInstance => c?.instanceId === target.instanceId && hasStealth(c),
+    );
+    if (stealthed) return { ok: false, reason: "This creature has Stealth and can't be targeted." };
+
     const onVanguard = defenderBoard.vanguard.some((c) => c?.instanceId === target.instanceId);
     if (onVanguard) return checkTaunt(defenderBoard.vanguard, target.instanceId, "Vanguard");
 
@@ -273,6 +292,7 @@ function resolveCreatureTrade(
   attackerAttack: number,
   attackerIsRanged: boolean,
   attackerHasPush: boolean,
+  attackerHasDrain: boolean,
   defenderOwner: PlayerId,
   defenderInstanceId: string,
 ): void {
@@ -297,6 +317,7 @@ function resolveCreatureTrade(
   fireOnDefendTrigger(state, defenderOwner, defender, attackerTarget);
 
   damageCard(state, defenderOwner, actualDefenderId, attackerAttack);
+  if (attackerHasDrain) restoreGuard(state, attackerOwner, attackerAttack);
 
   // Push (DESIGN.md §5): if the defender was in Vanguard and survives, and
   // its column's Support slot is open, it gets shoved back there. Only
@@ -319,6 +340,7 @@ function resolveCreatureTrade(
   } else {
     damageCard(state, attackerOwner, attackerInstanceId, defenderAttack);
   }
+  if (hasKeyword(defender, "drain")) restoreGuard(state, defenderOwner, defenderAttack);
 }
 
 /**
@@ -372,8 +394,14 @@ export function declareCreatureAttack(
 
   const attackerAttack = getEffectiveCreatureAttack(state, attackerOwner, attacker);
   const defenderOwner = otherPlayer(attackerOwner);
+  const attackerHasDrain = def.keywords.includes("drain");
 
   if (target.type === "creature") {
+    // Captured before the trade resolves — the primary target's own slot
+    // may clear (it died) or move (Push) by the time Cleave needs it, but
+    // the column indices it occupied stay valid for finding its neighbors.
+    const cleaveInfo = def.keywords.includes("cleave") ? locateOnBoard(state, defenderOwner, target.instanceId) : null;
+
     resolveCreatureTrade(
       state,
       attackerOwner,
@@ -381,15 +409,26 @@ export function declareCreatureAttack(
       attackerAttack,
       reach.ranged,
       def.keywords.includes("push"),
+      attackerHasDrain,
       defenderOwner,
       target.instanceId,
     );
+
+    if (cleaveInfo) {
+      for (const splashTarget of cleaveSplashTargets(cleaveInfo.row, cleaveInfo.columns)) {
+        damageCard(state, defenderOwner, splashTarget.instanceId, attackerAttack);
+        if (attackerHasDrain) restoreGuard(state, attackerOwner, attackerAttack);
+      }
+    }
   } else if (target.type === "building") {
     damageCard(state, defenderOwner, target.instanceId, attackerAttack);
+    if (attackerHasDrain) restoreGuard(state, attackerOwner, attackerAttack);
   } else {
     damagePlayer(state, defenderOwner, attackerAttack);
+    if (attackerHasDrain) restoreGuard(state, attackerOwner, attackerAttack);
   }
 
+  if (hasKeyword(attacker, "stealth")) attacker.stealthBroken = true;
   attacker.hasAttackedThisTurn = true;
   return { ok: true };
 }
@@ -409,8 +448,8 @@ export function declareHeroAttack(
   const defenderOwner = otherPlayer(attackerOwner);
 
   if (target.type === "creature") {
-    // Heroes have no Ranged/Push weapon flags yet (Equipment has no such fields) — always a plain melee trade for now.
-    resolveCreatureTrade(state, attackerOwner, "hero", attackerAttack, false, false, defenderOwner, target.instanceId);
+    // Heroes have no Ranged/Push/Drain weapon flags yet (Equipment has no such fields) — always a plain melee trade for now.
+    resolveCreatureTrade(state, attackerOwner, "hero", attackerAttack, false, false, false, defenderOwner, target.instanceId);
   } else if (target.type === "building") {
     damageCard(state, defenderOwner, target.instanceId, attackerAttack);
   } else {

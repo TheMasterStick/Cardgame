@@ -169,7 +169,7 @@ Only meaningful on Creature cards (`keywords: Keyword[]`). See DESIGN.md
 | `reach` | Same enemy-Support-targeting reach as Ranged, but doesn't grant attacking from Support — a Reach creature must still be in Vanguard to attack at all. |
 | `infiltrate` | Can strike enemy Buildings directly regardless of the enemy board's row state, and is the one thing that lets an attacker bypass a Taunt creature to hit the Hero. Doesn't grant Support-row targeting by itself — pair with Reach/Ranged on the same card for that. |
 | `charge` | Can attack the same turn it's played, ignoring summoning sickness. |
-| `battlecry` | Marks a card whose `onPlay` trigger represents a Battlecry effect (fires when played). Purely a label — the actual effect still comes from a `triggers: [{ on: "onPlay", ... }]` entry. |
+| `warcry` | *(renamed from `battlecry` in Phase D — no card ever shipped with the old value, so there was nothing to migrate.)* Marks a card whose `onPlay` trigger represents a Warcry effect (fires when played). Purely a label — the actual effect still comes from a `triggers: [{ on: "onPlay", ... }]` entry. |
 | `taunt` | While alive, forces enemy attackers to target it first among the creatures in whichever row is actually being attacked — a Vanguard Taunt gates Vanguard-tier attacks; a Support Taunt gates Support-tier attacks the same way, for any attacker that can currently reach Support (Reach/Ranged always, Base once enemy Vanguard is empty — see the combat ladder below). Also gates Hero-targeting for any attacker that can reach the row it's in, the same way — bypassed only by Infiltrate. Doesn't affect Building targeting or Spell/Ability targeting (neither is gated by Taunt at all). |
 | `counter` | Marks a card whose `onDefend` trigger fires when it's attacked (pair with a `triggers: [{ on: "onDefend", ... }]` entry, e.g. reflect damage back at the attacker). |
 | `revenge` | Marks a card whose `onDeath` trigger fires when it dies (pair with a `triggers: [{ on: "onDeath", ... }]` entry). |
@@ -181,16 +181,26 @@ Only meaningful on Creature cards (`keywords: Keyword[]`). See DESIGN.md
 | `formation` | Pair with `formationBonus: { attackDelta: N }`. Grants +N Attack while an allied creature occupies an adjacent column, same row — also live. |
 | `advance` | Lets a Support creature spend 1 Energy to move into the same-column Vanguard slot instead of attacking (`declareAdvance` in `combat.ts`). Uses the same Ready/summoning-sickness gate as attacking, and exhausts the creature the same way. No `triggers` entry needed — it's a player action, not a trigger. |
 | `push` | When this creature's attack damages an enemy Vanguard creature and it survives, and that column's Support slot is empty, the defender gets moved there automatically. Doesn't apply to Massive defenders (they don't fit in one Support slot). No `triggers` entry needed. |
+| `stealth` | Can't be chosen as the target of an enemy attack, or of a hostile Spell/Ability that targets a specific creature — still hit by AOE effects (`allEnemyCreatures`), same scoping as Immune. Broken permanently the moment this creature attacks (there's no "Reveal" effect yet to break it early). Enforced in the engine (`combat.ts`'s `validateTarget`, `effects.ts`'s `resolveEffect`), the UI (a Stealthed creature is never highlighted as clickable, and a Spell/Ability whose only legal target is Stealthed fizzles rather than leaving the player stuck), and the AI's targeting heuristics. |
+| `ward` | Negates the next hostile Spell or Ability that directly targets this creature — one-time, then consumed (`card.wardConsumed`). Doesn't stop AOE effects or plain combat damage, same scoping as Stealth/Immune. Checked after Stealth/Immune, so a creature that's already blocking the hit some other way doesn't burn its Ward for free. |
+| `cleave` | On attack against a creature, also deals the same damage to enemy creatures in the columns directly adjacent to the primary target, same row — no retaliation, redirect, or Push from the splash hits, just damage. Doesn't trigger against Building/Hero targets (there's no "row" to splash into). |
+| `drain` | Every time this creature deals *combat* damage (attacking or retaliating, including once per Cleave splash hit), its controller's Hero regains that much Guard, capped at Guard's current max — no overflow into Hero HP, and no effect on Guard's cap itself (that's what `gainCap`/`gainGuard` are for). |
+| `bloodied` | Label for a card whose printed effect only applies below 50% Health — not yet wired to any actual trigger mechanism in the engine (DESIGN.md §7 deliberately defers that decision until a real Bloodied card needs it). Safe to put on a card today; it just won't do anything yet. |
+| `summon` | Label for a trigger whose effect creates another creature via the `summonCreature` CardEffect (see Effects below) — pair with whichever `TriggerName` fits the card (`onPlay` for a Warcry-style summon, `onDeath` for a death-rattle one, etc.). |
 
-`battlecry`, `counter`, and `revenge` are labels that pair with a
+`warcry`, `counter`, and `revenge` are labels that pair with a
 matching `triggers` entry (`onPlay`, `onDefend`, `onDeath`
 respectively) — the keyword itself doesn't do anything without the
-trigger. `taunt`, `frenzy`, `immune`, `poison`, `protector`, and `push`
-are fully handled by the engine from the keyword alone. `ranged`,
-`reach`, `infiltrate`, and `charge` are also engine-handled, no trigger
-needed. `flank`/`formation` need their matching `flankBonus`/
-`formationBonus` field to actually do anything. `advance` is invoked as
-a player action (`declareAdvance`), not through a trigger or effect.
+trigger. `summon` is the same idea, paired with a `summonCreature`
+effect instead of a specific trigger name. `taunt`, `frenzy`, `immune`,
+`poison`, `protector`, `push`, `stealth`, and `drain` are fully handled
+by the engine from the keyword alone. `ranged`, `reach`, `infiltrate`,
+and `charge` are also engine-handled, no trigger needed. `flank`/
+`formation` need their matching `flankBonus`/`formationBonus` field to
+actually do anything, same as `ward` needing nothing extra (its
+one-time-use state lives on the `CardInstance`, not the definition).
+`advance` is invoked as a player action (`declareAdvance`), not through
+a trigger or effect. `bloodied` doesn't do anything yet — see above.
 
 **Massive creatures** (`spaceCost: N` on a `CreatureDefinition`, no
 keyword needed — it's a numeric field since it needs a magnitude, per
@@ -288,6 +298,7 @@ Used in a spell/ability's `effect` field, and in any creature/building
 | `drawCard` | `amount` | Draws for the acting player. No `target`. |
 | `gainGuard` | `amount` | Grants Guard to the acting player. No `target`. |
 | `gainCap` | `pool` (`"resource"\|"mana"\|"energy"`), `amount` | Raises a resource cap (and current amount) for the acting player. No `target`. |
+| `summonCreature` | `creatureId` (must match an existing Creature card's `id`) | Creates a copy of that Creature on the acting player's own board — Vanguard preferred, falling back to Support, respecting the summoned creature's own `spaceCost`. Fizzles silently (no crash, nothing created) if neither row has room, same philosophy as a Warcry with no legal target. The new creature has ordinary summoning sickness and fires its own `onPlay` triggers. No `target`. |
 
 `target` (on the four kinds that need one) is one of:
 `"targetCreature"`, `"targetBuilding"`, `"targetCreatureOrBuilding"`,
@@ -367,8 +378,9 @@ drop its JSON output straight into the array in
 > meaningful on `hero`/`creature`). Hero cards additionally need
 > `attack`, `hp`. Creatures additionally need `attack`, `hp`,
 > `keywords` (array, any of `ranged`, `reach`, `infiltrate`, `charge`,
-> `battlecry`, `taunt`, `counter`, `revenge`, `frenzy`, `immune`,
-> `poison`, `protector`, `flank`, `formation`, `advance`, `push`),
+> `warcry`, `taunt`, `counter`, `revenge`, `frenzy`, `immune`,
+> `poison`, `protector`, `flank`, `formation`, `advance`, `push`,
+> `stealth`, `ward`, `cleave`, `drain`, `bloodied`, `summon`),
 > `triggers` (array of `{on, effect}`, `on` one of
 > `onPlay`/`onAttack`/`onDeath`/`onDefend`/`startOfTurn`/`endOfTurn`).
 > Creatures can optionally add `spaceCost` (number, Massive — default
@@ -384,12 +396,14 @@ drop its JSON output straight into the array in
 > field) and need `activateCost`, `charges`, and `effect` the same way.
 > Equipment needs `attackBonus` and `damageReduction`.
 > An `effect` object has a `kind` (`damage`, `heal`, `applyStatus`,
-> `buff`, `drawCard`, `gainGuard`, or `gainCap`) plus kind-specific
-> fields: `damage`/`heal` need `amount` + `target`; `applyStatus` needs
-> `status` (`"burn"` or `"poison"`) + `amount` + `target`; `buff` needs
-> `target` + `attackDelta`/`hpDelta`; `drawCard` needs `amount`;
-> `gainGuard` needs `amount`; `gainCap` needs `pool`
-> (`"resource"`/`"mana"`/`"energy"`) + `amount`. `target` is one of
+> `buff`, `drawCard`, `gainGuard`, `gainCap`, or `summonCreature`) plus
+> kind-specific fields: `damage`/`heal` need `amount` + `target`;
+> `applyStatus` needs `status` (`"burn"` or `"poison"`) + `amount` +
+> `target`; `buff` needs `target` + `attackDelta`/`hpDelta`; `drawCard`
+> needs `amount`; `gainGuard` needs `amount`; `gainCap` needs `pool`
+> (`"resource"`/`"mana"`/`"energy"`) + `amount`; `summonCreature` needs
+> `creatureId` (must match an existing Creature card's `id`), no
+> `target`. `target` is one of
 > `targetCreature`, `targetBuilding`, `targetCreatureOrBuilding`,
 > `targetAny`, `targetPlayer`, `allEnemyCreatures`,
 > `allFriendlyCreatures`, `selfHero`.

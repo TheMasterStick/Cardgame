@@ -1,6 +1,7 @@
 import { CARD_DEFINITIONS } from "../data/cards";
 import type { AiTurnStep } from "../engine/ai";
-import type { CardEffect, EffectTarget, GameState, HeroCardDefinition, PlayerId } from "../engine/types";
+import { hasKeyword } from "../engine/effects";
+import type { CardArchetype, CardEffect, CardInstance, EffectTarget, GameState, HeroCardDefinition, PlayerId } from "../engine/types";
 
 const EXPLICIT_TARGET_CATEGORIES: EffectTarget[] = [
   "targetCreature",
@@ -44,14 +45,21 @@ export function effectAllowsPortraitTarget(effect: CardEffect): boolean {
  * a reason to make the card unplayable: it should still go off and the
  * effect just fizzles (DESIGN.md §7 "Warcry with no target").
  */
-export function effectHasLegalTarget(state: GameState, effect: CardEffect): boolean {
+export function effectHasLegalTarget(state: GameState, effect: CardEffect, sourceArchetype?: CardArchetype): boolean {
   const category = effectTargetCategory(effect);
   if (category === null || category === "targetPlayer" || category === "targetAny") return true;
 
   const side = effectTargetSide(effect);
   const targetOwner: PlayerId = side === "own" ? "player" : "opponent";
   const board = state.players[targetOwner].board;
-  const hasCreature = [...board.vanguard, ...board.support].some((c) => c !== null);
+  // A Spell/Ability can't target a Stealthed creature (DESIGN.md §7) — if
+  // every candidate creature is Stealthed, treat it the same as no creature
+  // being out at all, so the card still fizzles instead of entering a
+  // pending-target state with nothing left to click.
+  const isBlockedBySpellOrAbilityStealth = sourceArchetype === "spell" || sourceArchetype === "ability";
+  const hasCreature = [...board.vanguard, ...board.support].some(
+    (c) => c !== null && !(isBlockedBySpellOrAbilityStealth && hasKeyword(c, "stealth") && !c.stealthBroken),
+  );
   const hasBuilding = board.buildings.some((c) => c !== null);
 
   if (category === "targetCreature") return hasCreature;
@@ -93,15 +101,48 @@ export function getPendingEffect(state: GameState, pending: PendingAction | null
   return def.effect;
 }
 
+/**
+ * Whether `pending`'s effect actually comes from a Spell or Ability card
+ * (as opposed to a creature/building Warcry, or a Hero Power/Signature,
+ * neither of which are Spell/Ability archetype cards) — mirrors the
+ * `sourceArchetype` engine.ts's resolveEffect is given, needed here so the
+ * UI's Stealth exclusion (below) only applies where DESIGN.md §7 actually
+ * scopes it: "a targeted enemy Spell or Ability", not any hostile effect.
+ */
+export function pendingEffectSourceArchetype(state: GameState, pending: PendingAction): CardArchetype | undefined {
+  if (pending.kind === "playCard") {
+    const card = state.players.player.hand.find((c) => c.instanceId === pending.instanceId);
+    const def = card && CARD_DEFINITIONS[card.defId];
+    return def?.archetype === "spell" ? "spell" : undefined;
+  }
+  if (pending.kind === "activate") {
+    const card = state.players.player.board.spellAbilitySlots[pending.slotIndex];
+    const def = card && CARD_DEFINITIONS[card.defId];
+    return def?.archetype === "spell" || def?.archetype === "ability" ? def.archetype : undefined;
+  }
+  return undefined; // heroPower/signature/attack/placeCreature
+}
+
 export function isEffectTargetable(
   effect: CardEffect,
   side: "creature" | "building" | "portrait",
   owner: PlayerId,
+  card?: CardInstance,
+  sourceArchetype?: CardArchetype,
 ): boolean {
   const requiredSide = effectTargetSide(effect);
   if (requiredSide === null) return false;
   if (requiredSide === "own" && owner !== "player") return false;
   if (requiredSide === "enemy" && owner !== "opponent") return false;
+  if (
+    side === "creature" &&
+    card &&
+    (sourceArchetype === "spell" || sourceArchetype === "ability") &&
+    hasKeyword(card, "stealth") &&
+    !card.stealthBroken
+  ) {
+    return false;
+  }
   if (side === "building" && !effectAllowsBuildingTarget(effect)) return false;
   if (side === "portrait" && !effectAllowsPortraitTarget(effect)) return false;
   return true;

@@ -79,7 +79,7 @@ export const KEYWORD_LABELS: Record<Keyword, string> = {
   reach: "Reach",
   infiltrate: "Infiltrate",
   charge: "Charge",
-  battlecry: "Battlecry",
+  warcry: "Warcry",
   counter: "Counter",
   revenge: "Revenge",
   frenzy: "Frenzy",
@@ -91,12 +91,18 @@ export const KEYWORD_LABELS: Record<Keyword, string> = {
   formation: "Formation",
   advance: "Advance",
   push: "Push",
+  stealth: "Stealth",
+  ward: "Ward",
+  cleave: "Cleave",
+  drain: "Drain",
+  bloodied: "Bloodied",
+  summon: "Summon",
 };
 
 /** Small glyphs shown on the compact card face so keyworded cards are recognizable at a glance. */
 export const KEYWORD_ICONS: Record<Keyword, string> = {
   taunt: "🛡️",
-  battlecry: "📯",
+  warcry: "📯",
   revenge: "⚰️",
   charge: "⚡",
   ranged: "🏹",
@@ -111,6 +117,12 @@ export const KEYWORD_ICONS: Record<Keyword, string> = {
   formation: "🤝",
   advance: "⏩",
   push: "🫸",
+  stealth: "🌫️",
+  ward: "🧿",
+  cleave: "🪓",
+  drain: "🩸",
+  bloodied: "💔",
+  summon: "🌀",
 };
 
 /**

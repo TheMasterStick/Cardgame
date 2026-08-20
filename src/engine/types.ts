@@ -20,7 +20,7 @@ export type Keyword =
   | "reach"
   | "infiltrate"
   | "charge"
-  | "battlecry"
+  | "warcry"
   | "counter"
   | "revenge"
   | "frenzy"
@@ -31,7 +31,13 @@ export type Keyword =
   | "flank"
   | "formation"
   | "advance"
-  | "push";
+  | "push"
+  | "stealth"
+  | "ward"
+  | "cleave"
+  | "drain"
+  | "bloodied"
+  | "summon";
 
 export type Element =
   | "frost"
@@ -149,6 +155,18 @@ export interface GainCapEffect {
   amount: number;
 }
 
+/**
+ * Creates a copy of the named Creature card on the controller's own board
+ * (Summon keyword, DESIGN.md §7) — into the first row with room for its
+ * `spaceCost`, Vanguard preferred over Support. No explicit target: like a
+ * Warcry with no legal target, it just fizzles (does nothing) if neither
+ * row has room.
+ */
+export interface SummonCreatureEffect {
+  kind: "summonCreature";
+  creatureId: string;
+}
+
 export type CardEffect =
   | DamageEffect
   | HealEffect
@@ -156,7 +174,8 @@ export type CardEffect =
   | BuffEffect
   | DrawCardEffect
   | GainGuardEffect
-  | GainCapEffect;
+  | GainCapEffect
+  | SummonCreatureEffect;
 
 export type TriggerName =
   | "onPlay"
@@ -325,6 +344,10 @@ export interface CardInstance {
   summonedTurn?: number;
   hasAttackedThisTurn?: boolean;
   statuses: StatusEffectInstance[];
+  /** Stealth (DESIGN.md §7) is permanently lost once this creature attacks — tracked per-instance since the keyword itself is static on the definition. */
+  stealthBroken?: boolean;
+  /** Ward (DESIGN.md §7) is a one-time negation — set true once it's been consumed by a hostile targeted Spell/Ability. */
+  wardConsumed?: boolean;
   // Spell / ability runtime state
   chargesRemaining?: number | "unlimited";
 }

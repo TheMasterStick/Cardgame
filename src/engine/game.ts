@@ -1,4 +1,5 @@
 import { CARD_DEFINITIONS } from "../data/cards";
+import { findOpenContiguousSlots, findOpenSlot } from "./board";
 import { drawCard, drawStartingHand } from "./deck";
 import { killCardIfDead, resolveEffect, type EffectTargetRef } from "./effects";
 import { applySpellDiscount, peekSpellDiscount } from "./hero";
@@ -19,39 +20,6 @@ import {
 export interface ActionResult {
   ok: boolean;
   reason?: string;
-}
-
-function findOpenSlot(row: (CardInstance | null)[], preferred?: number): number {
-  if (preferred !== undefined && row[preferred] === null) return preferred;
-  return row.findIndex((c) => c === null);
-}
-
-/**
- * Finds `spaceCost` contiguous open slots in the same row for a Massive
- * creature (DESIGN.md §5) — null if there isn't enough contiguous space
- * anywhere. `spaceCost` 1 is the common case and just wraps findOpenSlot.
- */
-function findOpenContiguousSlots(row: (CardInstance | null)[], spaceCost: number, preferred?: number): number[] | null {
-  if (spaceCost <= 1) {
-    const idx = findOpenSlot(row, preferred);
-    return idx === -1 ? null : [idx];
-  }
-  const fitsAt = (start: number): number[] | null => {
-    if (start < 0 || start + spaceCost > row.length) return null;
-    for (let i = start; i < start + spaceCost; i++) {
-      if (row[i] !== null) return null;
-    }
-    return Array.from({ length: spaceCost }, (_, k) => start + k);
-  };
-  if (preferred !== undefined) {
-    const atPreferred = fitsAt(preferred);
-    if (atPreferred) return atPreferred;
-  }
-  for (let start = 0; start + spaceCost <= row.length; start++) {
-    const fit = fitsAt(start);
-    if (fit) return fit;
-  }
-  return null;
 }
 
 /** Dedupes a row by instanceId — a Massive creature (DESIGN.md §5) occupies more than one slot with the same instance. */

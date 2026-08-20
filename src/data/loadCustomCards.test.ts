@@ -121,4 +121,56 @@ describe("custom card validation", () => {
       expect(card.triggers).toHaveLength(0);
     }
   });
+
+  it("accepts every currently-defined keyword, not just ranged/charge", () => {
+    const card = validateCard({
+      id: "x",
+      name: "X",
+      archetype: "creature",
+      cost: 1,
+      rarity: "common",
+      attack: 1,
+      hp: 1,
+      keywords: ["stealth", "ward", "cleave", "drain", "bloodied", "summon", "warcry", "taunt"],
+    });
+    expect(card).not.toBeNull();
+    if (card?.archetype === "creature") {
+      expect(card.keywords).toEqual(["stealth", "ward", "cleave", "drain", "bloodied", "summon", "warcry", "taunt"]);
+    }
+  });
+
+  it("accepts a creature with an onDeath summonCreature trigger", () => {
+    const card = validateCard({
+      id: "x",
+      name: "X",
+      archetype: "creature",
+      cost: 1,
+      rarity: "common",
+      attack: 1,
+      hp: 1,
+      keywords: ["summon", "revenge"],
+      triggers: [{ on: "onDeath", effect: { kind: "summonCreature", creatureId: "militia-recruit" } }],
+    });
+    expect(card).not.toBeNull();
+    if (card?.archetype === "creature") {
+      expect(card.triggers).toHaveLength(1);
+    }
+  });
+
+  it("drops a summonCreature trigger missing creatureId but keeps the rest of a valid creature", () => {
+    const card = validateCard({
+      id: "x",
+      name: "X",
+      archetype: "creature",
+      cost: 1,
+      rarity: "common",
+      attack: 1,
+      hp: 1,
+      triggers: [{ on: "onDeath", effect: { kind: "summonCreature" } }],
+    });
+    expect(card).not.toBeNull();
+    if (card?.archetype === "creature") {
+      expect(card.triggers).toHaveLength(0);
+    }
+  });
 });

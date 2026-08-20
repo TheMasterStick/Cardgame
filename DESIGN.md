@@ -57,11 +57,46 @@ restricted until real Faction-tagged content exists. The three starter
 Heroes' base Attack numbers (10/20/15) were left exactly as they were
 even though this pass touched their card entries — see §9's
 open-default note; retiring them to the low/0-base convention is a
-separate balance call, not bundled into this rework. Everything else
-below (the fuller keyword pool beyond what's listed above,
-Buildings-as-objects, the Equipment rework) is still spec only.
-CARDS.md/BACKEND.md describe what's live today; check them (not just
-this doc) for current schema.
+separate balance call, not bundled into this rework.
+**Phase D is also live**: Battlecry was renamed Warcry throughout (a
+pure label rename — no card ever used the old keyword, so there was
+nothing to migrate); Stealth, Ward, Cleave, Drain, Bloodied, and Summon
+(the new `summonCreature` CardEffect kind) all landed, each with an
+example card (`shadow-stalker`, `warded-acolyte`, `warhammer-brawler`,
+`blood-leech`, `spider-matriarch`). A few implementation notes: Stealth
+and Ward's "hostile Spell or Ability" scoping is checked against the
+same `sourceArchetype` `resolveEffect` already threads through for
+Immune, so — matching Immune's existing precedent — neither blocks a
+creature/building Warcry or a Hero Power/Signature, only literal Spell/
+Ability card effects; both are also enforced UI-side (the pending-
+target highlight skips Stealthed creatures, and a Spell/Ability whose
+only legal target is Stealthed fizzles immediately rather than leaving
+the player stuck in a pending state with nothing left to click) and
+AI-side (the opponent's targeting heuristics skip Stealthed creatures
+too, for the same "don't waste an action on an illegal target" reason
+— Hero Power/Signature are included in that heuristic skip even though
+Stealth technically doesn't restrict them, a deliberate over-cautious
+simplification since the AI never needs to play perfectly). Cleave's
+splash targets are read live off the primary target's original column
+neighbors, so it stays correct even if the primary target dies or gets
+Pushed mid-resolution. Drain triggers on every individual instance of
+combat damage this creature deals — including once per Cleave splash
+hit — restoring Guard through `restoreGuard` (a cap-respecting sibling
+of the existing `gainGuard`, which raises the cap itself and is meant
+for a different job). `summonCreature` places into the controller's
+Vanguard, falling back to Support, and simply fizzles (like a Warcry
+with no legal target) if neither row has room; a summoned creature
+gets normal summoning sickness and fires its own onPlay triggers.
+Bloodied landed as a keyword label only, per its own §7 "Open default"
+note — no card built yet needs its trigger mechanism decided, so
+nothing forces that decision prematurely. Separately, this pass also
+fixed `src/data/loadCustomCards.ts`'s keyword validator (it guards
+`customCards.json`), which had been silently accepting only `ranged`/
+`charge` on custom creatures since Phase A — every other keyword now
+round-trips correctly, not just the six new ones. Everything else below (Buildings-as-objects, the
+Equipment rework, Board-as-resource) is still spec only. CARDS.md/
+BACKEND.md describe what's live today; check them (not just this doc)
+for current schema.
 
 Sections marked **Open default** are judgment calls made to keep the
 spec internally consistent and buildable; flag any of them if they
@@ -570,7 +605,7 @@ Suggested build order, each phase individually shippable/testable:
 | **B1 — Reach & position, wave 1** ✅ *(live)* | Reach, Ranged, Infiltrate keywords and the full targeting chain they unlock (§5). Deliberate Vanguard-vs-Support placement on play. Support creatures can attack if Ranged. Column-based Building protection (§11). Hero-targeting has no board-population gate — every attacker can always reach the Hero, gated only by a reachable Taunt creature (Infiltrate bypasses that too). Target-restricted Warcries/Spells with no legal target just fizzle instead of making the card unplayable. |
 | **B2 — Reach & position, wave 2** ✅ *(live)* | Protector, Flank, Formation, Advance, Push, Massive. Protector's redirect is heuristic-automatic rather than a live prompt (see the implementation-status note above); everything else matches this section as written. |
 | **C — Spell forms & Hero rework** ✅ *(live)* | Instant/Ritual/Charged split for Spells. Hero Passive/Power/Signature. Allegiance deckbuilding validation. See the implementation-status note above for the discard-vs-graveyard deviation and Allegiance's currently-inert status. |
-| **D — Keyword expansion** | Stealth, Ward, Cleave, Drain, Bloodied, Summon (+ the `summonCreature` effect kind), Warcry rename. |
+| **D — Keyword expansion** ✅ *(live)* | Stealth, Ward, Cleave, Drain, Bloodied, Summon (+ the `summonCreature` effect kind), Warcry rename. See the implementation-status note above for scoping details and the loadCustomCards.ts validator fix. |
 | **E — Buildings as objects** | Durability/attackability, activated abilities, On Construction triggers, enemy interaction (Siege/Sabotage). |
 | **F — Equipment rework** | 4-slot zone, categories, assign/reassign for Energy, survives-death/Unassigned flow. |
 | **G — Board-as-resource (§16)** | Swarm/Consume/Garrison/Mount/Transformation, plus Hero Rule-Breaks (§9) once there's enough of the rest in place to make rule-breaking meaningful. |
