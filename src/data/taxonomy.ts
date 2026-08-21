@@ -1,4 +1,4 @@
-import type { CardArchetype, CreatureType, Element, EquipmentCategory, Faction, Keyword, Race, Rarity, StatusType } from "../engine/types";
+import type { CardArchetype, CreatureType, Element, EquipmentCategory, Faction, HeroClass, Keyword, Race, Rarity, StatusType } from "../engine/types";
 
 export const ELEMENT_LABELS: Record<Element, string> = {
   frost: "Frost",
@@ -159,8 +159,16 @@ export const CREATURE_TYPE_LABELS: Record<CreatureType, string> = {
   dragon: "Dragon",
   support: "Support",
   creature: "Creature",
+  rogue: "Rogue",
 };
 export const CREATURE_TYPE_OPTIONS = Object.keys(CREATURE_TYPE_LABELS) as CreatureType[];
+
+export const HERO_CLASS_LABELS: Record<HeroClass, string> = {
+  fighter: "Fighter",
+  mage: "Mage",
+  rogue: "Rogue",
+};
+export const HERO_CLASS_OPTIONS = Object.keys(HERO_CLASS_LABELS) as HeroClass[];
 
 export const STATUS_LABELS: Record<StatusType, string> = {
   poison: "Poison",

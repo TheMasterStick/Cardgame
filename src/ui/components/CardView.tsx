@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { CARD_DEFINITIONS } from "../../data/cards";
-import { ELEMENT_LABELS, RACE_LABELS, STATUS_ICONS } from "../../data/taxonomy";
+import { ELEMENT_LABELS, HERO_CLASS_LABELS, RACE_LABELS, STATUS_ICONS } from "../../data/taxonomy";
 import type { CardDefinition, CardInstance, CreatureDefinition, HeroCardDefinition } from "../../engine/types";
 
 interface CardViewProps {
@@ -158,8 +158,8 @@ export function CardView({
 
   let detailedContent: ReactNode;
   if (isHero) {
-    const metaParts: string[] = [];
-    if (def.race) metaParts.push(RACE_LABELS[def.race]);
+    const metaParts: string[] = [HERO_CLASS_LABELS[(def as HeroCardDefinition).class]];
+    if (def.races?.length) metaParts.push(def.races.map((r) => RACE_LABELS[r]).join(" / "));
     if (def.element) metaParts.push(ELEMENT_LABELS[def.element]);
     const topRow = (
       <div className="card__top">

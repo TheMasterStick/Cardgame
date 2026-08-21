@@ -24,7 +24,7 @@ export function getAuraAttackBonus(state: GameState, owner: PlayerId, card: Card
   if (!passive || passive.kind !== "auraBuff") return 0;
   const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
   const filter = passive.filter;
-  const matches = filter === "all" || ("race" in filter ? def.race === filter.race : def.faction === filter.faction);
+  const matches = filter === "all" || ("race" in filter ? (def.races?.includes(filter.race) ?? false) : def.faction === filter.faction);
   return matches ? passive.attackDelta : 0;
 }
 

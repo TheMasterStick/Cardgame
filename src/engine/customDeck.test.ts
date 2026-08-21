@@ -11,6 +11,7 @@ function hero(overrides: Partial<HeroCardDefinition> = {}): HeroCardDefinition {
     archetype: "hero",
     cost: 0,
     rarity: "common",
+    class: "fighter",
     hp: 10,
     attack: 0,
     ...overrides,
@@ -71,8 +72,13 @@ describe("Allegiance (DESIGN.md §10)", () => {
 
   it("neutralRaces lets in an off-Faction creature of a listed Race", () => {
     const h = hero({ faction: "wildheart-tribes", allegiance: { neutralRaces: ["beast"] } });
-    expect(isCardAllowedForHero(h, creature({ faction: "necropolitan", race: "beast" }))).toBe(true);
-    expect(isCardAllowedForHero(h, creature({ faction: "necropolitan", race: "undead" }))).toBe(false);
+    expect(isCardAllowedForHero(h, creature({ faction: "necropolitan", races: ["beast"] }))).toBe(true);
+    expect(isCardAllowedForHero(h, creature({ faction: "necropolitan", races: ["undead"] }))).toBe(false);
+  });
+
+  it("neutralRaces matches if any of a dual-race creature's races is listed", () => {
+    const h = hero({ faction: "wildheart-tribes", allegiance: { neutralRaces: ["beast"] } });
+    expect(isCardAllowedForHero(h, creature({ faction: "necropolitan", races: ["undead", "beast"] }))).toBe(true);
   });
 
   it("deckAllegianceViolations reports only the cards that break Allegiance", () => {

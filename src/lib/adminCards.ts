@@ -13,7 +13,6 @@ const COMMON_FIELDS = new Set([
   "art",
   "element",
   "faction",
-  "race",
 ]);
 
 interface CardRow {
@@ -26,7 +25,6 @@ interface CardRow {
   art: string | null;
   element: string | null;
   faction: string | null;
-  race: string | null;
   data: Record<string, unknown> | null;
 }
 
@@ -45,7 +43,6 @@ function toRow(def: CardDefinition, createdBy?: string): Record<string, unknown>
     art: def.art ?? null,
     element: def.element ?? null,
     faction: def.faction ?? null,
-    race: def.race ?? null,
     data,
     ...(createdBy ? { created_by: createdBy } : {}),
   };
@@ -64,7 +61,6 @@ function fromRow(row: CardRow): CardDefinition | null {
   if (row.art) flat.art = row.art;
   if (row.element) flat.element = row.element;
   if (row.faction) flat.faction = row.faction;
-  if (row.race) flat.race = row.race;
   return validateCard(flat);
 }
 

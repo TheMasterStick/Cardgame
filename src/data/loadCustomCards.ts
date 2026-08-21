@@ -4,9 +4,12 @@ import type {
   CardDefinition,
   CardEffect,
   CreatureType,
+  Element,
   EquipmentCategory,
+  Faction,
   Keyword,
   PassiveEffect,
+  Race,
   Rarity,
   Trigger,
   TriggerName,
@@ -55,6 +58,53 @@ const VALID_KEYWORDS: Keyword[] = [
   "massive",
 ];
 const VALID_EQUIPMENT_CATEGORIES: EquipmentCategory[] = ["weapon", "armor", "accessory", "mount"];
+const VALID_ELEMENTS: Element[] = [
+  "frost",
+  "fire",
+  "nature",
+  "light",
+  "darkness",
+  "arcane",
+  "martial",
+  "blood",
+  "infernal",
+  "chaos",
+];
+const VALID_FACTIONS: Faction[] = [
+  "infernal-court",
+  "roseguard-kingdom",
+  "moonveil-coven",
+  "velvet-syndicate",
+  "wildheart-tribes",
+  "celestial-academy",
+  "necropolitan",
+  "arcane-industries",
+];
+const VALID_RACES: Race[] = [
+  "beast",
+  "demon",
+  "dragon",
+  "elemental",
+  "mech",
+  "human",
+  "undead",
+  "goblin",
+  "dwarf",
+  "elf",
+  "pixie",
+  "ogre",
+  "giant",
+  "dark-elf",
+  "angel",
+  "orc",
+  "gnome",
+  "troll",
+  "dryad",
+  "fairy",
+  "harpy",
+  "fiend",
+  "vampire",
+];
 const VALID_TRIGGER_NAMES: TriggerName[] = ["onPlay", "onAttack", "onDeath", "startOfTurn", "endOfTurn"];
 const EFFECT_KINDS_NEEDING_TARGET = new Set(["damage", "heal", "applyStatus", "buff", "consume", "transform", "garrison", "devour"]);
 
@@ -105,12 +155,19 @@ const VALID_CREATURE_TYPES: CreatureType[] = [
   "dragon",
   "support",
   "creature",
+  "rogue",
 ];
 
 function parseCreatureType(raw: unknown): CreatureType[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const types = raw.filter((t): t is CreatureType => typeof t === "string" && VALID_CREATURE_TYPES.includes(t as CreatureType));
   return types.length > 0 ? types : undefined;
+}
+
+function parseRaces(raw: unknown): Race[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const races = raw.filter((r): r is Race => typeof r === "string" && VALID_RACES.includes(r as Race));
+  return races.length > 0 ? races : undefined;
 }
 
 /** Only the auraBuff template is accepted for a custom Building's passive — see BuildingDefinition's doc comment in types.ts. */
@@ -153,7 +210,10 @@ export function validateCard(raw: unknown): CardDefinition | null {
 
   const text = typeof raw.text === "string" ? raw.text : undefined;
   const art = typeof raw.art === "string" ? raw.art : undefined;
-  const base = { id, name, cost, rarity: rarity as Rarity, text, art };
+  const element = typeof raw.element === "string" && VALID_ELEMENTS.includes(raw.element as Element) ? (raw.element as Element) : undefined;
+  const faction = typeof raw.faction === "string" && VALID_FACTIONS.includes(raw.faction as Faction) ? (raw.faction as Faction) : undefined;
+  const races = parseRaces(raw.races);
+  const base = { id, name, cost, rarity: rarity as Rarity, text, art, element, faction, races };
 
   switch (archetype) {
     case "creature": {

@@ -26,7 +26,7 @@ export function getBuildingAuraAttackBonus(state: GameState, owner: PlayerId, ca
     const passive = (CARD_DEFINITIONS[building.defId] as BuildingDefinition).passive;
     if (!passive) continue;
     const filter = passive.filter;
-    const matches = filter === "all" || ("race" in filter ? def.race === filter.race : def.faction === filter.faction);
+    const matches = filter === "all" || ("race" in filter ? (def.races?.includes(filter.race) ?? false) : def.faction === filter.faction);
     if (matches) bonus += passive.attackDelta;
   }
   return bonus;

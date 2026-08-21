@@ -103,7 +103,8 @@ export type Race =
  * Faction/Allegiance rules and predates this field). A creature can carry
  * more than one, printed as "Defender • Elemental" etc. — Formation checks
  * whether an adjacent creature shares any of these with the formation
- * holder.
+ * holder. `rogue` (Phase L) is for a creature whose battlefield identity is
+ * infiltration/assassination/evasion — see `assassin`/`shadow-infiltrator`.
  */
 export type CreatureType =
   | "fighter"
@@ -116,7 +117,17 @@ export type CreatureType =
   | "giant"
   | "dragon"
   | "support"
-  | "creature";
+  | "creature"
+  | "rogue";
+
+/**
+ * Broad Hero class fantasy (DESIGN.md §9) — Fighter/Mage/Rogue — separate
+ * from `CreatureType` (a creature's battlefield combat role) and not a
+ * strict deck lockout, just the player's main-character identity. Purely
+ * descriptive today: nothing in the engine keys off it yet, same as Race
+ * and Element until a card's own effect chooses to reference it.
+ */
+export type HeroClass = "fighter" | "mage" | "rogue";
 
 export type StatusType = "burn" | "poison" | "bleed" | "freeze";
 
@@ -342,8 +353,15 @@ interface CardDefinitionBase {
   element?: Element;
   /** Faction allegiance. Optional. */
   faction?: Faction;
-  /** Character race/type. Only meaningful for Creature and Hero cards. */
-  race?: Race;
+  /**
+   * Character race/type(s). Only meaningful for Creature and Hero cards.
+   * An array (Phase L) so a dual-nature card (Human + Angel, etc.) doesn't
+   * need bespoke text — most cards still carry just one entry. Mechanically
+   * inert on its own, same as before; `auraBuff`'s `{ race }` filter and a
+   * Hero's `allegiance.neutralRaces` grant both match against membership in
+   * this array now instead of a single equality check.
+   */
+  races?: Race[];
 }
 
 /**
@@ -376,6 +394,8 @@ export interface HeroCardDefinition extends CardDefinitionBase {
   archetype: "hero";
   attack: number;
   hp: number;
+  /** Broad class fantasy (DESIGN.md §9) — see HeroClass's own doc comment. */
+  class: HeroClass;
   passive?: PassiveEffect;
   /** Usable once per turn (not charge-based) — resets every startTurn. */
   heroPower?: HeroActivatedAbility;

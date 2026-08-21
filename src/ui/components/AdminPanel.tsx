@@ -4,6 +4,7 @@ import {
   ELEMENT_OPTIONS,
   EQUIPMENT_CATEGORY_OPTIONS,
   FACTION_OPTIONS,
+  HERO_CLASS_OPTIONS,
   KEYWORD_OPTIONS,
   RACE_OPTIONS,
   RARITY_OPTIONS,
@@ -11,6 +12,7 @@ import {
   ELEMENT_LABELS,
   EQUIPMENT_CATEGORY_LABELS,
   FACTION_LABELS,
+  HERO_CLASS_LABELS,
   RACE_LABELS,
   RARITY_LABELS,
   KEYWORD_LABELS,
@@ -27,6 +29,7 @@ import type {
   Element,
   EquipmentCategory,
   Faction,
+  HeroClass,
   Keyword,
   Race,
   Rarity,
@@ -80,7 +83,8 @@ interface CardDraft {
   art: string;
   element: Element | "";
   faction: Faction | "";
-  race: Race | "";
+  races: Race[];
+  heroClass: HeroClass;
   attack: number;
   hp: number;
   keywords: Keyword[];
@@ -121,7 +125,8 @@ function emptyDraft(): CardDraft {
     art: "",
     element: "",
     faction: "",
-    race: "",
+    races: [],
+    heroClass: "fighter",
     attack: 1,
     hp: 1,
     keywords: [],
@@ -195,11 +200,12 @@ function draftFromCard(def: CardDefinition): CardDraft {
   draft.art = def.art ?? "";
   draft.element = def.element ?? "";
   draft.faction = def.faction ?? "";
-  draft.race = def.race ?? "";
+  draft.races = def.races ?? [];
 
   if (def.archetype === "hero") {
     draft.attack = def.attack;
     draft.hp = def.hp;
+    draft.heroClass = def.class;
   } else if (def.archetype === "creature") {
     draft.attack = def.attack;
     draft.hp = def.hp;
@@ -309,11 +315,11 @@ function buildCardDefinition(draft: CardDraft): CardDefinition | { error: string
     art: draft.art || undefined,
     element: draft.element || undefined,
     faction: draft.faction || undefined,
-    race: draft.race || undefined,
+    races: draft.races.length > 0 ? draft.races : undefined,
   };
 
   if (draft.archetype === "hero") {
-    return { ...base, archetype: "hero", attack: draft.attack, hp: draft.hp };
+    return { ...base, archetype: "hero", attack: draft.attack, hp: draft.hp, class: draft.heroClass };
   }
   if (draft.archetype === "creature") {
     const effect = buildEffect(draft);
@@ -405,6 +411,13 @@ export function AdminPanel({ collection, userId, onSetCoins, onCardsChanged, onB
     setDraft((d) => ({
       ...d,
       keywords: d.keywords.includes(keyword) ? d.keywords.filter((k) => k !== keyword) : [...d.keywords, keyword],
+    }));
+  }
+
+  function toggleRace(race: Race) {
+    setDraft((d) => ({
+      ...d,
+      races: d.races.includes(race) ? d.races.filter((r) => r !== race) : [...d.races, race],
     }));
   }
 
@@ -591,18 +604,31 @@ export function AdminPanel({ collection, userId, onSetCoins, onCardsChanged, onB
                 ))}
               </select>
             </label>
-            {(draft.archetype === "hero" || draft.archetype === "creature") && (
+            {draft.archetype === "hero" && (
               <label>
-                Race
-                <select value={draft.race} onChange={(e) => setDraft((d) => ({ ...d, race: e.target.value as Race | "" }))}>
-                  <option value="">None</option>
-                  {RACE_OPTIONS.map((r) => (
-                    <option key={r} value={r}>
-                      {RACE_LABELS[r]}
+                Class
+                <select
+                  value={draft.heroClass}
+                  onChange={(e) => setDraft((d) => ({ ...d, heroClass: e.target.value as HeroClass }))}
+                >
+                  {HERO_CLASS_OPTIONS.map((c) => (
+                    <option key={c} value={c}>
+                      {HERO_CLASS_LABELS[c]}
                     </option>
                   ))}
                 </select>
               </label>
+            )}
+            {(draft.archetype === "hero" || draft.archetype === "creature") && (
+              <div className="admin-keywords">
+                <span>Race(s)</span>
+                {RACE_OPTIONS.map((r) => (
+                  <label key={r} className="admin-keyword-checkbox">
+                    <input type="checkbox" checked={draft.races.includes(r)} onChange={() => toggleRace(r)} />
+                    {RACE_LABELS[r]}
+                  </label>
+                ))}
+              </div>
             )}
 
             {(draft.archetype === "hero" || draft.archetype === "creature") && (

@@ -406,6 +406,56 @@ Fighter/Mage/Rogue Hero cards were explicitly left untouched — the
 spec itself says their stats aren't finalized yet and says not to
 invent them.
 
+**Phase L landed the first two taxonomy items from ROADMAP.md** (#5
+multi-race support, #6 explicit Hero Class + `rogue` CreatureType) — the
+two items the August documentation review flagged as "planned
+engine/schema change," now live. `race?: Race` became `races?: Race[]`
+on every card (`CardDefinitionBase`): a dual-nature creature (Human +
+Angel, etc.) no longer needs bespoke text, and the two consumers that
+matched against it — `auraBuff`'s `{ race }` Passive filter and a Hero's
+`allegiance.neutralRaces` grant — both now check *array membership*
+(`def.races?.includes(filter.race)`, `card.races?.some(r =>
+neutralRaces.includes(r))`) instead of a single equality check, so a
+dual-race creature matches either aura or either listed neutral Race.
+The 8 existing cards that had `race: "X"` were migrated to `races:
+["X"]`; nothing needed more than one entry yet. A new `HeroClass =
+"fighter" | "mage" | "rogue"` type backs a **required** `class` field on
+`HeroCardDefinition` — required rather than optional, since an optional
+field nobody's forced to fill in would defeat the point of finally
+making Class a real declared thing instead of prose-only; all 5 existing
+Heroes were assigned one (Fighter→fighter, Mage→mage, Rogue→rogue,
+Grand Marshal→fighter — a wide-battlefront martial commander, Archivist
+→mage — an arcane scholar). Purely descriptive today, same as Race/
+Element until a card's own effect keys off it — no mechanic reads it
+yet, matching the "Open default" the roadmap called for. `rogue` was
+added to `CreatureType`, and the two cards CARDS.md's own text named as
+"obvious future candidates" — `assassin` and `shadow-infiltrator` — had
+their `creatureType` retagged from `["fighter"]` to `["rogue"]`, since
+that's a strictly more accurate read of their actual identity
+(infiltration/assassination/evasion) than the generic Fighter tag was.
+Both fields flow through the Admin Panel now too: the old single-select
+Race dropdown became a multi-checkbox list (mirroring the existing
+Keywords checkboxes) driving `races: Race[]`, and a new Class dropdown
+appears for Hero drafts. On the Supabase side, `race` stops being its
+own dedicated column — like every other array-valued field (keywords,
+creatureType), `races` now lives in the `data` jsonb blob instead;
+migration `0004_multi_race.sql` folds any existing single `race` value
+into `data.races` as a one-element array before dropping the column and
+its check constraint. **Fixed a genuine pre-existing bug found while
+touching this path**: `loadCustomCards.ts`'s `validateCard` — the
+function `adminCards.ts`'s `fromRow` calls to turn a fetched Supabase
+row back into a `CardDefinition` — never actually included `element`,
+`faction`, or the old `race` in its returned object at all, only
+`id`/`name`/`cost`/`rarity`/`text`/`art`. That meant any Element/
+Faction/Race set through the Admin Panel was silently discarded the
+next time `fetchRemoteCards()` ran (e.g. on a page refresh) even though
+it was correctly saved to its Supabase column — the round-trip was
+broken, not just the write path. All three are now parsed and validated
+(against the same enum lists CARDS.md documents) in `validateCard`
+itself, so this fixes the bug for both the Supabase-Admin path and the
+`customCards.json` path (which had the identical gap — a hand-authored
+custom card's `element`/`faction`/`races` were quietly dropped too).
+
 CARDS.md/BACKEND.md describe what's live today; check them (not just
 this doc) for current schema.
 
@@ -686,7 +736,7 @@ These are deliberately different systems:
 - **CreatureType** — battlefield/combat role. Examples: Fighter, Defender, Ranger, Mage, Support, Beast/Creature. A Defender generally means high durability/defensive tools; a Fighter generally means more offensive pressure, lower durability and/or offensive keywords. A Spiked Turtle can therefore be Race/Creature `beast` while its combat role is **Defender**.
 - **Race** — what the being is: Human, Dwarf, Elf, Orc, Beast, Angel, etc. Race is not the creature's combat job.
 
-**Planned taxonomy cleanup:** add `rogue` as a CreatureType for cards such as Assassin/Shadow Infiltrator when their battlefield role warrants it, and add an explicit Hero `class` field rather than leaving Fighter/Mage/Rogue only as prose/starter-Hero identity.
+**Live as of Phase L:** `rogue` is a real CreatureType, retagged onto `assassin`/`shadow-infiltrator`; `class: HeroClass` is a required field on every Hero rather than prose/starter-Hero identity only.
 
 ## 8. Elements, Factions, Races, and world identities
 
@@ -698,7 +748,7 @@ Exact live enum lists are maintained in `CARDS.md`/`src/data/taxonomy.ts`.
 - **CreatureType** — combat-role tag(s), used by mechanics such as Formation.
 - **World culture / state / house / organization** — lore identity, documented separately in `WORLD.md`; not automatically an engine Faction.
 
-**Planned race-schema improvement:** the live schema currently stores one `race` value. Before multi-racial/dual-nature cards become common, migrate toward `races: Race[]` (or an equivalent primary-race + secondary-tags model). This avoids bespoke text for recurring combinations such as Human + Angel. Until the engine/database migration happens, the singular live field remains authoritative.
+**Live as of Phase L:** the schema stores `races: Race[]`, not a single value — a dual-nature card (Human + Angel, etc.) doesn't need bespoke text. Most cards still carry just one entry.
 
 ## 9. Hero cards
 
@@ -707,7 +757,7 @@ A Hero card carries:
 | Field | Notes |
 |---|---|
 | Faction | Drives Allegiance (§10). A Faction-less Hero has no Allegiance restriction at all. |
-| Class | Fighter / Mage / Rogue — broad **class fantasy** for the player's chosen main character, not a strict deck lockout and not the same taxonomy as a CreatureType. Fighter leans toward direct pressure/combat, Mage toward Spell/supernatural synergy, Rogue toward precision/indirect play; any class may still use the wider card pool allowed by Allegiance. **Planned:** represent this with an explicit Hero `class` field in the schema. |
+| Class | `class: "fighter" \| "mage" \| "rogue"` (required, Phase L) — broad **class fantasy** for the player's chosen main character, not a strict deck lockout and not the same taxonomy as a CreatureType. Fighter leans toward direct pressure/combat, Mage toward Spell/supernatural synergy, Rogue toward precision/indirect play; any class may still use the wider card pool allowed by Allegiance. Purely descriptive today — no mechanic keys off it yet, same as Race/Element. |
 | Health, Attack | Attack only matters once Equipment is assigned (unchanged from v1) — but a Hero's own base Attack should now be **low or 0**, since a Weapon's `attackBonus` is meant to be the primary source of a Hero's Attack, not a bonus layered on top of an already-large base. **Open default / known exception:** the three original starter Heroes (Fighter 10, Mage 20, Rogue 15 base Attack) predate this convention and haven't been retconned — they still hit hard the moment *any* Equipment is assigned, weapon or not. Revisit those three numbers whenever they're touched again; every faction Hero authored from here on should follow the low/0-base convention. |
 | Passive | An always-on effect. **Open default:** built from a small curated set of templates (aura buff to a matching Faction/Race/Class, a first-spell-cheaper-per-turn discount, an on-reveal-enemy-card effect, etc.) rather than a free-form scripting language — matches how `CardEffect` is already a fixed set of `kind`s, not arbitrary code. The template set grows as new Heroes need new patterns. |
 | Hero Power | An activated effect using the same `CardEffect` shape as a Spell/Ability, Energy-costed, usable **once per turn** (not charge-based). |
@@ -927,6 +977,7 @@ Suggested build order, each phase individually shippable/testable:
 | **I — Garrison (§16)** ✅ *(live)* | A `garrison` CardEffect (single-target, resolved the same way as Consume/Transform) moves a friendly creature into `CardInstance.garrisonedCreature` on a Building, off the battlefield and untargetable, ejected back out (or destroyed) when that Building dies. `garrison-post` demonstrates it in the Fighter starter deck. With this, every §16 Board-as-resource pattern that's actually part of the game is live — Mount was decided against, not deferred; see the implementation-status note above. |
 | **J — Allegiance made live (§10)** ✅ *(live)* | Not a pre-planned phase — Allegiance (§10) was built and unit-tested back in Phase C but never actually restricted a real deck, since no starter Hero carried a Faction. `archivist` (`faction: "arcane-industries"`) ships with a real 30-card starter deck, so the restriction now genuinely bites. See the implementation-status note above. |
 | **K — Neutral Core Set adoption + card-art-is-the-card UI** ✅ *(live)* | Adopted an external 59-card spec as ground truth for the Neutral Core Set; every existing Phase A-J mechanic was explicitly kept, not reconciled against the new spec. Vanish replaces Stealth; new keywords Enrage, Frenzy (reassigned to a new card), Resistant, Deadeye, Double Strike, Duel, Crowd Pleaser, Bleed, Burn(-on-hit), Frost Armor, Massive; new `creatureType` field drives type-conditional Formation; new `gainIncome`/`drawCreature`/`devour`/`multi` CardEffect kinds; new `targetRow`/`targetCreatureOrPlayer` targeting; Building ability charges; Equipment keywords/charges; Ability gained the Instant/Activated split Spells already had. The card frame/text overlay was removed for every non-Hero archetype — the art itself now carries that information. Two genuine pre-existing bugs surfaced and fixed along the way: the onAttack trigger was built but never wired into combat, and `applyStatus` never supported AOE targets. See the implementation-status note above for the full list, the Open defaults, and the known gaps (no Duel UI button yet, Bulletin Board's scrying simplified, decks not reworked to include the 11 new cards). |
+| **L — Taxonomy migrations (ROADMAP.md #5/#6)** ✅ *(live)* | `race?: Race` became `races?: Race[]` everywhere (types.ts, the 8 cards that had one, the `auraBuff`/`neutralRaces` array-membership matching, CardView's Hero meta line, the Admin Panel's checkbox multi-select, the Supabase schema — `race` moved from a dedicated column into `data` jsonb like every other array field, migration `0004_multi_race.sql`). New required `class: HeroClass` field on every Hero (`"fighter" \| "mage" \| "rogue"`), purely descriptive today; new `rogue` CreatureType, retagged onto `assassin`/`shadow-infiltrator` in place of the generic `fighter` tag. Fixed a genuine pre-existing bug along the way: `validateCard` never actually included `element`/`faction`/`race` in its returned object, so an Admin-Panel-set Element/Faction/Race silently vanished on the next `fetchRemoteCards()` — fixed for both the Supabase and `customCards.json` paths. See the implementation-status note above for the full writeup. |
 
 Each phase gets the same verification pass as prior work: `tsc
 --noEmit`, `eslint`, `vitest`, `vite build`, plus a Playwright smoke
@@ -947,5 +998,5 @@ otherwise unaffected by this rework and stay as documented in
 
 1. **Temporary modifiers/durations** — a generic way to express “this turn”, “until your next turn”, or N-turn buffs/debuffs. This is the highest-leverage missing primitive for converting `FACTIONS.md`.
 2. **Deck inspection / choose / reorder** — enough interaction for top-N look, choose one, reorder/bottom the rest. This would replace Bulletin Board's current approximation and unlock many faction drafts.
-3. **Taxonomy migration** — explicit Hero `class`; `rogue` CreatureType; multi-race representation.
+3. ~~Taxonomy migration — explicit Hero `class`; `rogue` CreatureType; multi-race representation.~~ **Done (Phase L).**
 4. **Selective faction mechanics** — Mark/Grudge/Trap/Counter-style systems only when an authored mini-set actually needs them. Prefer bespoke logic for truly one-off cards over a bloated universal scripting layer.

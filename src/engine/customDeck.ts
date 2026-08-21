@@ -46,7 +46,7 @@ export function isCardAllowedForHero(heroDef: HeroCardDefinition, card: CardDefi
   if (heroDef.allegiance?.unrestricted) return true;
   if (card.faction === heroDef.faction) return true;
   if (heroDef.allegiance?.extraFactions?.includes(card.faction)) return true;
-  if (card.race && heroDef.allegiance?.neutralRaces?.includes(card.race)) return true;
+  if (card.races?.some((r) => heroDef.allegiance?.neutralRaces?.includes(r))) return true;
   return false;
 }
 

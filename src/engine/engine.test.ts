@@ -1315,6 +1315,32 @@ describe("Buildings as objects (Phase E, DESIGN.md §11)", () => {
     expect(after).toBe(before);
   });
 
+  it("buffs a dual-race creature whose races array includes the filter's race (Phase L multi-race support)", () => {
+    const testDefId = "test-dual-race-creature";
+    CARD_DEFINITIONS[testDefId] = {
+      id: testDefId,
+      name: "Test Dual-Race Creature",
+      archetype: "creature",
+      cost: 1,
+      rarity: "common",
+      attack: 1,
+      hp: 1,
+      races: ["dragon", "beast"],
+      keywords: [],
+      triggers: [],
+    };
+    const state = makeState();
+    const hybrid = createCardInstance(testDefId, "player");
+    state.players.player.board.vanguard[0] = hybrid;
+    const before = getEffectiveCreatureAttack(state, "player", hybrid);
+
+    const den = createCardInstance("beast-den", "player"); // Passive: Beast creatures +2 Attack
+    state.players.player.board.buildings[0] = den;
+    const after = getEffectiveCreatureAttack(state, "player", hybrid);
+
+    expect(after).toBe(before + 2);
+  });
+
   it("activateBuildingAbility spends the ability's configured pool (Mana for Demon Gate) and resolves its effect", () => {
     const state = makeState();
     const gate = createCardInstance("demon-gate", "player"); // Activate (3 Mana): summon a Flame Imp
@@ -1668,6 +1694,7 @@ describe("Hero Rule-Breaks (DESIGN.md §9)", () => {
       archetype: "hero",
       cost: 0,
       rarity: "legendary",
+      class: "fighter",
       attack: 0,
       hp: 20,
       ruleBreaks: {

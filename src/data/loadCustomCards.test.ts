@@ -210,7 +210,45 @@ describe("custom card validation", () => {
     }
   });
 
-  it("accepts a creatureType tag list", () => {
+  it("accepts element, faction, and a races list — a pre-existing gap where validateCard silently dropped all three (Phase L)", () => {
+    const card = validateCard({
+      id: "dual-race-test",
+      name: "Dual Race Test",
+      archetype: "creature",
+      cost: 3,
+      rarity: "rare",
+      attack: 2,
+      hp: 2,
+      element: "frost",
+      faction: "necropolitan",
+      races: ["undead", "dragon"],
+    });
+    expect(card).not.toBeNull();
+    expect(card?.element).toBe("frost");
+    expect(card?.faction).toBe("necropolitan");
+    expect(card?.races).toEqual(["undead", "dragon"]);
+  });
+
+  it("rejects an invalid element/faction/race rather than passing it through", () => {
+    const card = validateCard({
+      id: "y",
+      name: "Y",
+      archetype: "creature",
+      cost: 1,
+      rarity: "common",
+      attack: 1,
+      hp: 1,
+      element: "not-a-real-element",
+      faction: "not-a-real-faction",
+      races: ["not-a-real-race"],
+    });
+    expect(card).not.toBeNull();
+    expect(card?.element).toBeUndefined();
+    expect(card?.faction).toBeUndefined();
+    expect(card?.races).toBeUndefined();
+  });
+
+  it("accepts a creatureType tag list, including the rogue role (Phase L)", () => {
     const card = validateCard({
       id: "x",
       name: "X",
@@ -219,11 +257,11 @@ describe("custom card validation", () => {
       rarity: "rare",
       attack: 4,
       hp: 7,
-      creatureType: ["defender", "elemental"],
+      creatureType: ["defender", "elemental", "rogue"],
     });
     expect(card).not.toBeNull();
     if (card?.archetype === "creature") {
-      expect(card.creatureType).toEqual(["defender", "elemental"]);
+      expect(card.creatureType).toEqual(["defender", "elemental", "rogue"]);
     }
   });
 
