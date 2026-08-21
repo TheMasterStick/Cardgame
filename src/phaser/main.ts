@@ -7,8 +7,8 @@ if (!root) throw new Error("Missing #phaser-test-root");
 new Phaser.Game({
   type: Phaser.AUTO,
   parent: root,
-  width: 1280,
-  height: 720,
+  width: 1920,
+  height: 1080,
   backgroundColor: "#171717",
   scale: {
     mode: Phaser.Scale.FIT,
