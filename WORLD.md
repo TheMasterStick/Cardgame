@@ -85,6 +85,12 @@ Human cavalry tradition/order associated with unicorn mounts and flank warfare. 
 
 **Card anchor:** Flankguard Outrider.
 
+### Arcane Industries Consortium — working organization, tied to Gnomish engineering
+
+**Established:** the mechanical Faction (`arcane-industries`) with a real card roster — Archivist (Hero), Arcane Golem, Arcane Turret, Arcane Sanctum, and Arcane Missiles.
+
+**Working:** the Consortium's in-world identity leans Gnomish — arcane engineering/tinkering rather than pure scholarly wizardry, distinguishing it from a more traditional Mage Order. This fits the setting's existing Gnome-as-engineer association (see §7's "Band of Merry Folk," which already pairs a Dwarf engineer with Gnomes). Exact structure (guild, company, academy) and how it relates politically to other powers remain open.
+
 ## 7. Mixed adventuring bands
 
 Mixed-race groups are unusual enough to be story-worthy. A planned Neutral Ability, **Band of Merry Folk**, intentionally plays with the classic fellowship/adventuring-party fantasy: two Human warriors, a Human mage, a Dwarf engineer, an Elf ranger and three Gnomes. Its art/mechanic is on the back burner until more non-Human cards exist.
@@ -100,7 +106,15 @@ The race pool itself is already selected, with a deliberate bias toward recogniz
 - then differentiate cultures inside each race rather than treating a whole species as one state;
 - keep racial mingling meaningful and contextual, not universal background noise.
 
-## 9. Canon-status convention
+## 9. Magic traditions
+
+### Hemomancy — working tradition, blood magic
+
+**Working:** a named blood-magic tradition, distinct from a Race — a Vampire practices it by nature, but a mortal spellcaster could learn it too. Intended as the home for future blood-themed Spell/Ability cards (sacrifice-for-power effects, life-drain, blood-price costs), mechanically anchored by the existing `blood` Element tag (`src/data/loadCustomCards.ts`/`CARDS.md`'s Elements list) rather than a new field.
+
+**Open:** Blood Leech (Race: `vampire`, keyword: `drain`) is the closest existing card in flavor but isn't itself tagged `element: "blood"` yet, and stays filed under Vampire rather than getting reclassified — Hemomancy is the umbrella for *future* spells, not a retroactive recategorization of an existing creature. Whether Hemomancy belongs to a specific culture/order, or is a loose cross-cultural practice like alchemy, remains open.
+
+## 10. Canon-status convention
 
 Use these labels when expanding this file:
 
