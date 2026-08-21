@@ -5,8 +5,6 @@ const HERO_X = 365;
 const ENEMY_HERO_Y = 245;
 const PLAYER_HERO_Y = 795;
 const SIGNATURE_X = 465;
-const GRAVEYARD_X = 1770;
-const PLAYER_GRAVEYARD_COUNT_Y = 955;
 
 type TooltipSpec = {
   title: string;
@@ -21,7 +19,6 @@ export class BattleSceneHudTest extends BattleScene {
 
     this.createHeroAbilityHud("enemy");
     this.createHeroAbilityHud("player");
-    this.keepBurnedCardsOutOfGraveyardDisplay();
   }
 
   private createHeroAbilityHud(owner: "enemy" | "player") {
@@ -121,23 +118,5 @@ export class BattleSceneHudTest extends BattleScene {
   private hideTooltip() {
     this.tooltip?.destroy(true);
     this.tooltip = null;
-  }
-
-  private keepBurnedCardsOutOfGraveyardDisplay() {
-    // In this sandbox overdrawn cards are removed from the deck and never stored
-    // in a graveyard collection. Cover the legacy test counter that previously
-    // displayed the burn count as if it were a graveyard count.
-    this.add
-      .rectangle(GRAVEYARD_X, PLAYER_GRAVEYARD_COUNT_Y, 74, 24, 0x191919, 1)
-      .setDepth(352);
-
-    this.add
-      .text(GRAVEYARD_X, PLAYER_GRAVEYARD_COUNT_Y, "0 cards", {
-        fontFamily: "Arial, sans-serif",
-        fontSize: "11px",
-        color: "#8f8f8f",
-      })
-      .setOrigin(0.5)
-      .setDepth(353);
   }
 }
