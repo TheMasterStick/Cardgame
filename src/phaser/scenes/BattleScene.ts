@@ -337,8 +337,10 @@ export class BattleScene extends Phaser.Scene {
         .setAngle(45);
     }
 
+    const countY = owner === "enemy" ? startY - 28 : endY + 28;
+
     this.add
-      .text(x, endY + 28, "MANA  5 / 10", {
+      .text(x, countY, "5 / 10", {
         fontFamily: "Arial, sans-serif",
         fontSize: "13px",
         color: owner === "enemy" ? "#9fb9d0" : "#a9c9e2",
