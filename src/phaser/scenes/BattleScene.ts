@@ -1,20 +1,21 @@
 import Phaser from "phaser";
 
 const FIELD_CENTER_X = 960;
-const SLOT_WIDTH = 92;
-const SLOT_HEIGHT = 132;
-const COLUMN_GAP = 38;
+const SLOT_WIDTH = 82;
+const SLOT_HEIGHT = 116;
+const HERO_WIDTH = 92;
+const HERO_HEIGHT = 132;
+const COLUMN_GAP = 34;
 const FIELD_COLUMNS = 5;
+const CENTER_COLUMN = 2;
 
 const ROWS = {
-  enemyHero: 60,
-  enemyBuildings: 175,
-  enemyBackline: 325,
-  enemyVanguard: 475,
-  playerVanguard: 605,
-  playerBackline: 755,
-  playerBuildings: 905,
-  playerHero: 1020,
+  enemyBuildings: 205,
+  enemyBackline: 335,
+  enemyVanguard: 465,
+  playerVanguard: 615,
+  playerBackline: 745,
+  playerBuildings: 875,
 };
 
 type SlotKind = "vanguard" | "backline" | "building" | "hero" | "equipment" | "spell";
@@ -47,21 +48,22 @@ export class BattleScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    this.add
-      .text(width / 2, height / 2, "1        2        3        4        5", {
-        fontFamily: "Arial, sans-serif",
-        fontSize: "17px",
-        color: "#8f8f8f",
-        letterSpacing: 2,
-      })
-      .setOrigin(0.5);
+    for (let i = 0; i < FIELD_COLUMNS; i += 1) {
+      this.add
+        .text(this.columnX(i), height / 2, String(i + 1), {
+          fontFamily: "Arial, sans-serif",
+          fontSize: "17px",
+          color: "#8f8f8f",
+        })
+        .setOrigin(0.5);
+    }
 
     const divider = this.add.graphics();
     divider.lineStyle(2, 0x777777, 0.5);
     divider.lineBetween(430, height / 2, 1490, height / 2);
 
     this.add
-      .text(510, height / 2 - 14, "OPPONENT", {
+      .text(560, height / 2 - 14, "OPPONENT", {
         fontFamily: "Arial, sans-serif",
         fontSize: "14px",
         color: "#ad7e7e",
@@ -69,7 +71,7 @@ export class BattleScene extends Phaser.Scene {
       .setOrigin(0.5, 1);
 
     this.add
-      .text(510, height / 2 + 14, "YOU", {
+      .text(560, height / 2 + 14, "YOU", {
         fontFamily: "Arial, sans-serif",
         fontSize: "14px",
         color: "#7fa987",
@@ -80,6 +82,14 @@ export class BattleScene extends Phaser.Scene {
     this.createHeroSlots();
     this.createSideRacks();
     this.createDraggableScaleCard();
+
+    this.add
+      .text(FIELD_CENTER_X, 1045, "PLAYER HAND FAN AREA", {
+        fontFamily: "Arial, sans-serif",
+        fontSize: "14px",
+        color: "#777777",
+      })
+      .setOrigin(0.5);
   }
 
   private columnX(index: number) {
@@ -90,17 +100,17 @@ export class BattleScene extends Phaser.Scene {
 
   private createFieldRows() {
     const rows: Array<{ y: number; label: string; kind: SlotKind; owner: "enemy" | "player" }> = [
-      { y: ROWS.enemyBuildings, label: "BUILDINGS", kind: "building", owner: "enemy" },
+      { y: ROWS.enemyBuildings, label: "BUILDINGS / HERO", kind: "building", owner: "enemy" },
       { y: ROWS.enemyBackline, label: "BACKLINE", kind: "backline", owner: "enemy" },
       { y: ROWS.enemyVanguard, label: "VANGUARD", kind: "vanguard", owner: "enemy" },
       { y: ROWS.playerVanguard, label: "VANGUARD", kind: "vanguard", owner: "player" },
       { y: ROWS.playerBackline, label: "BACKLINE", kind: "backline", owner: "player" },
-      { y: ROWS.playerBuildings, label: "BUILDINGS", kind: "building", owner: "player" },
+      { y: ROWS.playerBuildings, label: "BUILDINGS / HERO", kind: "building", owner: "player" },
     ];
 
     for (const row of rows) {
       this.add
-        .text(560, row.y, row.label, {
+        .text(600, row.y, row.label, {
           fontFamily: "Arial, sans-serif",
           fontSize: "15px",
           color: row.owner === "enemy" ? "#a58b8b" : "#8fa593",
@@ -108,21 +118,36 @@ export class BattleScene extends Phaser.Scene {
         .setOrigin(1, 0.5);
 
       for (let i = 0; i < FIELD_COLUMNS; i += 1) {
+        if (row.kind === "building" && i === CENTER_COLUMN) continue;
         this.createSlot(this.columnX(i), row.y, row.kind, String(i + 1));
       }
     }
   }
 
   private createHeroSlots() {
-    this.createSlot(FIELD_CENTER_X, ROWS.enemyHero, "hero", "ENEMY HERO", 126, 78);
-    this.createSlot(FIELD_CENTER_X, ROWS.playerHero, "hero", "YOUR HERO", 126, 78);
+    this.createSlot(
+      this.columnX(CENTER_COLUMN),
+      ROWS.enemyBuildings,
+      "hero",
+      "ENEMY\nHERO",
+      HERO_WIDTH,
+      HERO_HEIGHT,
+    );
+    this.createSlot(
+      this.columnX(CENTER_COLUMN),
+      ROWS.playerBuildings,
+      "hero",
+      "YOUR\nHERO",
+      HERO_WIDTH,
+      HERO_HEIGHT,
+    );
   }
 
   private createSideRacks() {
-    this.createRack(260, 195, "EQUIPMENT", "equipment", "enemy");
-    this.createRack(1660, 195, "SPELL / ABILITY", "spell", "enemy");
-    this.createRack(260, 785, "EQUIPMENT", "equipment", "player");
-    this.createRack(1660, 785, "SPELL / ABILITY", "spell", "player");
+    this.createRack(260, 215, "EQUIPMENT", "equipment", "enemy");
+    this.createRack(1660, 215, "SPELL / ABILITY", "spell", "enemy");
+    this.createRack(260, 765, "EQUIPMENT", "equipment", "player");
+    this.createRack(1660, 765, "SPELL / ABILITY", "spell", "player");
   }
 
   private createRack(
@@ -133,17 +158,17 @@ export class BattleScene extends Phaser.Scene {
     owner: "enemy" | "player",
   ) {
     this.add
-      .text(x, owner === "enemy" ? centerY - 230 : centerY + 230, title, {
+      .text(x, owner === "enemy" ? centerY - 220 : centerY + 220, title, {
         fontFamily: "Arial, sans-serif",
         fontSize: "16px",
         color: owner === "enemy" ? "#a58b8b" : "#8fa593",
       })
       .setOrigin(0.5);
 
-    const spacing = 108;
+    const spacing = 102;
     const startY = centerY - (spacing * 3) / 2;
     for (let i = 0; i < 4; i += 1) {
-      this.createSlot(x, startY + i * spacing, kind, String(i + 1), 68, 92);
+      this.createSlot(x, startY + i * spacing, kind, String(i + 1), 64, 86);
     }
   }
 
@@ -162,7 +187,7 @@ export class BattleScene extends Phaser.Scene {
       .text(x, y, label, {
         align: "center",
         fontFamily: "Arial, sans-serif",
-        fontSize: kind === "hero" ? "15px" : "13px",
+        fontSize: kind === "hero" ? "14px" : "12px",
         color: "#aaa69f",
       })
       .setOrigin(0.5);
@@ -175,7 +200,7 @@ export class BattleScene extends Phaser.Scene {
     const startY = 540;
 
     this.add
-      .text(startX, 423, "DRAGGABLE CARD\n(scale reference)", {
+      .text(startX, 423, "DRAGGABLE HERO-SCALE CARD", {
         align: "center",
         fontFamily: "Arial, sans-serif",
         fontSize: "14px",
@@ -184,7 +209,7 @@ export class BattleScene extends Phaser.Scene {
       .setOrigin(0.5);
 
     const card = this.add
-      .rectangle(startX, startY, SLOT_WIDTH, SLOT_HEIGHT, 0x2b2b2b)
+      .rectangle(startX, startY, HERO_WIDTH, HERO_HEIGHT, 0x2b2b2b)
       .setStrokeStyle(4, 0xc8a66a)
       .setInteractive({ draggable: true, useHandCursor: true });
 
