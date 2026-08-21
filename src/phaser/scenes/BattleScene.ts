@@ -1,11 +1,11 @@
 import Phaser from "phaser";
 
 const FIELD_CENTER_X = 960;
-const SLOT_WIDTH = 82;
-const SLOT_HEIGHT = 116;
+const SLOT_WIDTH = 88;
+const SLOT_HEIGHT = 124;
 const HERO_WIDTH = 92;
 const HERO_HEIGHT = 132;
-const COLUMN_GAP = 34;
+const COLUMN_GAP = 36;
 const FIELD_COLUMNS = 5;
 const CENTER_COLUMN = 2;
 
@@ -129,7 +129,7 @@ export class BattleScene extends Phaser.Scene {
       this.columnX(CENTER_COLUMN),
       ROWS.enemyBuildings,
       "hero",
-      "ENEMY\nHERO",
+      "ENEMY\nHERO\nLANE 3",
       HERO_WIDTH,
       HERO_HEIGHT,
     );
@@ -137,7 +137,7 @@ export class BattleScene extends Phaser.Scene {
       this.columnX(CENTER_COLUMN),
       ROWS.playerBuildings,
       "hero",
-      "YOUR\nHERO",
+      "YOUR\nHERO\nLANE 3",
       HERO_WIDTH,
       HERO_HEIGHT,
     );
@@ -168,7 +168,7 @@ export class BattleScene extends Phaser.Scene {
     const spacing = 102;
     const startY = centerY - (spacing * 3) / 2;
     for (let i = 0; i < 4; i += 1) {
-      this.createSlot(x, startY + i * spacing, kind, String(i + 1), 64, 86);
+      this.createSlot(x, startY + i * spacing, kind, String(i + 1), 68, 92);
     }
   }
 
@@ -187,7 +187,7 @@ export class BattleScene extends Phaser.Scene {
       .text(x, y, label, {
         align: "center",
         fontFamily: "Arial, sans-serif",
-        fontSize: kind === "hero" ? "14px" : "12px",
+        fontSize: kind === "hero" ? "13px" : "12px",
         color: "#aaa69f",
       })
       .setOrigin(0.5);
