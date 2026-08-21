@@ -15,7 +15,9 @@ export function shuffle<T>(items: T[]): T[] {
  * If the deck is empty, the discard pile (not the graveyard) is shuffled
  * back into the deck first, per DESIGN.md §8 — there is no fatigue damage.
  * If the deck and discard pile are both empty, drawing is a no-op.
- * A draw that would exceed the hand size limit burns the card to discard.
+ * A draw that would exceed the hand size limit burns the card permanently:
+ * it leaves the match and is not added to discard/graveyard, so it can never
+ * be reshuffled or resurrected later in the same match.
  */
 export function drawCard(state: GameState, playerId: PlayerId): CardInstance | null {
   const player = state.players[playerId];
@@ -31,8 +33,7 @@ export function drawCard(state: GameState, playerId: PlayerId): CardInstance | n
   if (!card) return null;
 
   if (player.hand.length >= MAX_HAND_SIZE) {
-    player.discard.push(card);
-    state.log.push(`${playerId} drew ${card.defId} but hand was full — it was burned.`);
+    state.log.push(`${playerId} drew ${card.defId} but hand was full — it was burned and destroyed for this match.`);
     return null;
   }
 
