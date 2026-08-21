@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { BattleSceneHudTest } from "./scenes/BattleSceneHudTest";
+import { EngineBattleScene } from "./scenes/EngineBattleScene";
 
 const root = document.getElementById("phaser-test-root");
 if (!root) throw new Error("Missing #phaser-test-root");
@@ -14,5 +14,5 @@ new Phaser.Game({
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
   },
-  scene: [BattleSceneHudTest],
+  scene: [EngineBattleScene],
 });
