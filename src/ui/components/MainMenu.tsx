@@ -29,6 +29,10 @@ export function MainMenu({ coins, onQuickPlay, onCollection, onPacks, onDeckBuil
           <div className="menu-option__title">My Collection</div>
           <div className="menu-option__desc">Browse every card you own.</div>
         </button>
+        <a className="menu-option" href="/phaser.html">
+          <div className="menu-option__title">Phaser Test</div>
+          <div className="menu-option__desc">Open the isolated Phaser battlefield prototype.</div>
+        </a>
         {onAdmin && (
           <button className="menu-option menu-option--admin" onClick={onAdmin}>
             <div className="menu-option__title">Admin Panel</div>
