@@ -1,7 +1,7 @@
 import { CARD_DEFINITIONS } from "../data/cards";
 import { findOpenContiguousSlots, findOpenSlot } from "./board";
 import { drawCard, drawStartingHand } from "./deck";
-import { killCardIfDead, resolveEffect, type EffectTargetRef } from "./effects";
+import { damagePlayer, killCardIfDead, resolveEffect, type EffectTargetRef } from "./effects";
 import { applySpellDiscount, peekSpellDiscount } from "./hero";
 import { tickStatuses, tickTemporaryModifiers } from "./status";
 import {
@@ -49,12 +49,11 @@ function processEndOfTurnStatuses(state: GameState, owner: PlayerId): void {
   }
   const heroDmg = tickStatuses(player.hero);
   if (heroDmg > 0) {
-    player.hero.currentHp -= heroDmg;
-    state.log.push(`${owner}'s Hero took ${heroDmg} status damage.`);
-    if (player.hero.currentHp <= 0 && !state.winner) {
-      state.winner = otherPlayer(owner);
-      state.log.push(`${state.winner} wins! ${owner}'s Hero fell to status damage.`);
-    }
+    // Poison/Bleed/Burn on a Hero are still ordinary hostile damage unless
+    // a card explicitly says it bypasses Guard. Route status ticks through
+    // the same Guard -> Hero HP pipeline as attacks and direct-damage Spells.
+    damagePlayer(state, owner, heroDmg);
+    state.log.push(`${owner}'s Hero took ${heroDmg} status damage through Guard.`);
   }
 }
 
@@ -84,7 +83,12 @@ export function startTurn(state: GameState): void {
   const player = state.players[state.activePlayer];
 
   for (const card of [...player.board.vanguard, ...player.board.support]) {
-    if (card) card.hasAttackedThisTurn = false;
+    if (card) {
+      card.hasAttackedThisTurn = false;
+      // Double Strike is "up to two attacks each turn", not two attacks once
+      // per match. Reset its per-turn counter alongside ordinary exhaustion.
+      card.attacksUsedThisTurn = 0;
+    }
   }
   player.hero.hasAttackedThisTurn = false;
   // Hero Power is once-per-turn (DESIGN.md §9) and the firstSpellDiscount
