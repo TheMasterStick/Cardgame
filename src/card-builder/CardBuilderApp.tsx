@@ -61,22 +61,33 @@ type BaseSpec = {
   url: string;
 };
 
-const DEFAULT_LAYOUT: LayoutOffsets = {
-  nameX: 0,
-  nameY: 0,
-  costX: 0,
-  costY: 0,
-  resourceX: 0,
-  resourceY: 0,
+const PROJECT_DEFAULT_LAYOUT: LayoutOffsets = {
+  nameX: 7,
+  nameY: 18,
+  costX: -27,
+  costY: -8,
+  resourceX: -17,
+  resourceY: -7,
   categoriesX: 0,
-  categoriesY: 0,
+  categoriesY: 58,
   rulesX: 0,
-  rulesY: 0,
-  attackX: 0,
-  attackY: 0,
-  healthX: 0,
-  healthY: 0,
+  rulesY: 18,
+  attackX: 4,
+  attackY: 22,
+  healthX: -6,
+  healthY: 22,
 };
+
+const PROJECT_DEFAULT_PRESENTATION = {
+  titleFont: "Trajan Pro, Cinzel, Georgia, serif",
+  bodyFont: "Cinzel, Georgia, serif",
+  nameSize: 21,
+  costSize: 31,
+  resourceSize: 28,
+  categorySize: 13,
+  rulesSize: 12,
+  statSize: 29,
+} as const;
 
 const FONT_PRESETS = [
   "Georgia, serif",
@@ -148,6 +159,13 @@ function defaultCategories(def: CardDefinition): string[] {
   return categories;
 }
 
+function presentationDefaults() {
+  return {
+    ...PROJECT_DEFAULT_PRESENTATION,
+    layout: { ...PROJECT_DEFAULT_LAYOUT },
+  };
+}
+
 function draftFromDefinition(def: CardDefinition): BuilderDraft {
   let attack = 0;
   let hp = 0;
@@ -175,15 +193,7 @@ function draftFromDefinition(def: CardDefinition): BuilderDraft {
     artScale: 1,
     artX: 0,
     artY: 0,
-    titleFont: "Georgia, serif",
-    bodyFont: "Georgia, serif",
-    nameSize: 18,
-    costSize: 24,
-    resourceSize: 18,
-    categorySize: 10,
-    rulesSize: 13,
-    statSize: 27,
-    layout: { ...DEFAULT_LAYOUT },
+    ...presentationDefaults(),
   };
 }
 
@@ -206,15 +216,7 @@ function emptyDraft(): BuilderDraft {
     artScale: 1,
     artX: 0,
     artY: 0,
-    titleFont: "Georgia, serif",
-    bodyFont: "Georgia, serif",
-    nameSize: 18,
-    costSize: 24,
-    resourceSize: 18,
-    categorySize: 10,
-    rulesSize: 13,
-    statSize: 27,
-    layout: { ...DEFAULT_LAYOUT },
+    ...presentationDefaults(),
   };
 }
 
@@ -233,7 +235,7 @@ function hydrateDraft(raw: Partial<BuilderDraft>, fallback: BuilderDraft): Build
     categorySize: raw.categorySize ?? fallback.categorySize,
     rulesSize: raw.rulesSize ?? fallback.rulesSize,
     statSize: raw.statSize ?? fallback.statSize,
-    layout: { ...DEFAULT_LAYOUT, ...raw.layout },
+    layout: { ...PROJECT_DEFAULT_LAYOUT, ...raw.layout },
   };
 }
 
@@ -414,6 +416,15 @@ export function CardBuilderApp() {
     setDraft((current) => ({ ...current, layout: { ...current.layout, [key]: value } }));
   }
 
+  function applyProjectDefaultPresentation() {
+    setDraft((current) => ({
+      ...current,
+      ...PROJECT_DEFAULT_PRESENTATION,
+      layout: { ...PROJECT_DEFAULT_LAYOUT },
+    }));
+    setMessage("Applied the project default card layout. Card content and artwork were left unchanged.");
+  }
+
   function changeArchetype(next: CardArchetype) {
     setDraft((current) => ({
       ...current,
@@ -449,7 +460,7 @@ export function CardBuilderApp() {
     if (!def) return;
     localStorage.removeItem(`card-builder:draft:${def.id}`);
     setDraft(draftFromDefinition(def));
-    setMessage("Reset to the canonical card definition.");
+    setMessage("Reset to the canonical card definition with the project default presentation.");
   }
 
   async function copyDraft() {
@@ -460,7 +471,7 @@ export function CardBuilderApp() {
   function createNew() {
     setSelectedId("");
     setDraft(emptyDraft());
-    setMessage("New unsaved card draft.");
+    setMessage("New unsaved card draft using the project default presentation.");
   }
 
   return (
@@ -472,6 +483,7 @@ export function CardBuilderApp() {
           <p>Mechanics from the real card definitions. Presentation layered over the uploaded card bases.</p>
         </div>
         <div className="cb-header__actions">
+          <button onClick={applyProjectDefaultPresentation}>Default Layout</button>
           <button onClick={saveDraft}>Save Draft</button>
           <button onClick={() => void copyDraft()}>Copy JSON</button>
           {selectedDef && <button onClick={resetDraft}>Reset</button>}
@@ -578,6 +590,8 @@ export function CardBuilderApp() {
             <label>Rules <input type="number" min={6} max={30} value={draft.rulesSize} onChange={(event) => patch("rulesSize", Number(event.target.value))} /></label>
             <label>Stats <input type="number" min={8} max={52} value={draft.statSize} onChange={(event) => patch("statSize", Number(event.target.value))} /></label>
           </div>
+          <button className="cb-reset-layout" onClick={applyProjectDefaultPresentation}>Apply project default layout</button>
+          <p className="cb-note">The project default is the centered layout you approved: Trajan/Cinzel display styling, Cinzel rules text, the tuned font sizes, and the tuned Name / Cost / Resource / Categories / Rules / Attack / Health positions. It does not change card content, artwork, categories, cost, or resource choice.</p>
           <p className="cb-note">You can type any CSS font-family stack here. If the font exists on the machine or is later bundled with the game, the preview will use it; otherwise the next font in the stack is used.</p>
 
           <div className="cb-section-title">Element Positioning</div>
@@ -587,10 +601,10 @@ export function CardBuilderApp() {
             <LayoutControl label="Resource icon" x={draft.layout.resourceX} y={draft.layout.resourceY} onChange={(axis, value) => patchLayout(axis === "x" ? "resourceX" : "resourceY", value)} />
             <LayoutControl label="Categories" x={draft.layout.categoriesX} y={draft.layout.categoriesY} onChange={(axis, value) => patchLayout(axis === "x" ? "categoriesX" : "categoriesY", value)} />
             <LayoutControl label="Rules text" x={draft.layout.rulesX} y={draft.layout.rulesY} onChange={(axis, value) => patchLayout(axis === "x" ? "rulesX" : "rulesY", value)} />
-            {(draft.archetype === "creature") && <LayoutControl label="Attack" x={draft.layout.attackX} y={draft.layout.attackY} onChange={(axis, value) => patchLayout(axis === "x" ? "attackX" : "attackY", value)} />}
+            {draft.archetype === "creature" && <LayoutControl label="Attack" x={draft.layout.attackX} y={draft.layout.attackY} onChange={(axis, value) => patchLayout(axis === "x" ? "attackX" : "attackY", value)} />}
             {(draft.archetype === "creature" || draft.archetype === "building" || draft.archetype === "spell") && <LayoutControl label={draft.archetype === "spell" ? "Damage" : "Health"} x={draft.layout.healthX} y={draft.layout.healthY} onChange={(axis, value) => patchLayout(axis === "x" ? "healthX" : "healthY", value)} />}
           </div>
-          <button className="cb-reset-layout" onClick={() => patch("layout", { ...DEFAULT_LAYOUT })}>Reset element positions</button>
+          <button className="cb-reset-layout" onClick={() => patch("layout", { ...PROJECT_DEFAULT_LAYOUT })}>Reset positions to project default</button>
 
           <div className="cb-section-title">Card Base</div>
           <label>Template
