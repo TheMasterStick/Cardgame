@@ -13,18 +13,24 @@ const CARD_HEIGHT = SLOT_HEIGHT;
 const HAND_MAX = 10;
 const HAND_BASE_Y = 1065;
 const HAND_HOVER_Y = 945;
-const DECK_X = 1435;
-const DECK_Y = 985;
+
+const EQUIPMENT_X = 175;
+const HERO_X = 365;
+const MANA_X = 1425;
+const SPELL_X = 1575;
+const DECK_X = 1770;
+const ENEMY_DECK_Y = 155;
+const PLAYER_DECK_Y = 925;
+const ENEMY_HUD_Y = 245;
+const PLAYER_HUD_Y = 795;
 
 const ROWS = {
-  enemyHero: 72,
   enemyBuildings: 205,
   enemyBackline: 335,
   enemyVanguard: 465,
   playerVanguard: 615,
   playerBackline: 745,
   playerBuildings: 875,
-  playerHero: 1020,
 };
 
 type SlotKind = "vanguard" | "backline" | "building" | "hero" | "equipment" | "spell";
@@ -71,6 +77,7 @@ export class BattleScene extends Phaser.Scene {
   private targetingArrow!: Phaser.GameObjects.Graphics;
   private deckCountText!: Phaser.GameObjects.Text;
   private burnCountText!: Phaser.GameObjects.Text;
+  private playerHandCountText!: Phaser.GameObjects.Text;
   private statusText!: Phaser.GameObjects.Text;
   private burned = 0;
 
@@ -136,9 +143,8 @@ export class BattleScene extends Phaser.Scene {
       .setOrigin(0.5, 0);
 
     this.createFieldRows();
-    this.createHeroSlots();
-    this.createSideRacks();
-    this.createDeckPile();
+    this.createSideHud();
+    this.createDeckPiles();
 
     this.targetingArrow = this.add.graphics().setDepth(1900);
 
@@ -204,9 +210,7 @@ export class BattleScene extends Phaser.Scene {
     this.input.on(
       "pointerdown",
       (_pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[]) => {
-        if (currentlyOver.length === 0 && this.selectedCard) {
-          this.selectCard(null);
-        }
+        if (currentlyOver.length === 0 && this.selectedCard) this.selectCard(null);
       },
     );
 
@@ -252,38 +256,101 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
-  private createHeroSlots() {
-    this.createSlot(FIELD_CENTER_X, ROWS.enemyHero, "hero", "ENEMY\nHERO", HERO_WIDTH, HERO_HEIGHT);
-    this.createSlot(FIELD_CENTER_X, ROWS.playerHero, "hero", "YOUR\nHERO", HERO_WIDTH, HERO_HEIGHT);
+  private createSideHud() {
+    this.createEquipmentRack(ENEMY_HUD_Y, "enemy");
+    this.createEquipmentRack(PLAYER_HUD_Y, "player");
+
+    this.createHeroPanel(HERO_X, ENEMY_HUD_Y, "ENEMY HERO", "enemy");
+    this.createHeroPanel(HERO_X, PLAYER_HUD_Y, "YOUR HERO", "player");
+
+    this.createManaBar(MANA_X, ENEMY_HUD_Y, "enemy");
+    this.createManaBar(MANA_X, PLAYER_HUD_Y, "player");
+
+    this.createSpellRack(ENEMY_HUD_Y, "enemy");
+    this.createSpellRack(PLAYER_HUD_Y, "player");
   }
 
-  private createSideRacks() {
-    this.createRack(260, 215, "EQUIPMENT", "equipment", "enemy");
-    this.createRack(1660, 215, "SPELL / ABILITY", "spell", "enemy");
-    this.createRack(260, 765, "EQUIPMENT", "equipment", "player");
-    this.createRack(1660, 765, "SPELL / ABILITY", "spell", "player");
-  }
+  private createEquipmentRack(centerY: number, owner: "enemy" | "player") {
+    const spacing = 96;
+    const startY = centerY - (spacing * 3) / 2;
 
-  private createRack(
-    x: number,
-    centerY: number,
-    title: string,
-    kind: "equipment" | "spell",
-    owner: "enemy" | "player",
-  ) {
+    for (let i = 0; i < 4; i += 1) {
+      this.createSlot(EQUIPMENT_X, startY + i * spacing, "equipment", String(i + 1), 68, 84);
+    }
+
     this.add
-      .text(x, owner === "enemy" ? centerY - 220 : centerY + 220, title, {
+      .text(EQUIPMENT_X, owner === "enemy" ? centerY + 205 : centerY + 205, "EQUIPMENT", {
         fontFamily: "Arial, sans-serif",
-        fontSize: "16px",
+        fontSize: "15px",
         color: owner === "enemy" ? "#a58b8b" : "#8fa593",
       })
       .setOrigin(0.5);
+  }
 
+  private createHeroPanel(x: number, y: number, label: string, owner: "enemy" | "player") {
+    this.createSlot(x, y, "hero", label, HERO_WIDTH, HERO_HEIGHT);
+
+    this.createResourcePill(x, y + 88, "ENERGY", "5 / 10", 0xd8b35f, owner);
+    this.createResourcePill(x, y + 116, "RESOURCES", "5 / 10", 0xb57b4b, owner);
+  }
+
+  private createResourcePill(
+    x: number,
+    y: number,
+    label: string,
+    value: string,
+    color: number,
+    owner: "enemy" | "player",
+  ) {
+    const panel = this.add.rectangle(x, y, 132, 22, color, 0.13).setStrokeStyle(1, color, 0.8);
+    panel.setDepth(120);
+
+    this.add
+      .text(x, y, `${label}   ${value}`, {
+        fontFamily: "Arial, sans-serif",
+        fontSize: "11px",
+        color: owner === "enemy" ? "#cababa" : "#d8ddd9",
+      })
+      .setOrigin(0.5)
+      .setDepth(121);
+  }
+
+  private createManaBar(x: number, centerY: number, owner: "enemy" | "player") {
+    const spacing = 20;
+    const startY = centerY - (spacing * 9) / 2;
+
+    this.add
+      .text(x, startY - 28, "MANA  5 / 10", {
+        fontFamily: "Arial, sans-serif",
+        fontSize: "13px",
+        color: owner === "enemy" ? "#9fb9d0" : "#a9c9e2",
+      })
+      .setOrigin(0.5);
+
+    for (let i = 0; i < 10; i += 1) {
+      const active = i < 5;
+      this.add
+        .rectangle(x, startY + i * spacing, 12, 12, active ? 0x57b7ff : 0x24445c, active ? 0.95 : 0.35)
+        .setStrokeStyle(2, active ? 0x9bd8ff : 0x4e7189, active ? 1 : 0.55)
+        .setAngle(45);
+    }
+  }
+
+  private createSpellRack(centerY: number, owner: "enemy" | "player") {
     const spacing = 102;
     const startY = centerY - (spacing * 3) / 2;
+
     for (let i = 0; i < 4; i += 1) {
-      this.createSlot(x, startY + i * spacing, kind, String(i + 1), 68, 92);
+      this.createSlot(SPELL_X, startY + i * spacing, "spell", String(i + 1), 68, 92);
     }
+
+    this.add
+      .text(SPELL_X, centerY + 220, "SPELL / ABILITY", {
+        fontFamily: "Arial, sans-serif",
+        fontSize: "15px",
+        color: owner === "enemy" ? "#a58b8b" : "#8fa593",
+      })
+      .setOrigin(0.5);
   }
 
   private createSlot(
@@ -344,36 +411,77 @@ export class BattleScene extends Phaser.Scene {
     })).reverse();
   }
 
-  private createDeckPile() {
+  private createDeckPiles() {
+    this.createEnemyDeckPile();
+    this.createPlayerDeckPile();
+  }
+
+  private createEnemyDeckPile() {
+    this.add
+      .rectangle(DECK_X, ENEMY_DECK_Y, CARD_WIDTH, CARD_HEIGHT, 0x25202d)
+      .setStrokeStyle(4, 0x9a7ab0)
+      .setDepth(400);
+
+    this.add
+      .text(DECK_X, ENEMY_DECK_Y - 13, "ENEMY\nDECK", {
+        align: "center",
+        fontFamily: "Georgia, serif",
+        fontSize: "15px",
+        color: "#eee5f2",
+      })
+      .setOrigin(0.5)
+      .setDepth(401);
+
+    this.add
+      .text(DECK_X, ENEMY_DECK_Y + 28, "15 cards\nHand: 5", {
+        align: "center",
+        fontFamily: "Arial, sans-serif",
+        fontSize: "12px",
+        color: "#cfc1d6",
+      })
+      .setOrigin(0.5)
+      .setDepth(401);
+  }
+
+  private createPlayerDeckPile() {
     const deckBack = this.add
-      .rectangle(DECK_X, DECK_Y, CARD_WIDTH, CARD_HEIGHT, 0x25202d)
+      .rectangle(DECK_X, PLAYER_DECK_Y, CARD_WIDTH, CARD_HEIGHT, 0x25202d)
       .setStrokeStyle(4, 0x9a7ab0)
       .setInteractive({ useHandCursor: true })
       .setDepth(400);
 
     this.add
-      .text(DECK_X, DECK_Y - 8, "TEST\nDECK", {
+      .text(DECK_X, PLAYER_DECK_Y - 17, "YOUR\nDECK", {
         align: "center",
         fontFamily: "Georgia, serif",
-        fontSize: "16px",
+        fontSize: "15px",
         color: "#eee5f2",
       })
       .setOrigin(0.5)
       .setDepth(401);
 
     this.deckCountText = this.add
-      .text(DECK_X, DECK_Y + 31, "", {
+      .text(DECK_X, PLAYER_DECK_Y + 23, "", {
         fontFamily: "Arial, sans-serif",
-        fontSize: "13px",
+        fontSize: "12px",
         color: "#cfc1d6",
       })
       .setOrigin(0.5)
       .setDepth(401);
 
-    this.burnCountText = this.add
-      .text(DECK_X, 1058, "", {
+    this.playerHandCountText = this.add
+      .text(DECK_X, PLAYER_DECK_Y + 40, "", {
         fontFamily: "Arial, sans-serif",
-        fontSize: "13px",
+        fontSize: "11px",
+        color: "#aeb7bf",
+      })
+      .setOrigin(0.5)
+      .setDepth(401);
+
+    this.burnCountText = this.add
+      .text(DECK_X, PLAYER_DECK_Y + 78, "", {
+        fontFamily: "Arial, sans-serif",
+        fontSize: "12px",
         color: "#b88989",
       })
       .setOrigin(0.5)
@@ -405,7 +513,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private createHandCard(data: TestCardData): TestCardView {
-    const container = this.add.container(DECK_X, DECK_Y).setDepth(1000);
+    const container = this.add.container(DECK_X, PLAYER_DECK_Y).setDepth(1000);
     const frame = this.add.rectangle(0, 0, CARD_WIDTH, CARD_HEIGHT, 0x2b2b2b).setStrokeStyle(3, 0xc8a66a);
     const label = this.createCardLabel(data, 0, 0, 13);
 
@@ -459,7 +567,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private animateBurn(data: TestCardData) {
-    const container = this.add.container(DECK_X, DECK_Y).setDepth(2800);
+    const container = this.add.container(DECK_X, PLAYER_DECK_Y).setDepth(2800);
     const frame = this.add
       .rectangle(0, 0, CARD_WIDTH, CARD_HEIGHT, 0x2b2b2b)
       .setStrokeStyle(4, 0xc8a66a, 1);
@@ -469,7 +577,7 @@ export class BattleScene extends Phaser.Scene {
 
     this.tweens.add({
       targets: container,
-      y: DECK_Y - 165,
+      y: PLAYER_DECK_Y - 165,
       scaleX: 1.12,
       scaleY: 1.12,
       angle: Phaser.Math.Between(-4, 4),
@@ -595,6 +703,7 @@ export class BattleScene extends Phaser.Scene {
     card.frame.setStrokeStyle(3, SLOT_COLORS[slot.kind], 0.95);
     this.layoutHand(true);
     this.updateSlotHighlights();
+    this.updateDeckLabels();
     this.showStatus(`Placed TEST CARD ${String(card.data.id).padStart(2, "0")} in ${slot.kind} lane ${slot.lane}.`);
   }
 
@@ -670,8 +779,9 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private updateDeckLabels() {
-    if (!this.deckCountText || !this.burnCountText) return;
+    if (!this.deckCountText || !this.burnCountText || !this.playerHandCountText) return;
     this.deckCountText.setText(`${this.deck.length} cards`);
+    this.playerHandCountText.setText(`Hand: ${this.hand.length}`);
     this.burnCountText.setText(`Burned: ${this.burned}`);
   }
 
