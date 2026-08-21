@@ -7,7 +7,6 @@ const HERO_WIDTH = 92;
 const HERO_HEIGHT = 132;
 const COLUMN_GAP = 36;
 const FIELD_COLUMNS = 5;
-const CENTER_COLUMN = 2;
 
 const CARD_WIDTH = SLOT_WIDTH;
 const CARD_HEIGHT = SLOT_HEIGHT;
@@ -18,12 +17,14 @@ const DECK_X = 1435;
 const DECK_Y = 985;
 
 const ROWS = {
+  enemyHero: 72,
   enemyBuildings: 205,
   enemyBackline: 335,
   enemyVanguard: 465,
   playerVanguard: 615,
   playerBackline: 745,
   playerBuildings: 875,
+  playerHero: 1020,
 };
 
 type SlotKind = "vanguard" | "backline" | "building" | "hero" | "equipment" | "spell";
@@ -95,7 +96,7 @@ export class BattleScene extends Phaser.Scene {
       .text(
         width / 2,
         50,
-        "Click the deck to draw • Hover a hand card to inspect • Click a card then a slot, or drag/drop it",
+        "Click deck to draw • Hover to inspect • Click card then slot, or drag/drop • Click empty space / Esc to cancel",
         {
           fontFamily: "Arial, sans-serif",
           fontSize: "14px",
@@ -142,7 +143,7 @@ export class BattleScene extends Phaser.Scene {
     this.targetingArrow = this.add.graphics().setDepth(1900);
 
     this.statusText = this.add
-      .text(FIELD_CENTER_X, 1010, "", {
+      .text(FIELD_CENTER_X, 1005, "", {
         fontFamily: "Arial, sans-serif",
         fontSize: "14px",
         color: "#d8c68d",
@@ -179,7 +180,6 @@ export class BattleScene extends Phaser.Scene {
       ) => {
         const card = this.hand.find((entry) => entry.container === gameObject);
         if (!card || !card.inHand) return;
-
         card.container.setPosition(dragX, dragY);
       },
     );
@@ -200,6 +200,17 @@ export class BattleScene extends Phaser.Scene {
         }
       },
     );
+
+    this.input.on(
+      "pointerdown",
+      (_pointer: Phaser.Input.Pointer, currentlyOver: Phaser.GameObjects.GameObject[]) => {
+        if (currentlyOver.length === 0 && this.selectedCard) {
+          this.selectCard(null);
+        }
+      },
+    );
+
+    this.input.keyboard?.on("keydown-ESC", () => this.selectCard(null));
   }
 
   update() {
@@ -214,12 +225,12 @@ export class BattleScene extends Phaser.Scene {
 
   private createFieldRows() {
     const rows: Array<{ y: number; label: string; kind: SlotKind; owner: "enemy" | "player" }> = [
-      { y: ROWS.enemyBuildings, label: "BUILDINGS / HERO", kind: "building", owner: "enemy" },
+      { y: ROWS.enemyBuildings, label: "BUILDINGS", kind: "building", owner: "enemy" },
       { y: ROWS.enemyBackline, label: "BACKLINE", kind: "backline", owner: "enemy" },
       { y: ROWS.enemyVanguard, label: "VANGUARD", kind: "vanguard", owner: "enemy" },
       { y: ROWS.playerVanguard, label: "VANGUARD", kind: "vanguard", owner: "player" },
       { y: ROWS.playerBackline, label: "BACKLINE", kind: "backline", owner: "player" },
-      { y: ROWS.playerBuildings, label: "BUILDINGS / HERO", kind: "building", owner: "player" },
+      { y: ROWS.playerBuildings, label: "BUILDINGS", kind: "building", owner: "player" },
     ];
 
     for (const row of rows) {
@@ -232,8 +243,6 @@ export class BattleScene extends Phaser.Scene {
         .setOrigin(1, 0.5);
 
       for (let i = 0; i < FIELD_COLUMNS; i += 1) {
-        if (row.kind === "building" && i === CENTER_COLUMN) continue;
-
         const rect = this.createSlot(this.columnX(i), row.y, row.kind, String(i + 1));
 
         if (row.owner === "player" && (row.kind === "vanguard" || row.kind === "backline")) {
@@ -244,22 +253,8 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private createHeroSlots() {
-    this.createSlot(
-      this.columnX(CENTER_COLUMN),
-      ROWS.enemyBuildings,
-      "hero",
-      "ENEMY\nHERO\nLANE 3",
-      HERO_WIDTH,
-      HERO_HEIGHT,
-    );
-    this.createSlot(
-      this.columnX(CENTER_COLUMN),
-      ROWS.playerBuildings,
-      "hero",
-      "YOUR\nHERO\nLANE 3",
-      HERO_WIDTH,
-      HERO_HEIGHT,
-    );
+    this.createSlot(FIELD_CENTER_X, ROWS.enemyHero, "hero", "ENEMY\nHERO", HERO_WIDTH, HERO_HEIGHT);
+    this.createSlot(FIELD_CENTER_X, ROWS.playerHero, "hero", "YOUR\nHERO", HERO_WIDTH, HERO_HEIGHT);
   }
 
   private createSideRacks() {
@@ -398,6 +393,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.hand.length >= HAND_MAX) {
       this.burned += 1;
       this.updateDeckLabels();
+      this.animateBurn(data);
       this.showStatus(`TEST CARD ${String(data.id).padStart(2, "0")} burned — hand is full.`);
       return;
     }
@@ -411,19 +407,7 @@ export class BattleScene extends Phaser.Scene {
   private createHandCard(data: TestCardData): TestCardView {
     const container = this.add.container(DECK_X, DECK_Y).setDepth(1000);
     const frame = this.add.rectangle(0, 0, CARD_WIDTH, CARD_HEIGHT, 0x2b2b2b).setStrokeStyle(3, 0xc8a66a);
-    const label = this.add
-      .text(
-        0,
-        0,
-        `TEST CARD ${String(data.id).padStart(2, "0")}\n\n${data.cost} ENERGY\n\n${data.attack}     ${data.health}`,
-        {
-          align: "center",
-          fontFamily: "Georgia, serif",
-          fontSize: "13px",
-          color: "#f4ead6",
-        },
-      )
-      .setOrigin(0.5);
+    const label = this.createCardLabel(data, 0, 0, 13);
 
     container.add([frame, label]);
     container.setSize(CARD_WIDTH, CARD_HEIGHT);
@@ -456,6 +440,83 @@ export class BattleScene extends Phaser.Scene {
     });
 
     return card;
+  }
+
+  private createCardLabel(data: TestCardData, x: number, y: number, fontSize: number) {
+    return this.add
+      .text(
+        x,
+        y,
+        `TEST CARD ${String(data.id).padStart(2, "0")}\n\n${data.cost} ENERGY\n\n${data.attack}     ${data.health}`,
+        {
+          align: "center",
+          fontFamily: "Georgia, serif",
+          fontSize: `${fontSize}px`,
+          color: "#f4ead6",
+        },
+      )
+      .setOrigin(0.5);
+  }
+
+  private animateBurn(data: TestCardData) {
+    const container = this.add.container(DECK_X, DECK_Y).setDepth(2800);
+    const frame = this.add
+      .rectangle(0, 0, CARD_WIDTH, CARD_HEIGHT, 0x2b2b2b)
+      .setStrokeStyle(4, 0xc8a66a, 1);
+    const glow = this.add.rectangle(0, 0, CARD_WIDTH - 8, CARD_HEIGHT - 8, 0xe56a24, 0);
+    const label = this.createCardLabel(data, 0, 0, 13);
+    container.add([frame, glow, label]);
+
+    this.tweens.add({
+      targets: container,
+      y: DECK_Y - 165,
+      scaleX: 1.12,
+      scaleY: 1.12,
+      angle: Phaser.Math.Between(-4, 4),
+      duration: 320,
+      ease: "Back.easeOut",
+      onComplete: () => {
+        frame.setStrokeStyle(5, 0xffb347, 1);
+        this.tweens.add({ targets: glow, alpha: 0.78, duration: 160, yoyo: true, repeat: 1 });
+
+        for (let i = 0; i < 12; i += 1) {
+          const ember = this.add
+            .circle(
+              container.x + Phaser.Math.Between(-CARD_WIDTH / 2, CARD_WIDTH / 2),
+              container.y + Phaser.Math.Between(10, CARD_HEIGHT / 2),
+              Phaser.Math.Between(2, 5),
+              i % 2 === 0 ? 0xffb347 : 0xd94d20,
+              0.95,
+            )
+            .setDepth(2799);
+
+          this.tweens.add({
+            targets: ember,
+            x: ember.x + Phaser.Math.Between(-42, 42),
+            y: ember.y - Phaser.Math.Between(45, 125),
+            alpha: 0,
+            scale: 0.2,
+            duration: Phaser.Math.Between(420, 760),
+            ease: "Sine.easeOut",
+            onComplete: () => ember.destroy(),
+          });
+        }
+
+        this.time.delayedCall(180, () => {
+          this.tweens.add({
+            targets: container,
+            y: container.y - 85,
+            alpha: 0,
+            scaleX: 0.72,
+            scaleY: 0.72,
+            angle: container.angle + Phaser.Math.Between(-8, 8),
+            duration: 650,
+            ease: "Quad.easeIn",
+            onComplete: () => container.destroy(true),
+          });
+        });
+      },
+    });
   }
 
   private layoutHand(animated: boolean) {
