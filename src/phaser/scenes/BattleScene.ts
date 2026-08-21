@@ -16,13 +16,17 @@ const HAND_HOVER_Y = 945;
 
 const EQUIPMENT_X = 175;
 const HERO_X = 365;
-const MANA_X = 1425;
+const DECK_X = 1435;
+const MANA_X = 1518;
 const SPELL_X = 1575;
-const DECK_X = 1770;
-const ENEMY_DECK_Y = 155;
-const PLAYER_DECK_Y = 925;
+const GRAVEYARD_X = 1770;
+const ENEMY_DECK_Y = 115;
+const PLAYER_DECK_Y = 985;
+const ENEMY_GRAVEYARD_Y = 155;
+const PLAYER_GRAVEYARD_Y = 925;
 const ENEMY_HUD_Y = 245;
 const PLAYER_HUD_Y = 795;
+const HAND_COUNT_Y = 958;
 
 const ROWS = {
   enemyBuildings: 205,
@@ -76,7 +80,7 @@ export class BattleScene extends Phaser.Scene {
   private hoveredSlot: CreatureSlot | null = null;
   private targetingArrow!: Phaser.GameObjects.Graphics;
   private deckCountText!: Phaser.GameObjects.Text;
-  private burnCountText!: Phaser.GameObjects.Text;
+  private graveyardCountText!: Phaser.GameObjects.Text;
   private playerHandCountText!: Phaser.GameObjects.Text;
   private statusText!: Phaser.GameObjects.Text;
   private burned = 0;
@@ -144,12 +148,12 @@ export class BattleScene extends Phaser.Scene {
 
     this.createFieldRows();
     this.createSideHud();
-    this.createDeckPiles();
+    this.createDeckAndGraveyardPiles();
 
     this.targetingArrow = this.add.graphics().setDepth(1900);
 
     this.statusText = this.add
-      .text(FIELD_CENTER_X, 1005, "", {
+      .text(FIELD_CENTER_X, 985, "", {
         fontFamily: "Arial, sans-serif",
         fontSize: "14px",
         color: "#d8c68d",
@@ -279,7 +283,7 @@ export class BattleScene extends Phaser.Scene {
     }
 
     this.add
-      .text(EQUIPMENT_X, owner === "enemy" ? centerY + 205 : centerY + 205, "EQUIPMENT", {
+      .text(EQUIPMENT_X, centerY + 205, "EQUIPMENT", {
         fontFamily: "Arial, sans-serif",
         fontSize: "15px",
         color: owner === "enemy" ? "#a58b8b" : "#8fa593",
@@ -290,8 +294,13 @@ export class BattleScene extends Phaser.Scene {
   private createHeroPanel(x: number, y: number, label: string, owner: "enemy" | "player") {
     this.createSlot(x, y, "hero", label, HERO_WIDTH, HERO_HEIGHT);
 
-    this.createResourcePill(x, y + 88, "ENERGY", "5 / 10", 0xd8b35f, owner);
-    this.createResourcePill(x, y + 116, "RESOURCES", "5 / 10", 0xb57b4b, owner);
+    if (owner === "enemy") {
+      this.createResourcePill(x, y - 116, "ENERGY", "5 / 10", 0xd8b35f, owner);
+      this.createResourcePill(x, y - 88, "RESOURCES", "5 / 10", 0xb57b4b, owner);
+    } else {
+      this.createResourcePill(x, y + 88, "ENERGY", "5 / 10", 0xd8b35f, owner);
+      this.createResourcePill(x, y + 116, "RESOURCES", "5 / 10", 0xb57b4b, owner);
+    }
   }
 
   private createResourcePill(
@@ -318,22 +327,23 @@ export class BattleScene extends Phaser.Scene {
   private createManaBar(x: number, centerY: number, owner: "enemy" | "player") {
     const spacing = 20;
     const startY = centerY - (spacing * 9) / 2;
-
-    this.add
-      .text(x, startY - 28, "MANA  5 / 10", {
-        fontFamily: "Arial, sans-serif",
-        fontSize: "13px",
-        color: owner === "enemy" ? "#9fb9d0" : "#a9c9e2",
-      })
-      .setOrigin(0.5);
+    const endY = startY + spacing * 9;
 
     for (let i = 0; i < 10; i += 1) {
-      const active = i < 5;
+      const active = owner === "player" ? i >= 5 : i < 5;
       this.add
         .rectangle(x, startY + i * spacing, 12, 12, active ? 0x57b7ff : 0x24445c, active ? 0.95 : 0.35)
         .setStrokeStyle(2, active ? 0x9bd8ff : 0x4e7189, active ? 1 : 0.55)
         .setAngle(45);
     }
+
+    this.add
+      .text(x, endY + 28, "MANA  5 / 10", {
+        fontFamily: "Arial, sans-serif",
+        fontSize: "13px",
+        color: owner === "enemy" ? "#9fb9d0" : "#a9c9e2",
+      })
+      .setOrigin(0.5);
   }
 
   private createSpellRack(centerY: number, owner: "enemy" | "player") {
@@ -411,9 +421,20 @@ export class BattleScene extends Phaser.Scene {
     })).reverse();
   }
 
-  private createDeckPiles() {
+  private createDeckAndGraveyardPiles() {
     this.createEnemyDeckPile();
     this.createPlayerDeckPile();
+    this.createEnemyGraveyardPile();
+    this.createPlayerGraveyardPile();
+
+    this.playerHandCountText = this.add
+      .text(FIELD_CENTER_X, HAND_COUNT_Y, "", {
+        fontFamily: "Arial, sans-serif",
+        fontSize: "13px",
+        color: "#c9c2b5",
+      })
+      .setOrigin(0.5)
+      .setDepth(1800);
   }
 
   private createEnemyDeckPile() {
@@ -423,7 +444,7 @@ export class BattleScene extends Phaser.Scene {
       .setDepth(400);
 
     this.add
-      .text(DECK_X, ENEMY_DECK_Y - 13, "ENEMY\nDECK", {
+      .text(DECK_X, ENEMY_DECK_Y - 12, "ENEMY\nDECK", {
         align: "center",
         fontFamily: "Georgia, serif",
         fontSize: "15px",
@@ -433,7 +454,7 @@ export class BattleScene extends Phaser.Scene {
       .setDepth(401);
 
     this.add
-      .text(DECK_X, ENEMY_DECK_Y + 28, "15 cards\nHand: 5", {
+      .text(DECK_X, ENEMY_DECK_Y + 29, "15 cards", {
         align: "center",
         fontFamily: "Arial, sans-serif",
         fontSize: "12px",
@@ -451,7 +472,7 @@ export class BattleScene extends Phaser.Scene {
       .setDepth(400);
 
     this.add
-      .text(DECK_X, PLAYER_DECK_Y - 17, "YOUR\nDECK", {
+      .text(DECK_X, PLAYER_DECK_Y - 14, "YOUR\nDECK", {
         align: "center",
         fontFamily: "Georgia, serif",
         fontSize: "15px",
@@ -461,7 +482,7 @@ export class BattleScene extends Phaser.Scene {
       .setDepth(401);
 
     this.deckCountText = this.add
-      .text(DECK_X, PLAYER_DECK_Y + 23, "", {
+      .text(DECK_X, PLAYER_DECK_Y + 28, "", {
         fontFamily: "Arial, sans-serif",
         fontSize: "12px",
         color: "#cfc1d6",
@@ -469,25 +490,59 @@ export class BattleScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(401);
 
-    this.playerHandCountText = this.add
-      .text(DECK_X, PLAYER_DECK_Y + 40, "", {
+    deckBack.on("pointerdown", () => this.drawCard());
+  }
+
+  private createEnemyGraveyardPile() {
+    this.add
+      .rectangle(GRAVEYARD_X, ENEMY_GRAVEYARD_Y, CARD_WIDTH, CARD_HEIGHT, 0x191919)
+      .setStrokeStyle(3, 0x777777, 0.8)
+      .setDepth(350);
+
+    this.add
+      .text(GRAVEYARD_X, ENEMY_GRAVEYARD_Y - 10, "ENEMY\nGRAVEYARD", {
+        align: "center",
+        fontFamily: "Georgia, serif",
+        fontSize: "13px",
+        color: "#b7b0aa",
+      })
+      .setOrigin(0.5)
+      .setDepth(351);
+
+    this.add
+      .text(GRAVEYARD_X, ENEMY_GRAVEYARD_Y + 30, "0 cards", {
         fontFamily: "Arial, sans-serif",
         fontSize: "11px",
-        color: "#aeb7bf",
+        color: "#8f8f8f",
       })
       .setOrigin(0.5)
-      .setDepth(401);
+      .setDepth(351);
+  }
 
-    this.burnCountText = this.add
-      .text(DECK_X, PLAYER_DECK_Y + 78, "", {
+  private createPlayerGraveyardPile() {
+    this.add
+      .rectangle(GRAVEYARD_X, PLAYER_GRAVEYARD_Y, CARD_WIDTH, CARD_HEIGHT, 0x191919)
+      .setStrokeStyle(3, 0x777777, 0.8)
+      .setDepth(350);
+
+    this.add
+      .text(GRAVEYARD_X, PLAYER_GRAVEYARD_Y - 10, "YOUR\nGRAVEYARD", {
+        align: "center",
+        fontFamily: "Georgia, serif",
+        fontSize: "13px",
+        color: "#b7b0aa",
+      })
+      .setOrigin(0.5)
+      .setDepth(351);
+
+    this.graveyardCountText = this.add
+      .text(GRAVEYARD_X, PLAYER_GRAVEYARD_Y + 30, "", {
         fontFamily: "Arial, sans-serif",
-        fontSize: "12px",
-        color: "#b88989",
+        fontSize: "11px",
+        color: "#a68e88",
       })
       .setOrigin(0.5)
-      .setDepth(401);
-
-    deckBack.on("pointerdown", () => this.drawCard());
+      .setDepth(351);
   }
 
   private drawCard() {
@@ -779,10 +834,10 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private updateDeckLabels() {
-    if (!this.deckCountText || !this.burnCountText || !this.playerHandCountText) return;
+    if (!this.deckCountText || !this.graveyardCountText || !this.playerHandCountText) return;
     this.deckCountText.setText(`${this.deck.length} cards`);
-    this.playerHandCountText.setText(`Hand: ${this.hand.length}`);
-    this.burnCountText.setText(`Burned: ${this.burned}`);
+    this.playerHandCountText.setText(`HAND  ${this.hand.length} / ${HAND_MAX}`);
+    this.graveyardCountText.setText(`${this.burned} cards`);
   }
 
   private showStatus(message: string) {
