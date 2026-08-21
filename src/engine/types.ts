@@ -395,9 +395,8 @@ interface CardDefinitionBase {
    * Character race/type(s). Only meaningful for Creature and Hero cards.
    * An array (Phase L) so a dual-nature card (Human + Angel, etc.) doesn't
    * need bespoke text — most cards still carry just one entry. Mechanically
-   * inert on its own, same as before; `auraBuff`'s `{ race }` filter and a
-   * Hero's `allegiance.neutralRaces` grant both match against membership in
-   * this array now instead of a single equality check.
+   * inert on its own, same as before; `auraBuff`'s `{ race }` filter matches
+   * against membership in this array.
    */
   races?: Race[];
 }
@@ -439,19 +438,6 @@ export interface HeroCardDefinition extends CardDefinitionBase {
   heroPower?: HeroActivatedAbility;
   /** A stronger effect gated to a small number of uses per *match* instead of per turn. */
   signature?: HeroActivatedAbility & { usesPerMatch: number };
-  /**
-   * Allegiance grant (DESIGN.md §10) — bends the default deckbuilding rule
-   * ("your Faction's cards, plus Neutral") for this specific Hero. Omit
-   * entirely for a Hero that just follows the default rule.
-   */
-  allegiance?: {
-    /** Additional Factions allowed alongside this Hero's own (a Diplomat/Cultist-style Hero). */
-    extraFactions?: Faction[];
-    /** Creatures of a listed Race count as in-Faction regardless of their own Faction tag. */
-    neutralRaces?: Race[];
-    /** No Faction restriction at all despite having a Faction (a Mercenary Captain). */
-    unrestricted?: boolean;
-  };
   /** Rule-Breaks (DESIGN.md §9) — a curated menu of numeric deltas a Legendary-tier Hero can carry. Applied once at match start. Omit entirely for a Hero that plays by the standard board/pool shape. */
   ruleBreaks?: HeroRuleBreaks;
 }

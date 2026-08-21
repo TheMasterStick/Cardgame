@@ -40,7 +40,7 @@ the panel.
 | `text` | string (optional) | Flavor/rules text shown on the card. |
 | `art` | string (optional) | Image URL or a path into `public/` (e.g. `"/cards/lava-hound.png"`). Omit for the plain text layout. See "Adding images" below. |
 | `element` | string (optional) | Magic school/affinity — see "Elements" below. Purely descriptive/flavor unless a card's own effect cares about it. |
-| `faction` | string (optional) | Faction allegiance — see "Factions" below. Drives Allegiance deckbuilding validation on Hero cards; otherwise descriptive unless a card's own effect keys off it. |
+| `faction` | string (optional) | Faction — see "Factions" below. A flavor/synergy tag only (Phase O) — never restricts deckbuilding; mechanically inert unless a card's own effect (typically a Hero Passive's `auraBuff` filter) keys off it. |
 | `races` | string array (optional) | Character race/type(s) — see "Races" below. An array as of Phase L, so a dual-nature card (Human + Angel, etc.) doesn't need bespoke text; most cards still carry just one entry. Only meaningful on Creature and Hero cards; mechanically inert unless a card's own effect keys off it. |
 
 ## Taxonomy semantics (important)
@@ -51,7 +51,7 @@ The card data model separates three ideas:
 - **CreatureType**: battlefield/combat role. Defender means defensive durability/control; Fighter means offensive pressure; Ranger/Mage/Support/Rogue/Beast/Creature describe other combat identities. Multiple roles may be printed where appropriate.
 - **Race**: what the being actually is. The fantasy race pool below is already an intentional content decision, not an auto-generated placeholder list.
 
-World cultures, countries, houses, companies and orders (Cimbar, Lorthaine, Gestmane, Golden Company, etc.) are **not automatically `faction` values**. Mechanical `faction` exists for Allegiance/deckbuilding; world identities belong in lore unless a real card mechanic needs a tag.
+World cultures, countries, houses, companies and orders (Cimbar, Lorthaine, Gestmane, Golden Company, etc.) are **not automatically `faction` values**. Mechanical `faction` is a flavor/synergy tag, not a deckbuilding restriction (Phase O — see DESIGN.md §10); world identities belong in lore unless a real card mechanic needs a tag.
 
 ## Archetype-specific fields
 
@@ -64,8 +64,7 @@ of a match; its stats become the starting Hero HP/Attack (see DESIGN.md
   "attack": 20, "hp": 10, "faction": "moonveil-coven", "text": "A supernatural manipulator.",
   "passive": { "kind": "firstSpellDiscount", "amount": 1 },
   "heroPower": { "effect": { "kind": "damage", "amount": 2, "target": "targetAny" }, "activateCost": 2, "text": "Deal 2 damage." },
-  "signature": { "effect": { "kind": "damage", "amount": 3, "target": "allEnemyCreatures" }, "activateCost": 4, "usesPerMatch": 1, "text": "Deal 3 damage to all enemy creatures." },
-  "allegiance": { "extraFactions": ["arcane-industries"] }
+  "signature": { "effect": { "kind": "damage", "amount": 3, "target": "allEnemyCreatures" }, "activateCost": 4, "usesPerMatch": 1, "text": "Deal 3 damage to all enemy creatures." }
 }
 ```
 - `class`: `"fighter" | "mage" | "rogue"` — required. Broad class fantasy
@@ -82,12 +81,9 @@ of a match; its stats become the starting Hero HP/Attack (see DESIGN.md
   curated template set (see DESIGN.md §9) — currently:
   - `{ "kind": "auraBuff", "filter": "all" | { "race": Race } | { "faction": Faction }, "attackDelta": N }` — live +N Attack to every matching friendly creature, recomputed on every Attack read (same "Attack only, never stored" approach as Flank/Formation).
   - `{ "kind": "firstSpellDiscount", "amount": N }` — the controller's first Spell *activation* each turn (an Instant cast, or a Ritual/Charged Spell's `activateCost` step — not a Ritual/Charged Spell's initial slot-placement `cost`) costs N less Mana. Resets every `startTurn`.
+  - **Planned (not live):** this single fixed field is slated to become three named **Specializations** built from the same `PassiveEffect` templates, one chosen per match rather than baked into the card — see DESIGN.md §19's Phase P spec before authoring new Hero passive content.
 - `heroPower` *(optional)*: `{ "effect": CardEffect, "activateCost": N, "text"?: string }` — Energy-costed, usable once per turn (resets every `startTurn`), same `CardEffect` shape and `resolveEffect` machinery as a Spell/Ability.
-- `signature` *(optional)*: same shape as `heroPower` plus `"usesPerMatch": N` — gated to N total uses for the whole match, never resets on `startTurn`.
-- `allegiance` *(optional)*: bends Allegiance deckbuilding (DESIGN.md §10) beyond the default "Hero's own Faction + Neutral cards only" rule:
-  - `extraFactions: Faction[]` — additional Factions allowed alongside the Hero's own.
-  - `neutralRaces: Race[]` — creatures of a listed Race count as in-Faction regardless of their own Faction tag.
-  - `unrestricted: true` — no Faction restriction at all, despite the Hero having a Faction.
+- `signature` *(optional)*: same shape as `heroPower` plus `"usesPerMatch": N` — gated to N total uses for the whole match, never resets on `startTurn`. Not planned for every new Hero going forward (DESIGN.md §19) — kept as-is on Heroes that already have one.
 - `ruleBreaks` *(optional, Legendary-tier — DESIGN.md §9)*: a curated
   menu of numeric deltas applied once at match start —
   `extraSpellAbilitySlots`, `extraBuildingSlots`, `vanguardSlotDelta`,
@@ -127,7 +123,7 @@ of a match; its stats become the starting Hero HP/Attack (see DESIGN.md
   (Fighter/Ranger/Defender/Beast/Elemental/Mage/Ogre/Giant/Dragon/
   Support/Creature), printed as e.g. "Defender • Elemental" for a
   dual-typed card, stored as an array of 1-2 values. Distinct from
-  `race` (which drives Faction/Allegiance, not this). Formation
+  `race` (a flavor/synergy tag, not this). Formation
   (`formationBonus`) checks whether an adjacent creature shares one of
   these tags — see "Keywords" below.
 - `flankBonus`/`formationBonus`/`bloodiedBonus`/`frenzyBonus`/
@@ -385,21 +381,21 @@ values: `frost`, `fire`, `nature`, `light`, `darkness`, `arcane`,
 
 ## Factions
 
-Drives Allegiance deckbuilding (DESIGN.md §10): a deck may contain any
-card whose Faction matches its Hero's Faction, plus any Neutral card
-(Faction field simply omitted). A Faction-less Hero has no
-restriction; a Hero's optional `allegiance` grant (see the Hero fields
-above) can widen this further. Also usable as an `auraBuff` Hero
-Passive filter. Valid values: `infernal-court`, `roseguard-kingdom`,
-`moonveil-coven`, `velvet-syndicate`, `wildheart-tribes`,
-`celestial-academy`, `necropolitan`, `arcane-industries`. Display names
-(e.g. "The Infernal Court") live in `src/data/taxonomy.ts`.
+A flavor/synergy tag, not a deckbuilding restriction (DESIGN.md §10,
+rewritten Phase O) — any card is legal in any deck regardless of its
+Hero's own Faction. Usable as an `auraBuff` Hero Passive filter, so a
+Faction's own Hero can reward (or in principle penalize) fielding that
+Faction's creatures without that ever being required. Valid values:
+`infernal-court`, `roseguard-kingdom`, `moonveil-coven`,
+`velvet-syndicate`, `wildheart-tribes`, `celestial-academy`,
+`necropolitan`, `arcane-industries`. Display names (e.g. "The Infernal
+Court") live in `src/data/taxonomy.ts`.
 
 ## Races
 
-A species/type tag for Creature and Hero cards. The fantasy race pool is intentionally selected for the setting and future card content, including the project's adult-fantasy/fan-service visual direction; it is not merely anticipatory scaffolding. Race is mechanically inert on its own unless a card, Hero Allegiance grant, or aura keys off it.
+A species/type tag for Creature and Hero cards. The fantasy race pool is intentionally selected for the setting and future card content, including the project's adult-fantasy/fan-service visual direction; it is not merely anticipatory scaffolding. Race is mechanically inert on its own unless a card or aura keys off it.
 
-**Live schema (Phase L):** `races: Race[]` — a dual-nature card (Human + Angel, etc.) doesn't need bespoke text; most cards still carry just one entry. Valid values: `beast`, `demon`, `dragon`, `elemental`, `mech`, `human`, `undead`, `goblin`, `dwarf`, `elf`, `pixie`, `ogre`, `giant`, `dark-elf`, `angel`, `orc`, `gnome`, `troll`, `dryad`, `fairy`, `harpy`, `fiend`, `vampire`. `auraBuff`'s `{ race }` Passive filter and a Hero's `allegiance.neutralRaces` grant both match against *membership* in this array now, not a single equality check.
+**Live schema (Phase L):** `races: Race[]` — a dual-nature card (Human + Angel, etc.) doesn't need bespoke text; most cards still carry just one entry. Valid values: `beast`, `demon`, `dragon`, `elemental`, `mech`, `human`, `undead`, `goblin`, `dwarf`, `elf`, `pixie`, `ogre`, `giant`, `dark-elf`, `angel`, `orc`, `gnome`, `troll`, `dryad`, `fairy`, `harpy`, `fiend`, `vampire`. `auraBuff`'s `{ race }` Passive filter matches against *membership* in this array, not a single equality check.
 
 ## CreatureType
 
@@ -535,6 +531,6 @@ or URL, or `""` for the plain dark background. No other code involved.
 
 Use the schema in this file as authority; do **not** reuse older prompts that mention Stealth, the pre-Phase-K Frenzy behavior, the old Ability-only-activated model, or a singular `race` field. A compact current prompt:
 
-> Generate browser-card-game cards as a JSON array matching `CARDS.md`. Every card needs unique kebab-case `id`, `name`, `archetype`, `cost`, `rarity`; optional `text`, `art`, `element`, `faction`, `races` (array, usually one entry). Hero: `class` (`fighter|mage|rogue`, required), `attack`, `hp`, optional `passive`, `heroPower`, `signature`, `allegiance`, `ruleBreaks`. Creature: `attack`, `hp`, `keywords`, `triggers`, optional `creatureType` (1-2 live values, including `rogue`), `spaceCost`, and matching keyword payloads (`flankBonus`, `formationBonus`, `bloodiedBonus`, `frenzyBonus`, `enrageBonus`, `deadeyeBonus`, `crowdPleaserBonus`, `duel`, `resistantAmount`). Building: `hp`, `triggers`, optional aura `passive`, activated `ability` (which may have lifetime `charges`), or `spellAmplify`. Spell: `spellForm` = `instant|ritual|charged`; Ability: `abilityForm` = `instant|activated`. Instant has only play `cost`; slotted forms also use `activateCost` and `charges`. Equipment: `category`, `attackBonus`, `damageReduction`, optional `keywords`, `charges`. Current keywords include ranged, reach, infiltrate, charge, warcry, taunt, counter, revenge, frenzy, enrage, immune, poison, bleed, burn, frostArmor, resistant, deadeye, doubleStrike, duel, crowdPleaser, massive, protector, flank, formation, advance, push, vanish, ward, cleave, drain, bloodied, summon, armiger. Current status types are poison, bleed, burn, freeze. Current effects include damage, heal, applyStatus, buff, drawCard, gainGuard, gainCap, gainIncome, drawCreature, devour, multi, summonCreature, consume, transform, garrison. Use only target values and enum values documented above; anything unsupported is skipped by validation. Do not invent a world `faction` tag merely because a card belongs to a named culture/company; leave mechanical Faction omitted for Neutral cards unless Allegiance actually needs it.
+> Generate browser-card-game cards as a JSON array matching `CARDS.md`. Every card needs unique kebab-case `id`, `name`, `archetype`, `cost`, `rarity`; optional `text`, `art`, `element`, `faction`, `races` (array, usually one entry). Hero: `class` (`fighter|mage|rogue`, required), `attack`, `hp`, optional `passive`, `heroPower`, `signature`, `ruleBreaks`. Creature: `attack`, `hp`, `keywords`, `triggers`, optional `creatureType` (1-2 live values, including `rogue`), `spaceCost`, and matching keyword payloads (`flankBonus`, `formationBonus`, `bloodiedBonus`, `frenzyBonus`, `enrageBonus`, `deadeyeBonus`, `crowdPleaserBonus`, `duel`, `resistantAmount`). Building: `hp`, `triggers`, optional aura `passive`, activated `ability` (which may have lifetime `charges`), or `spellAmplify`. Spell: `spellForm` = `instant|ritual|charged`; Ability: `abilityForm` = `instant|activated`. Instant has only play `cost`; slotted forms also use `activateCost` and `charges`. Equipment: `category`, `attackBonus`, `damageReduction`, optional `keywords`, `charges`. Current keywords include ranged, reach, infiltrate, charge, warcry, taunt, counter, revenge, frenzy, enrage, immune, poison, bleed, burn, frostArmor, resistant, deadeye, doubleStrike, duel, crowdPleaser, massive, protector, flank, formation, advance, push, vanish, ward, cleave, drain, bloodied, summon, armiger. Current status types are poison, bleed, burn, freeze. Current effects include damage, heal, applyStatus, buff, drawCard, gainGuard, gainCap, gainIncome, drawCreature, devour, multi, summonCreature, consume, transform, garrison. Use only target values and enum values documented above; anything unsupported is skipped by validation. Do not invent a world `faction` tag merely because a card belongs to a named culture/company; Faction is a flavor/synergy tag only (never a deckbuilding restriction) — leave it omitted for Neutral cards unless a real card mechanic needs it.
 
 For designs requiring mechanics not currently represented by the schema (especially temporary “this turn/until next turn” modifiers, top-N choose/reorder, Mark/Grudge/Trap/Counterspell windows, temporary control, silence/rules copying), return the card as a **design proposal** and explicitly label the missing engine primitive instead of fabricating JSON that looks valid but cannot work.

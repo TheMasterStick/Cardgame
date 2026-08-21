@@ -531,6 +531,31 @@ to fill that slot, so a Revenge effect must use an AOE target
 was designed around this from the start; Totem-Flesh Colossus's
 Revenge already used the AOE shape for the same reason.
 
+**Phase O reverses Allegiance (§10) from a deckbuilding gate into pure
+flavor/synergy**, per explicit user direction: Heroes are meant to be
+collectible (pack/mission/event-pulled), not a fixed roster everyone
+freely picks from, so a Faction's cards can't be gated behind owning
+that Faction's specific Hero — a "Roseguard Deck" needs to be playable
+without Queen Maerwyn. `HeroCardDefinition.allegiance` and
+`customDeck.ts`'s `isCardAllowedForHero`/`deckAllegianceViolations`
+were deleted outright (no shipped Hero ever used the `allegiance`
+grant), and the Deck Builder's Faction-mismatch warnings/save-blocking
+were removed with them. Every existing Faction Hero (Archivist, Queen
+Maerwyn, Matron Shara Earthsong) already expresses Faction synergy the
+right way for this model — an `auraBuff` Passive filtered to their own
+Faction, a bonus for fielding it, never a requirement to — so no card
+content needed to change, only the restriction layer came out. See
+§10 for the full rewrite. A follow-up Hero redesign is planned next but
+not yet built: a fixed Hero Power stays exactly as-is (unchanged,
+DESIGN.md §9), but the single `passive` field is replaced by three
+named **Specializations** — flavorful doctrine choices (not literally
+labeled "offensive/defensive/support"), one chosen per match rather
+than baked into the card, chosen simultaneously/hidden against the
+opponent's own pick (a prediction/bluff layer once the opposing Hero is
+known but not their deck, hand, or in-progress choice) and revealed
+before the mulligan. See the §19 priorities list for the full spec and
+open questions.
+
 CARDS.md/BACKEND.md describe what's live today; check them (not just
 this doc) for current schema.
 
@@ -548,16 +573,16 @@ account/admin backend, see `BACKEND.md`.
 
 | Archetype | Zone when played | Summary |
 |---|---|---|
-| **Hero** | The Hero slot | Chosen before a match, not played from hand. Carries a broad Hero **Class fantasy** (Fighter/Mage/Rogue), plus Faction/Allegiance, Health, Attack, Passive, Hero Power and optionally a Signature Ability. See §9. |
+| **Hero** | The Hero slot | Chosen before a match, not played from hand. Carries a broad Hero **Class fantasy** (Fighter/Mage/Rogue), plus an optional Faction (flavor/synergy tag only — never a deckbuilding restriction, §10), Health, Attack, Passive, Hero Power and optionally a Signature Ability. See §9. |
 | **Creature** | Vanguard (5) or Support (5) | Has HP + Attack. May carry Keywords, triggers and one or two `creatureType` combat-role tags. Normally occupies 1 space; Massive creatures occupy more (§5). |
 | **Building** | Buildings row (5, one per column) | Has Durability (HP). May have a passive, activated ability, trigger, or card-specific field such as Spell Amplify. See §11. |
 | **Spell** | Instant: none. Ritual/Charged: one of 4 Spell/Ability slots | Three forms — Instant, Ritual, Charged — see §1a. Always costs **Mana** at every Spell-stage activation. |
 | **Ability** | Instant: none. Activated: one of 4 Spell/Ability slots | Mirrors the Spell split at a simpler level: Instant resolves from hand; Activated occupies a shared slot and can be unlimited or charged. Always costs **Energy**. |
 | **Equipment** | One of 4 Equipment slots | Player-owned inventory. Enters Unassigned, then can be assigned to the Hero or an Armiger for 1 Energy. Playing the card itself costs **Resources**. See §12. |
 
-Every card can optionally carry an **Element** and a mechanical **Faction/Allegiance**. Hero/Creature cards also carry a **Race** in the live schema. `creatureType` is separate: it describes battlefield/combat role rather than species or political identity.
+Every card can optionally carry an **Element** and a **Faction** (a flavor/synergy tag, never a deckbuilding restriction — §10). Hero/Creature cards also carry a **Race** in the live schema. `creatureType` is separate: it describes battlefield/combat role rather than species or political identity.
 
-**Taxonomy rule:** gameplay Faction/Allegiance is not the same thing as a world culture, country, house, mercenary company, or order. Names such as Cimbar, Lorthaine, Gestmane or Golden Company should not automatically become engine Factions merely because they recur in lore.
+**Taxonomy rule:** gameplay Faction is not the same thing as a world culture, country, house, mercenary company, or order. Names such as Cimbar, Lorthaine, Gestmane or Golden Company should not automatically become engine Factions merely because they recur in lore.
 
 ### 1a. Spell and Ability forms
 
@@ -818,7 +843,7 @@ These are deliberately different systems:
 Exact live enum lists are maintained in `CARDS.md`/`src/data/taxonomy.ts`.
 
 - **Element** — magical affinity/school; descriptive unless a card keys off it.
-- **Faction** — a **mechanical Allegiance/deckbuilding** tag. It should be used when a Hero/deck restriction genuinely needs it.
+- **Faction** — a **flavor/synergy tag** (rewritten in Phase O — never a deckbuilding restriction, §10). Use it when a Hero Passive or other card mechanic genuinely wants to key off Faction membership.
 - **Race** — species/type tag on Hero/Creature cards; the fantasy race pool is already intentionally established for future content.
 - **CreatureType** — combat-role tag(s), used by mechanics such as Formation.
 - **World culture / state / house / organization** — lore identity, documented separately in `WORLD.md`; not automatically an engine Faction.
@@ -831,12 +856,12 @@ A Hero card carries:
 
 | Field | Notes |
 |---|---|
-| Faction | Drives Allegiance (§10). A Faction-less Hero has no Allegiance restriction at all. |
-| Class | `class: "fighter" \| "mage" \| "rogue"` (required, Phase L) — broad **class fantasy** for the player's chosen main character, not a strict deck lockout and not the same taxonomy as a CreatureType. Fighter leans toward direct pressure/combat, Mage toward Spell/supernatural synergy, Rogue toward precision/indirect play; any class may still use the wider card pool allowed by Allegiance. Purely descriptive today — no mechanic keys off it yet, same as Race/Element. |
+| Faction | A flavor/synergy tag only (§10, rewritten Phase O) — never restricts what a deck can contain. Typically referenced by the Hero's own Passive (`auraBuff` filtered to that Faction) as a bonus for fielding it, never a requirement. |
+| Class | `class: "fighter" \| "mage" \| "rogue"` (required, Phase L) — broad **class fantasy** for the player's chosen main character, not a strict deck lockout and not the same taxonomy as a CreatureType. Fighter leans toward direct pressure/combat, Mage toward Spell/supernatural synergy, Rogue toward precision/indirect play. Purely descriptive today — no mechanic keys off it yet, same as Race/Element. |
 | Health, Attack | Attack only matters once Equipment is assigned (unchanged from v1) — but a Hero's own base Attack should now be **low or 0**, since a Weapon's `attackBonus` is meant to be the primary source of a Hero's Attack, not a bonus layered on top of an already-large base. **Open default / known exception:** the three original starter Heroes (Fighter 10, Mage 20, Rogue 15 base Attack) predate this convention and haven't been retconned — they still hit hard the moment *any* Equipment is assigned, weapon or not. Revisit those three numbers whenever they're touched again; every faction Hero authored from here on should follow the low/0-base convention. |
-| Passive | An always-on effect. **Open default:** built from a small curated set of templates (aura buff to a matching Faction/Race/Class, a first-spell-cheaper-per-turn discount, an on-reveal-enemy-card effect, etc.) rather than a free-form scripting language — matches how `CardEffect` is already a fixed set of `kind`s, not arbitrary code. The template set grows as new Heroes need new patterns. |
-| Hero Power | An activated effect using the same `CardEffect` shape as a Spell/Ability, Energy-costed, usable **once per turn** (not charge-based). |
-| Signature Ability *(optional)* | Same shape as Hero Power, but a stronger effect gated to a small number of uses **per match** (e.g. 1) instead of per turn. |
+| Passive | An always-on effect. **Open default:** built from a small curated set of templates (aura buff to a matching Faction/Race/Class, a first-spell-cheaper-per-turn discount, an on-reveal-enemy-card effect, etc.) rather than a free-form scripting language — matches how `CardEffect` is already a fixed set of `kind`s, not arbitrary code. The template set grows as new Heroes need new patterns. **Planned, not live (§19 Phase P):** this single field is slated to become three named Specializations built from the same templates, one chosen per match. |
+| Hero Power | An activated effect using the same `CardEffect` shape as a Spell/Ability, Energy-costed, usable **once per turn** (not charge-based). Stays fixed/unchanged by the planned Specialization redesign above — it's the Hero's one permanent active identity regardless of which Specialization is chosen. |
+| Signature Ability *(optional)* | Same shape as Hero Power, but a stronger effect gated to a small number of uses **per match** (e.g. 1) instead of per turn. Not assumed for every future Hero (§19 Phase P) — kept as-is on Heroes that already have one. |
 | Rule-Breaks *(optional, Legendary-tier)* | A curated menu of numeric deltas a Hero can carry: extra Spell slots, extra Building slots, Vanguard/Support slot count changes, starting Guard delta, max Energy/Mana/Resources cap delta. **Open default:** only numeric-delta modifiers are supported at first; a fully bespoke rule-break (e.g. "Harpies may overfill Support by forming Flocks") is one-off card-specific code, done when that specific card is actually built, not a general system. **Implementation status:** live and engine-tested — `HeroCardDefinition.ruleBreaks` is applied once at match start. `grand-marshal` (Legendary, +1 Vanguard/+1 Support slot) is the first shipped Hero to exercise it. |
 
 **Example Signature Ability — Raise Dead** (a Necromancer-archetype
@@ -854,34 +879,46 @@ Signature existing at all.
 
 ---
 
-## 10. Allegiance & faction deckbuilding
+## 10. Faction & deckbuilding (rewritten in Phase O — no longer a gate)
 
-- A deck's **primary Faction** is set by its Hero.
-- A deck may contain: any card whose Faction matches the Hero's
-  Faction, plus any **Neutral** card (Faction field simply omitted —
-  no separate "neutral" enum value needed, matches the existing
-  optional `faction` field). Neutral cards never break Allegiance for
-  any Hero, by construction.
-- A Faction-less Hero (no Faction set) has **no restriction** —
-  functions like today's fully-open deckbuilding.
-- Some Heroes explicitly bend this, via an optional `allegiance` grant
-  on the Hero card:
-  - `extraFactions`: additional Factions allowed alongside the Hero's
-    own (a Diplomat/Cultist-style Hero).
-  - `neutralRaces`: creatures of a listed Race count as in-Faction
-    regardless of their own Faction tag (a Beastmaster + Beast, a
-    Packmaster + Wolves).
-  - `unrestricted`: no Faction restriction at all despite having a
-    Faction (a Mercenary Captain).
-- A Hero's own Passive can *also* react to how pure the deck's
-  Allegiance is (e.g. "+1 Health to Faction creatures if ≥80% of your
-  non-Neutral deck matches your Faction") or invert it entirely (a
-  Temptress: "-1 Attack to your own Faction, +2 Attack to everyone
-  else's Faction while under your control") — these are just Passive
-  templates (§9), not a separate system.
+**Faction never restricts deckbuilding.** Any card is legal in any
+deck regardless of the chosen Hero's own Faction — a `roseguard-kingdom`
+card is exactly as playable under Fighter, Grand Marshal, or Matron
+Shara Earthsong as it is under Queen Maerwyn. This replaces the
+original "Allegiance" design (Hero's Faction + Neutral only, with
+`extraFactions`/`neutralRaces`/`unrestricted` grants to bend it) that
+shipped in Phase C/J — that gate is gone outright, not loosened; the
+`allegiance` Hero field and `isCardAllowedForHero`/
+`deckAllegianceViolations` were removed rather than kept as unused
+scaffolding.
 
-The Deck Builder enforces Allegiance at save/validate time; an invalid
-deck can't be taken into a match.
+The reasoning is a shift in what a Hero *is*: Heroes are meant to be
+collectible like any other card — pulled from packs, earned from
+missions/events — not a fixed menu everyone always has full access to.
+If picking a Faction's own Hero were also the only way to legally play
+that Faction's cards, a player without the Roseguard Kingdom Hero
+couldn't build a Roseguard-flavored deck at all. Instead:
+
+- **Faction is a flavor/synergy tag**, same standing as Element or
+  Race — mechanically inert on a plain card unless something
+  specifically keys off it.
+- A **"Faction deck"** (e.g. a Roseguard Kingdom-leaning build) is
+  fully playable with *any* Hero, own-Faction or not.
+- That Faction's **own Hero adds a bonus on top**, not a requirement:
+  Queen Maerwyn's Passive (`auraBuff` filtered to `roseguard-kingdom`)
+  only pays off *if* the player actually fields Roseguard creatures —
+  she doesn't need them to be legal, she rewards choosing to run them.
+  Every Faction Hero shipped so far (Archivist, Queen Maerwyn, Matron
+  Shara Earthsong) already follows this shape, so no card content
+  needed to change.
+- Nothing stops a future Hero Passive from flipping this around —
+  rewarding *foreign* troops instead of the Hero's own Faction (e.g.
+  "creatures without your Faction gain +1 Attack while you lead them"),
+  which reads naturally as just another `auraBuff`-style template, not
+  a new system.
+
+The Deck Builder no longer validates or blocks on Faction at all — the
+only remaining save/play gate is the 30-card size check (`DECK_SIZE`).
 
 ---
 
@@ -1055,6 +1092,7 @@ Suggested build order, each phase individually shippable/testable:
 | **L — Taxonomy migrations (ROADMAP.md #5/#6)** ✅ *(live)* | `race?: Race` became `races?: Race[]` everywhere (types.ts, the 8 cards that had one, the `auraBuff`/`neutralRaces` array-membership matching, CardView's Hero meta line, the Admin Panel's checkbox multi-select, the Supabase schema — `race` moved from a dedicated column into `data` jsonb like every other array field, migration `0004_multi_race.sql`). New required `class: HeroClass` field on every Hero (`"fighter" \| "mage" \| "rogue"`), purely descriptive today; new `rogue` CreatureType, retagged onto `assassin`/`shadow-infiltrator` in place of the generic `fighter` tag. Fixed a genuine pre-existing bug along the way: `validateCard` never actually included `element`/`faction`/`race` in its returned object, so an Admin-Panel-set Element/Faction/Race silently vanished on the next `fetchRemoteCards()` — fixed for both the Supabase and `customCards.json` paths. See the implementation-status note above for the full writeup. |
 | **M — Temporary-modifier primitive (ROADMAP.md #7)** ✅ *(live)* | `buff` gained an optional `duration?: number` — omit for the original permanent buff, give it a number and it becomes temporary instead: pushed onto a new `CardInstance.temporaryModifiers` array, summed live into Attack/effective-max-HP, never touching the permanent `attackDelta`/`hpDelta`. Ticks down at the end of *every* turn — both players', not just the bearer's own controller's — deliberately different timing from Poison/Bleed/Burn/Freeze's per-owner-turn-end tick, so `duration: 1` ("this turn") is symmetric for a self-buff and a hostile debuff alike. New Neutral bonus Spell `battle-fury` demonstrates it. Fixed an unrelated pre-existing bug found along the way: `loadCustomCards.ts`'s `VALID_RARITIES` never included `"uncommon"` despite it being a live `Rarity` value since Phase 0. See the implementation-status note above for the full writeup. |
 | **N — First archetype mini-sets (ROADMAP.md #10)** ✅ *(live)* | Roseguard Kingdom (FACTIONS.md §1, Human) and Wildheart Tribes (FACTIONS.md §7, Orc) converted into real cards under the previously-empty `roseguard-kingdom`/`wildheart-tribes` Factions — 10 cards each (a Legendary Hero + 9 supporting cards) plus a 30-card starter deck each, pure content with no engine changes. See the implementation-status note above for the conversion notes and the `onDeath`-trigger-target constraint it surfaced. |
+| **O — Allegiance reversed to pure synergy (§10)** ✅ *(live)* | Faction no longer restricts deckbuilding at all — any card is legal in any deck regardless of Hero. `HeroCardDefinition.allegiance` and `customDeck.ts`'s Allegiance-gate functions were deleted, along with the Deck Builder's Faction-mismatch warnings. A Faction's own Hero still grants a bonus for fielding that Faction (unchanged `auraBuff` Passives on Archivist/Queen Maerwyn/Matron Shara Earthsong), just never a requirement. See the implementation-status note above and the rewritten §10. |
 
 Each phase gets the same verification pass as prior work: `tsc
 --noEmit`, `eslint`, `vitest`, `vite build`, plus a Playwright smoke
@@ -1064,15 +1102,54 @@ pass against the dev server before it's called done.
 
 ## 18. Card collection, packs, and custom decks
 
-Unchanged from v1 in spirit — Collection/Coins/Packs/Deck Builder — with
-one addition: the Deck Builder now validates Allegiance (§10) against
-the chosen Hero before a deck can be saved/played. Rarity, pack odds,
-card art normalization (512×776), and the admin panel are all
-otherwise unaffected by this rework and stay as documented in
+Unchanged from v1 in spirit — Collection/Coins/Packs/Deck Builder. The
+Deck Builder's only save/play gate is deck size (`DECK_SIZE`) — it does
+not validate Faction against the chosen Hero at all (§10, rewritten in
+Phase O). Rarity, pack odds, card art normalization (512×776), and the
+admin panel are all otherwise unaffected and stay as documented in
 `CARDS.md`/`BACKEND.md`.
 
 ## 19. Next rules-layer priorities (planned, not live)
 
+0. **Hero Specializations — planned, not live (Phase P).** A direct
+   follow-up to Phase O's Allegiance rewrite, specified by the user in
+   detail:
+   - **Hero Power stays exactly as-is** — one fixed, always-on active
+     ability per Hero (§9), unaffected by anything below. It already
+     functions as the Hero's signature identity; a future Hero doesn't
+     need to also define a separate `signature` just because earlier
+     Heroes did (existing `signature` code/data is **not** being
+     removed — Archivist keeps hers — this is only guidance for new
+     Hero design going forward).
+   - The single `passive?: PassiveEffect` field is replaced by three
+     **Specializations** per Hero: named, flavorful doctrine choices
+     (a Hero-specific name, not a literal "Offensive/Defensive/
+     Support" label) built from the same curated `PassiveEffect`
+     template set (§9) — no new mechanical shape, just three named
+     instances of what one `passive` already was.
+   - **Chosen once per match, not once at deck-build time** — a player
+     brings a Hero with all three available and picks one after seeing
+     the opponent's Hero (so match-up reads are possible) but *before*
+     seeing the opponent's deck, hand, or in-progress choice.
+   - **Selection is simultaneous/hidden**, not a visible counter-pick —
+     this is a real design requirement (prediction/bluffing), not just
+     flavor. Against the heuristic AI (the only opponent today besides
+     local hot-seat), the AI's pick needs to be decided independently
+     of the player's in-progress choice, then both reveal together.
+     True hidden selection in local two-human hot-seat (pass-the-device)
+     isn't solved by this — same open gap as the rest of hot-seat mode.
+   - **Recommended (not finalized) reveal timing:** both picks reveal
+     immediately after both players lock in, before the opening-hand
+     mulligan — preserves the prediction game without hiding a passive
+     that's already influencing the board once the match is underway.
+   - Every existing Hero (Fighter/Mage/Rogue/Grand Marshal/Archivist/
+     Queen Maerwyn/Matron Shara Earthsong) needs three Specializations
+     authored, not just the Faction Heroes — Fighter/Mage/Rogue/Grand
+     Marshal stay available as always-unlocked starter Heroes so a new
+     player can always build and play a deck (Heroes overall are meant
+     to be collectible — pack/mission/event-pulled — not a fixed
+     everyone-picks-from-day-one roster; that's a content/economy point
+     for `packs.ts`/rewards, not an engine gate).
 1. ~~Temporary modifiers/durations — a generic way to express "this turn", "until your next turn", or N-turn buffs/debuffs.~~ **Done (Phase M)** — `buff`'s `duration` field, see CARDS.md's Effects table. `FACTIONS.md` conversion can now use it for any card whose text is a straight temporary Attack/HP change; a "look/choose/reorder" or Mark/Grudge/Trap-style card still needs items #2/#4 below.
 2. **Deck inspection / choose / reorder** — enough interaction for top-N look, choose one, reorder/bottom the rest. This would replace Bulletin Board's current approximation and unlock many faction drafts.
 3. ~~Taxonomy migration — explicit Hero `class`; `rogue` CreatureType; multi-race representation.~~ **Done (Phase L).**
