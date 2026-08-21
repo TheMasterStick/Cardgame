@@ -175,15 +175,18 @@ coin balance.
   the `cards` table). Clicking one opens it in the same form used to
   create new cards, pre-filled.
 - **Create a new card:** pick an archetype (Hero/Creature/Building/
-  Spell/Ability/Equipment), fill in the fields for that archetype
-  (mirrors CARDS.md exactly), optionally set Element/Faction/Race,
-  toggle keywords, and optionally add one trigger+effect (creatures/
-  buildings) or one activated effect (spells/abilities). A live card
-  preview updates as you type.
-- **Upload art:** pick any image file — it's resized in-browser to
-  512×776 (cover-fit crop, so it's never stretched) before upload, so
-  source images of any size or aspect ratio work. See CARDS.md "Adding
-  images" for the exact behavior.
+  Spell/Ability/Equipment) and fill the fields exposed by the current
+  Admin form. **The form does not yet expose every Phase-K field in
+  CARDS.md**: in particular it is still simplified around trigger arrays
+  and newer bespoke payloads. Treat `CARDS.md` as the schema authority;
+  use JSON/TypeScript for a card the Admin form cannot represent without
+  loss.
+- **Upload art:** the current browser uploader resizes to 512×776 using
+  cover-fit cropping. That was safe when the upload was only artwork, but
+  Phase K now treats non-Hero art as the **entire printed card face**. Use
+  a source already matching the target aspect ratio so name/rules/stats
+  are never cropped. Planned improvement: reject/contain mismatched full
+  card faces instead of silently cover-cropping them.
 - **Save:** upserts the card into the `cards` table by `id`. Existing
   built-in cards can be overwritten this way (editing "Fighter" from
   the panel replaces the built-in Fighter for every player) — that's
@@ -195,9 +198,19 @@ shared card registry, so no rebuild or redeploy is needed to see admin
 changes go live — just a page refresh for players who already had the
 app open.
 
+**Important with baked card faces:** changing cost, stats, rarity, name or
+rules in the database changes the live mechanics immediately, but it does
+not rewrite text baked into the uploaded card image. Until the admin tool
+can detect this, an edited mechanic should be accompanied by a matching
+updated full-card image or the card face can visibly disagree with the
+engine.
+
 ## What's not built yet
 
 - Deck sync to the account (see §5).
+- Full Phase-K schema coverage in the Admin authoring form.
+- Safe aspect-ratio handling for baked full-card-face uploads (no silent crop).
+- A warning/validation check when database mechanics no longer match text baked into an existing card image.
 
 I can't verify any of the Supabase-backed behavior myself (same network
 block as always), so if collection/coin sync — or the Admin Panel

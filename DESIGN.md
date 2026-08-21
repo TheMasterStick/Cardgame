@@ -6,6 +6,8 @@ spell/ability "items", building-driven economy), and the **Pokemon
 TCG** (simple status conditions instead of a full elemental chart).
 This document is the single source of truth for the target ruleset.
 
+> **Documentation cleanup (post-Phase K):** the detailed rules sections below have been reconciled to the Phase K implementation notes. `CARDS.md` remains the exact authoring/schema reference. Items explicitly marked **Planned** are not live engine behavior yet.
+
 **Implementation status:** this is a v2 architecture, landing in
 phases (see §17). **Phase A is live**: the Vanguard/Support/Buildings
 board (§4), the Energy/Mana/Resources-by-archetype cost split (§2),
@@ -421,38 +423,29 @@ account/admin backend, see `BACKEND.md`.
 
 | Archetype | Zone when played | Summary |
 |---|---|---|
-| **Hero** | The Hero slot | Chosen before a match, not played from hand. Faction + Class (Fighter/Mage/Rogue) + Health + Attack + a Passive + a Hero Power, optionally a Signature Ability. See §9. |
-| **Creature** | Vanguard (5) or Support (5) | Has HP + Attack. May carry an innate trigger and any Keywords from §7. Normally occupies 1 space; **Massive** creatures occupy more (§5). |
-| **Building** | Buildings row (5, one per column) | Has Durability (HP). Passive and/or activated ability, plus an optional On Construction trigger (fires like Warcry). See §11. |
-| **Spell** | Instant: none. Ritual/Charged: one of 4 Spell/Ability slots | Three forms — Instant, Ritual, Charged — see §1a. Always costs **Mana**, at every stage. |
-| **Ability** | One of the same 4 Spell/Ability slots | Occupies a slot like a Ritual/Charged Spell (unlimited or numbered charges). Always costs **Energy**, at every stage. |
-| **Equipment** | One of 4 Equipment slots (a player-owned zone, not Hero-only) | Gear that can be assigned to any eligible creature or the Hero — see §12. Always costs **Resources**. |
+| **Hero** | The Hero slot | Chosen before a match, not played from hand. Carries a broad Hero **Class fantasy** (Fighter/Mage/Rogue), plus Faction/Allegiance, Health, Attack, Passive, Hero Power and optionally a Signature Ability. See §9. |
+| **Creature** | Vanguard (5) or Support (5) | Has HP + Attack. May carry Keywords, triggers and one or two `creatureType` combat-role tags. Normally occupies 1 space; Massive creatures occupy more (§5). |
+| **Building** | Buildings row (5, one per column) | Has Durability (HP). May have a passive, activated ability, trigger, or card-specific field such as Spell Amplify. See §11. |
+| **Spell** | Instant: none. Ritual/Charged: one of 4 Spell/Ability slots | Three forms — Instant, Ritual, Charged — see §1a. Always costs **Mana** at every Spell-stage activation. |
+| **Ability** | Instant: none. Activated: one of 4 Spell/Ability slots | Mirrors the Spell split at a simpler level: Instant resolves from hand; Activated occupies a shared slot and can be unlimited or charged. Always costs **Energy**. |
+| **Equipment** | One of 4 Equipment slots | Player-owned inventory. Enters Unassigned, then can be assigned to the Hero or an Armiger for 1 Energy. Playing the card itself costs **Resources**. See §12. |
 
-Every card can optionally carry an **Element**, a **Faction**, and —
-for Hero/Creature cards — a **Race**. Faction additionally *does*
-gate deck-building now, via Allegiance (§10); Element/Race remain pure
-tags with no built-in rule of their own, available for a card's own
-effect text to reference. Full option lists are in §8.
+Every card can optionally carry an **Element** and a mechanical **Faction/Allegiance**. Hero/Creature cards also carry a **Race** in the live schema. `creatureType` is separate: it describes battlefield/combat role rather than species or political identity.
 
-### 1a. Spell forms
+**Taxonomy rule:** gameplay Faction/Allegiance is not the same thing as a world culture, country, house, mercenary company, or order. Names such as Cimbar, Lorthaine, Gestmane or Golden Company should not automatically become engine Factions merely because they recur in lore.
 
-- **Instant** — doesn't occupy a slot. Cast straight from hand for its
-  Mana `cost`; effect resolves immediately; goes straight to the
-  Graveyard. (Fireball, Healing Light, Counterspell, Assassinate.)
-- **Ritual** — occupies one of the 4 Spell/Ability slots. Mana `cost`
-  to play it into the slot; then has an activated effect with its own
-  Mana `activateCost` and **unlimited** charges. Stays until destroyed
-  or voluntarily **Dismissed** (a free action, straight to Graveyard).
-  (Blizzard, Demonic Pact, Sacred Ground.)
-- **Charged** — occupies a slot exactly like Ritual, but is printed
-  with a fixed charge count. Each activation spends `activateCost`
-  Mana **and** 1 charge; at 0 charges it **Fizzles** into the
-  Graveyard. (A 3-charge Chain Lightning.)
+### 1a. Spell and Ability forms
 
-Abilities only come in the Ritual/Charged shape (no Instant form) —
-same slot pool, same charge rules, Energy instead of Mana throughout.
+**Spells**
+- **Instant** — cast straight from hand for Mana `cost`; resolves immediately; never occupies a slot; goes to **Discard**.
+- **Ritual** — pay Mana `cost` to place it in a Spell/Ability slot, then pay Mana `activateCost` per activation. Normally uses `charges: "unlimited"`; voluntarily dismissing it sends it to **Discard**.
+- **Charged** — same placement/activation flow as Ritual, but with a fixed charge count; auto-discards when charges reach 0.
 
----
+**Abilities**
+- **Instant** — resolves straight from hand for Energy `cost`; no slot, no `activateCost`, no charges; goes to **Discard**.
+- **Activated** — occupies a Spell/Ability slot; Energy `cost` places it and Energy `activateCost` uses it. `charges` may be a number or `"unlimited"`.
+
+A target-restricted Instant/activation with no legal target is still playable/activatable and simply fizzles unless a specific card says otherwise.
 
 ## 2. Resources: three pools, one job each
 
@@ -480,16 +473,11 @@ it leans on.
 
 Every creature (and the Hero) has a Ready/Exhausted state:
 
-- Enters play **Exhausted**, unless it has **Charge** (enters Ready).
-- **Readies** automatically at the start of its controller's turn.
-- **Attacking Exhausts** it. So does **Advancing** (§5). A creature can
-  do at most one of {attack, Advance} per turn.
-- Attacks are **not** paid for out of Energy — a full board of
-  attackers costs nothing beyond having played them. Energy is spent
-  earlier (deploying, activating, Hero Power), not on the attack
-  itself.
-
----
+- Creatures enter play **Exhausted**, unless they have **Charge**.
+- At the **start of their controller's turn**, creatures and the Hero Ready and per-turn attack/use counters reset.
+- **Attacking Exhausts** a creature/Hero once its permitted attacks are spent. Double Strike tracks two attacks internally before becoming fully exhausted.
+- **Advance** uses the same readiness/freeze/summoning-sickness gate as attacking and exhausts the creature.
+- Attacks are not paid for with Energy; Energy pays for deployment, Ability/Hero-Power activations, Equipment assignment and tactical actions such as Advance/Duel where printed.
 
 ## 4. The board
 
@@ -654,44 +642,63 @@ label maps in `src/data/taxonomy.ts`) — one mechanic underneath.
 
 ## 7. Keywords
 
-Kept deliberately small — a universal pool, with factions layering
-their own on top (§9/§10 give Heroes the hook; a full faction keyword
-list is future faction-design work, not required for the v2 engine
-rebuild itself).
+The universal keyword pool is intentionally reusable. `CARDS.md` is the exact schema reference; this section is the rules-level summary.
 
-| Keyword | Effect |
+| Keyword | Rules identity |
 |---|---|
-| **Taunt** | See §5. |
-| **Warcry** | *(renamed from Battlecry.)* Label for a card with an `onPlay` trigger. If the trigger needs an explicit target and there isn't a legal one on the board (e.g. "deal 1 damage to an enemy creature" with no enemy creature out), the card is still fully playable — the Warcry just fizzles, doing nothing, rather than the card becoming unplayable (see §5). |
-| **Revenge** | Label for a card with an `onDeath` trigger. |
-| **Charge** | Enters play Ready instead of Exhausted (§3). |
-| **Ranged** | See §5. |
-| **Reach** | See §5. |
-| **Infiltrate** | See §5. |
-| **Protector** | See §5. *(Deliberately not called "Guard" — that name is reserved for the player's damage-shield pool in §6, and reusing it for a creature keyword was the single most confusing overlap in the original proposal.)* |
-| **Armiger** | May be assigned one piece of Equipment from the zone, same as the Hero — see §12. Without this keyword, a creature can't hold gear at all. |
-| **Stealth** | Cannot be chosen as the target of an enemy attack or a targeted enemy Spell/Ability. **Open default:** still hit by AOE effects (`allEnemyCreatures`) unless a card says otherwise — matches how Immune is scoped. Attacking, or being hit by a "Reveal" effect, removes Stealth permanently for that creature. |
-| **Ward** | Negates the next hostile Spell or Ability that *directly targets* this creature (one-time, then consumed). **Open default:** doesn't stop AOE effects or plain combat damage, same scoping logic as Stealth/Immune. |
-| **Cleave** | On attack, also deals the same damage to enemy creatures in adjacent columns, same row as the primary target. |
-| **Drain** | When this creature deals combat damage, its controller's Hero regains that much Guard (capped at Guard's max — no overflow into Hero HP). |
-| **Frenzy** | Unchanged from v1: taking damage and surviving permanently increases this creature's Attack by the amount taken. |
-| **Immune** | Unchanged from v1: blocks hostile Spell effects from landing on this creature. Abilities and triggers are unaffected. |
-| **Poison** | Unchanged from v1: a tag conventionally paired with an `onAttack` trigger that applies the Poison status (§13) to whatever was hit. |
-| **Summon** | Label for a trigger whose effect creates another specified creature (new `summonCreature` effect kind — needs adding to the effects system; see §17 Phase D). |
-| **Bloodied** | Label for a card whose printed effect only applies below 50% Health. Pair with `bloodiedBonus: { attackDelta: N }` on the card. **Resolved (was Open default):** a continuous live check, same pattern as Flank/Formation — re-evaluated in `getEffectiveCreatureAttack` off `currentHp * 2 <= maxHp`, not a discrete `onBloodied` hook. See `wounded-berserker`. |
+| **Taunt** | Combat targeting gate for the reachable row; see §5. |
+| **Warcry** | Label for an `onPlay` trigger. |
+| **Revenge** | Label for an `onDeath` trigger. |
+| **Counter** | Label for an `onDefend` trigger. |
+| **Charge** | Enters Ready and may attack immediately. |
+| **Ranged** | May attack from Support; may directly target enemy Support; skips retaliation only when attacking a non-Ranged defender. |
+| **Reach** | May directly target enemy Support from Vanguard, but does not itself permit attacking from Support. |
+| **Infiltrate** | May attack Buildings through column protection and bypass Taunt for Hero targeting. |
+| **Protector** | May redirect attacks from a same-row ally; live engine currently applies a survival heuristic automatically. |
+| **Armiger** | Creature may bear one Equipment item. |
+| **Vanish** | Cannot be specifically targeted by enemy attacks or targeted hostile Spell/Ability effects; AOE still hits. Does not break on attack. |
+| **Ward** | Negates the next directly targeted hostile Spell/Ability, then is consumed. |
+| **Cleave** | Creature attack also damages adjacent enemies in the primary target's row. |
+| **Drain** | Combat damage dealt restores that much Guard, capped at max Guard. |
+| **Frenzy** | Pair with `frenzyBonus`; permanently gains the printed Attack amount each time the creature attacks. Cimbar Berserker is the anchor example. |
+| **Enrage** | Pair with `enrageBonus`; live Attack scales with missing HP, so healing reduces it again. |
+| **Bloodied** | Pair with `bloodiedBonus`; live Attack bonus while at/below half HP. |
+| **Resistant** | Flat per-hit damage reduction, additive with Equipment reduction. |
+| **Deadeye** | Attack-instance bonus when attacking a target in enemy Support. |
+| **Double Strike** | Up to two attacks per turn. |
+| **Duel** | Bespoke Energy action: mark one enemy; gain the printed live bonus and may attack that target through the normal row/Taunt ladder while it remains. |
+| **Crowd Pleaser** | Live capped Attack/HP scaling from the number of other creatures on the board. |
+| **Immune** | Blocks hostile Spell-archetype activations from targeting this creature; Abilities/triggers are unaffected. |
+| **Poison / Bleed / Burn** | Labels normally paired with status-applying attack/defend triggers. |
+| **Frost Armor** | Label normally paired with an `onDefend` Freeze trigger. |
+| **Summon** | Label for a trigger that uses `summonCreature`. |
+| **Massive** | Descriptive label; numeric `spaceCost` drives the actual multi-slot behavior. |
+| **Flank** | Pair with `flankBonus`; live bonus in columns 1 or 5. |
+| **Formation** | Pair with `formationBonus`; live bonus when adjacent same-row ally shares at least one `creatureType`. |
+| **Advance** | Support creature may spend 1 Energy to move to same-column Vanguard instead of attacking. |
+| **Push** | Successful attack may push a surviving enemy Vanguard creature into empty same-column Support. |
 
-`spaceCost` (Massive) is a numeric field, not a boolean keyword, since
-it needs a magnitude — see §5.
+### CreatureType vs Hero Class vs Race
 
----
+These are deliberately different systems:
 
-## 8. Elements, Factions, Races
+- **Hero Class** — Fighter / Mage / Rogue. Broad player fantasy and deck direction, not a strict lockout. A Mage can lean harder into Spells; a Fighter can still use Spells; a Rogue hero represents indirect/precision play.
+- **CreatureType** — battlefield/combat role. Examples: Fighter, Defender, Ranger, Mage, Support, Beast/Creature. A Defender generally means high durability/defensive tools; a Fighter generally means more offensive pressure, lower durability and/or offensive keywords. A Spiked Turtle can therefore be Race/Creature `beast` while its combat role is **Defender**.
+- **Race** — what the being is: Human, Dwarf, Elf, Orc, Beast, Angel, etc. Race is not the creature's combat job.
 
-Unchanged from v1 — full lists live in `src/data/taxonomy.ts` and
-`CARDS.md`. The one behavior change: **Faction now gates deck-building**
-via Allegiance (§10). Element and Race remain pure tags.
+**Planned taxonomy cleanup:** add `rogue` as a CreatureType for cards such as Assassin/Shadow Infiltrator when their battlefield role warrants it, and add an explicit Hero `class` field rather than leaving Fighter/Mage/Rogue only as prose/starter-Hero identity.
 
----
+## 8. Elements, Factions, Races, and world identities
+
+Exact live enum lists are maintained in `CARDS.md`/`src/data/taxonomy.ts`.
+
+- **Element** — magical affinity/school; descriptive unless a card keys off it.
+- **Faction** — a **mechanical Allegiance/deckbuilding** tag. It should be used when a Hero/deck restriction genuinely needs it.
+- **Race** — species/type tag on Hero/Creature cards; the fantasy race pool is already intentionally established for future content.
+- **CreatureType** — combat-role tag(s), used by mechanics such as Formation.
+- **World culture / state / house / organization** — lore identity, documented separately in `WORLD.md`; not automatically an engine Faction.
+
+**Planned race-schema improvement:** the live schema currently stores one `race` value. Before multi-racial/dual-nature cards become common, migrate toward `races: Race[]` (or an equivalent primary-race + secondary-tags model). This avoids bespoke text for recurring combinations such as Human + Angel. Until the engine/database migration happens, the singular live field remains authoritative.
 
 ## 9. Hero cards
 
@@ -700,7 +707,7 @@ A Hero card carries:
 | Field | Notes |
 |---|---|
 | Faction | Drives Allegiance (§10). A Faction-less Hero has no Allegiance restriction at all. |
-| Class | Fighter / Mage / Rogue — a deckbuilding *identity*, not a strict profession. Fighter = direct confrontation (knights, barbarians, paladins, monstrous bruisers). Mage = supernatural manipulation (wizards, priests, necromancers, witches). Rogue = indirect warfare (archers, assassins, scouts, spies, duelists) — archers live here, not under Fighter. |
+| Class | Fighter / Mage / Rogue — broad **class fantasy** for the player's chosen main character, not a strict deck lockout and not the same taxonomy as a CreatureType. Fighter leans toward direct pressure/combat, Mage toward Spell/supernatural synergy, Rogue toward precision/indirect play; any class may still use the wider card pool allowed by Allegiance. **Planned:** represent this with an explicit Hero `class` field in the schema. |
 | Health, Attack | Attack only matters once Equipment is assigned (unchanged from v1) — but a Hero's own base Attack should now be **low or 0**, since a Weapon's `attackBonus` is meant to be the primary source of a Hero's Attack, not a bonus layered on top of an already-large base. **Open default / known exception:** the three original starter Heroes (Fighter 10, Mage 20, Rogue 15 base Attack) predate this convention and haven't been retconned — they still hit hard the moment *any* Equipment is assigned, weapon or not. Revisit those three numbers whenever they're touched again; every faction Hero authored from here on should follow the low/0-base convention. |
 | Passive | An always-on effect. **Open default:** built from a small curated set of templates (aura buff to a matching Faction/Race/Class, a first-spell-cheaper-per-turn discount, an on-reveal-enemy-card effect, etc.) rather than a free-form scripting language — matches how `CardEffect` is already a fixed set of `kind`s, not arbitrary code. The template set grows as new Heroes need new patterns. |
 | Hero Power | An activated effect using the same `CardEffect` shape as a Spell/Ability, Energy-costed, usable **once per turn** (not charge-based). |
@@ -837,54 +844,33 @@ creature can hold anything" made it feel less special, not more:
 
 ## 13. Status effects
 
-Unchanged from v1 — intentionally simple, a nod to the Pokemon TCG
-rather than a full elemental chart:
+Statuses tick on the affected player's **turn start** when they carry duration. Current status types:
 
-- **Burn**: fixed damage at end of each of the affected unit's
-  controller's turns, for a fixed number of turns, then expires.
-- **Poison**: same, but persists until cured or the unit dies (no
-  automatic expiry).
+- **Poison** — damage-over-time.
+- **Bleed** — separate damage-over-time; may coexist with Poison/Burn.
+- **Burn** — separate damage-over-time.
+- **Freeze** — control status; blocks attacking and the tactical actions that share the attack/readiness gate (including Advance and Duel activation) while active.
 
-Both can affect creatures, Buildings, or a player's Guard/Hero HP
-depending on the source card.
-
----
+Different status types can coexist. Reapplying the same status type does not stack separate copies; it refreshes amount/duration to the stronger values. Shipped cards normally use explicit durations; an omitted duration can persist indefinitely, though no current shipped card relies on that.
 
 ## 14. Turn structure
 
-1. **Draw phase:** draw 1 card. Refill Energy and Mana to their
-   current caps (Resources does **not** refill — it persists, §2).
-2. **Main phase:** play any cards you can afford, activate any
-   already-slotted Spells/Abilities, use your Hero Power (once), in
-   any order.
-3. **Combat phase:** declare attacks with any Ready, eligible attacker
-   (Vanguard creatures, Ranged Support creatures, an equipped Hero),
-   following §5's reach tiers.
-4. **End phase:** Burn/Poison tick down and deal damage; "end of turn"
-   triggers resolve; all your creatures/Hero **Ready**; turn passes.
+The live implementation resolves turn-start bookkeeping through the shared start-turn flow. At a rules level:
 
----
+1. **Start / Draw:** start-of-turn statuses/triggers resolve; the active player's creatures/Hero Ready and per-turn counters reset; draw 1; Energy and Mana refill to cap; Resources persist and gain their normal income/trickle up to cap.
+2. **Main phase:** play cards, activate slotted Spells/Abilities/Buildings, assign Equipment, use Hero Power, and take legal tactical actions in any allowed order.
+3. **Combat phase:** declare attacks with Ready eligible attackers, following §5.
+4. **End phase:** end-of-turn triggers resolve; turn passes. Readying is a **start-of-turn** operation, not an end-of-turn one.
 
 ## 15. Deck, hand, and card flow
 
-Unchanged from v1, plus Allegiance validation (§10):
+- **Deck size:** exactly 30 cards in the current prototype. There is currently no copy-count restriction.
+- **Piles:** Deck → Hand → **Discard** for one-shot/voluntary Spell/Ability spends and exhausted charged effects; **Graveyard** is reserved for destroyed Creature/Building battlefield objects.
+- **Empty deck:** shuffle Discard into a new Deck. Graveyard is never included in this automatic reshuffle.
+- Individual Hero/Spell/card effects may explicitly retrieve from Graveyard without changing the empty-deck rule.
+- Starting hand 4, one-time mulligan, max hand size 10, second player draws an extra card on turn 1 remain the current defaults.
 
-- **Deck size:** exactly 30 cards, no copy-count restriction.
-- **Piles:** Deck → Hand → Discard (voluntary/one-shot spends) or
-  Graveyard (destroyed creatures/Buildings, Fizzled Charged Spells —
-  permanently gone).
-- **Empty deck:** shuffle Discard back into a new deck. **Graveyard is
-  never part of this reshuffle, full stop, for every Hero** — that
-  part of the rule has no exceptions. No fatigue damage.
-- Separately (and unrelated to the reshuffle above), a Hero or Spell
-  can have its own effect that reaches into the Graveyard and pulls
-  specific cards back into play mid-match — that's a targeted recall
-  effect, not a change to how empty-deck reshuffling works. See §9's
-  Raise Dead example for a Necromancer-archetype Hero.
-- Starting hand 4, one-time mulligan, max hand size 10, second player
-  draws an extra card turn 1 — unchanged Open defaults from v1.
-
----
+**Balance review item, not a live change:** once competitive collection/deckbuilding matters, test a copy limit (for example 3 normal / 1 Legendary) against the current unrestricted model. Do not enforce one until playtesting supports it.
 
 ## 16. Board-space-as-resource (later-phase content layer)
 
@@ -956,3 +942,10 @@ the chosen Hero before a deck can be saved/played. Rarity, pack odds,
 card art normalization (512×776), and the admin panel are all
 otherwise unaffected by this rework and stay as documented in
 `CARDS.md`/`BACKEND.md`.
+
+## 19. Next rules-layer priorities (planned, not live)
+
+1. **Temporary modifiers/durations** — a generic way to express “this turn”, “until your next turn”, or N-turn buffs/debuffs. This is the highest-leverage missing primitive for converting `FACTIONS.md`.
+2. **Deck inspection / choose / reorder** — enough interaction for top-N look, choose one, reorder/bottom the rest. This would replace Bulletin Board's current approximation and unlock many faction drafts.
+3. **Taxonomy migration** — explicit Hero `class`; `rogue` CreatureType; multi-race representation.
+4. **Selective faction mechanics** — Mark/Grudge/Trap/Counter-style systems only when an authored mini-set actually needs them. Prefer bespoke logic for truly one-off cards over a bloated universal scripting layer.

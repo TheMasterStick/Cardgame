@@ -1,28 +1,19 @@
-# Faction Pool — First Playable Draft
+# Gameplay Archetype Pool — First Playable Draft
 
-The first faction-card skeleton before Neutrals: 19 factions, ~10 cards
-each. This is content design, not yet implemented — none of these
-cards exist in `src/data/cards.ts`. It's the reference to work from
-once a faction's cards get authored for real, using the schema in
-`CARDS.md` and the mechanics in `DESIGN.md`.
+This document is the **content/archetype bible** for the first large non-Neutral card pool. The 19 sections below describe deck fantasies, tone, naming language and candidate card packages. They do **not** automatically define literal geopolitical factions in the world. A future WORLD.md entry may map several archetypes onto one political power, or one race/culture may contain several archetypes.
 
-**Notation:** `E`/`M`/`R` = Energy/Mana/Resources cost (DESIGN.md §2).
-Character stats are Attack/Health. Building stats are Durability. All
-numbers are provisional — nothing here is balanced yet.
+The card lists were drafted before the current Phase-K Neutral Core Set and therefore contain **legacy mechanical wording**. Their names, tone and intended play patterns remain useful; their costs/effects must be converted against current `CARDS.md`/`DESIGN.md` before implementation. Do not copy a mechanic from this file into code simply because it is written here.
 
-**Two mechanical rules already live in the engine that these cards are
-written against:**
-- **Ranged never takes retaliation damage when it attacks** (either
-  target). Being Ranged grants no protection on defense — see
-  DESIGN.md §5.
-- **A Hero's own base Attack should be low/0** — the equipped
-  **Weapon** is meant to be the primary source of a Hero's Attack, not
-  a bonus stacked on a large base. (The three original starter Heroes
-  predate this and haven't been retconned — see DESIGN.md §9.)
+**Notation:** `E`/`M`/`R` means Energy/Mana/Resources. Creature/character stats are Attack/Health; Building stats are Durability. Numbers remain balance targets, not authoritative live values.
 
-Every card below now carries a final name and full mechanics — nothing
-pending (Orc Might Tribe runs one card over the usual ~10, at 11, now
-that Pit-Bred Stud has stats).
+**Current mechanical corrections that apply while reading this draft:**
+- Ranged avoids retaliation only when it attacks a **non-Ranged** defender; two Ranged creatures trade normally.
+- **Vanish** is the current keyword name; legacy `Stealth` text below must be converted.
+- **Frenzy** now means permanent Attack gained when the creature attacks (Cimbar Berserker anchor); old damage-survival growth text below needs conversion, usually to Enrage/Bloodied/bespoke logic.
+- Equipment cards are played with **Resources**; 1 Energy is the separate assignment/reassignment action. Legacy `1E/2E Equipment` costs below need conversion.
+- Abilities may now be Instant or Activated; Spells use Instant/Ritual/Charged. Legacy `Ongoing`/Trap wording is conceptual until converted.
+
+**Class/type note:** Hero Fighter/Mage/Rogue is broad class fantasy. Creature roles are separate `creatureType` tags such as Fighter, Defender, Ranger, Mage, Support, Beast/Creature, with Rogue planned as a creature-role addition where appropriate.
 
 ---
 
@@ -772,25 +763,17 @@ Buildings: 2–3R for 5–7 Durability.
 
 ---
 
-## Open items before this becomes a real card set
+## Conversion checklist before an archetype becomes a real card set
 
-Naming and stats are locked for all cards, including Pit-Bred Stud.
-What's left is entirely engine work:
+The creative identities in this file remain valid, but each mini-set should be converted against the Phase-K engine and the authoritative Neutral Core balance. Priority checks:
 
-**New engine concepts these cards assume, not yet built:**
-- Spell forms beyond the current single shape — Instant/Ongoing/Trap/
-  Charged, per DESIGN.md §1a/§17 Phase C. Trap (e.g. Gutline Snare,
-  Tripwire) is specifically an Ongoing that auto-fires on a condition
-  instead of manual activation — needs folding into the Phase C design,
-  not a simple reuse of Ritual.
-- **Mark** and **Grudge** keywords (Assassin Order / Grudge Holds) —
-  clean fits as faction keywords layered on the universal pool
-  (DESIGN.md §7), no core engine change needed once Phase D's keyword
-  work lands.
-- Allegiance mixing (Whispers' "6 non-native characters," Earthbound's
-  "count as Earthbound") — already covered by the `extraFactions`/
-  `neutralRaces` fields speced in DESIGN.md §10, just needs data.
-- Column/row-changing effects ("attack the Support row from Vanguard,"
-  "change rows without Exhausting," "pull into an empty Vanguard
-  space") — these are Phase B territory (Reach/Advance/Push), not
-  buildable against the current Phase A engine yet.
+1. **Temporary effects:** many cards say “this turn”, “next turn” or “until your next turn”. A generic duration/temporary-modifier primitive is planned and should land before those cards are implemented literally.
+2. **Deck look/search/reorder:** several Mage/High-Elf/Rogue concepts need top-N reveal/choose/reorder rather than the current simple draw effects.
+3. **Mark / Grudge / Trap / Counter windows:** implement only when the first real mini-set needs them; keep them faction/archetype-specific rather than bloating the universal keyword pool.
+4. **Legacy keyword conversion:** Stealth → Vanish; old Frenzy wording → current Frenzy/Enrage/Bloodied/bespoke mechanic as appropriate.
+5. **Equipment economy:** convert printed Equipment play costs to Resources; assignment remains 1 Energy.
+6. **Temporary control / rules copying / silence / buff removal:** treat as bespoke or new engine primitives only when an authored card justifies the complexity.
+7. **Creature roles:** review cards currently called Rogue/Fighter/Mage against the live CreatureType philosophy. Assassin and Shadow Infiltrator are obvious future candidates for a planned `rogue` CreatureType. Defender is a tactical role (high durability/defensive tools), not a Race.
+8. **World identity:** do not infer that “Kingdom”, “Mage Order”, “High Elves”, etc. are each one sovereign nation. They are gameplay archetypes until WORLD.md establishes otherwise.
+9. **Balance:** compare against the implemented 59-card Neutral Core, not only the old working curve at the top of this file.
+10. **Art/fan-service identity:** preserve each archetype's established adult grimdark/fan-service vocabulary when converting names and visuals; mechanical cleanup should not sand away the intended tone.

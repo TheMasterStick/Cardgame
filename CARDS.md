@@ -43,6 +43,18 @@ the panel.
 | `faction` | string (optional) | Faction allegiance — see "Factions" below. Drives Allegiance deckbuilding validation on Hero cards; otherwise descriptive unless a card's own effect keys off it. |
 | `race` | string (optional) | Character race/type — see "Races" below. Only meaningful on Creature and Hero cards; mechanically inert unless a card's own effect keys off it. |
 
+## Taxonomy semantics (important)
+
+The card data model separates three ideas:
+
+- **Hero Class** *(planned explicit field)*: Fighter / Mage / Rogue, describing the player's main-character fantasy and synergy direction. It is not a strict profession or universal deck lockout.
+- **CreatureType**: battlefield/combat role. Defender means defensive durability/control; Fighter means offensive pressure; Ranger/Mage/Support/Rogue/Beast/Creature describe other combat identities. Multiple roles may be printed where appropriate.
+- **Race**: what the being actually is. The fantasy race pool below is already an intentional content decision, not an auto-generated placeholder list.
+
+World cultures, countries, houses, companies and orders (Cimbar, Lorthaine, Gestmane, Golden Company, etc.) are **not automatically `faction` values**. Mechanical `faction` exists for Allegiance/deckbuilding; world identities belong in lore unless a real card mechanic needs a tag.
+
+**Planned schema changes, not live yet:** add an explicit Hero `class`; add `rogue` to CreatureType; migrate singular `race` toward multi-race support before dual-nature cards become common.
+
 ## Archetype-specific fields
 
 **Hero** (`archetype: "hero"`) — the card a player picks at the start
@@ -382,25 +394,29 @@ Passive filter. Valid values: `infernal-court`, `roseguard-kingdom`,
 
 ## Races
 
-A character-type tag for Creature and Hero cards. Mechanically inert
-on its own unless a specific card's effect keys off it — but a Hero's
-`allegiance.neutralRaces` or an `auraBuff` Passive can key off it (see
-the Hero fields above). Valid values: `beast`, `demon`, `dragon`,
-`elemental`, `mech`, `human`, `undead`, `goblin`, `dwarf`, `elf`,
-`pixie`, `ogre`, `giant`, `dark-elf`, `angel`, `orc`, `gnome`, `troll`,
-`dryad`, `fairy`, `harpy`, `fiend`, `vampire`.
+A species/type tag for Creature and Hero cards. The fantasy race pool is intentionally selected for the setting and future card content, including the project's adult-fantasy/fan-service visual direction; it is not merely anticipatory scaffolding. Race is mechanically inert on its own unless a card, Hero Allegiance grant, or aura keys off it.
+
+**Live schema:** one `race` string. Valid values: `beast`, `demon`, `dragon`, `elemental`, `mech`, `human`, `undead`, `goblin`, `dwarf`, `elf`, `pixie`, `ogre`, `giant`, `dark-elf`, `angel`, `orc`, `gnome`, `troll`, `dryad`, `fairy`, `harpy`, `fiend`, `vampire`.
+
+**Planned migration:** support more than one Race on a Hero/Creature (`races: Race[]` or equivalent) before dual-nature characters become common. Until that migration lands in TypeScript, validation, Supabase and admin tooling, use the singular live `race` field.
 
 ## CreatureType
 
-A combat-role tag for Creature cards only (`creatureType:
-CreatureType[]`, see the Creature fields above) — separate from `race`,
-which drives Faction/Allegiance and predates this field; the two don't
-cross-reference each other. Drives Formation's type-conditional check
-(see "Keywords" above). A card can carry more than one tag (printed as
-e.g. "Defender • Elemental"), stored as an array. Valid values:
-`fighter`, `ranger`, `defender`, `beast`, `elemental`, `mage`, `ogre`,
-`giant`, `dragon`, `support`, `creature` (a generic catch-all, used
-when a card's printed Type is literally "Creature").
+A **combat-role** tag for Creature cards only, separate from Race and separate from Hero Class. It answers “what job does this unit do on the board?” rather than “what species is it?”
+
+Examples of intended semantics:
+- `defender` — usually high HP/durability and defensive abilities/keywords. Spiked Turtle is the model: obviously an animal by Race, but tactically a Defender.
+- `fighter` — offensive pressure: typically higher damage relative to durability and/or offensive tools such as Reach, Charge, Cleave, Frenzy, etc.
+- `ranger` — ranged/precision role.
+- `mage` — creature-level magical/support role; does not mean the player's Hero is a Mage.
+- `support` — utility/buff/heal/economy role.
+- `beast` / `elemental` / `ogre` / `giant` / `dragon` / `creature` — existing broad formation/type families where the printed combat identity intentionally uses that label.
+
+Formation checks shared `creatureType` tags, so a card may carry 1-2 values.
+
+**Live values:** `fighter`, `ranger`, `defender`, `beast`, `elemental`, `mage`, `ogre`, `giant`, `dragon`, `support`, `creature`.
+
+**Planned addition:** `rogue`, for creature cards whose battlefield identity is infiltration/assassination/evasion (for example candidates such as Assassin or Shadow Infiltrator). Do not treat this as live until the enum/validator/admin paths are updated.
 
 ## Status effects
 
@@ -470,6 +486,8 @@ Counter), `"startOfTurn"`, `"endOfTurn"`.
 card image is normalized to **512×776** — a portrait card-art aspect
 ratio — regardless of the source image's original size or shape.
 
+> **Full-card-face warning:** because non-Hero art now contains the printed name/cost/rules/stats itself, cover-fit cropping can remove mechanically important text or frame elements. The current Admin Panel still cover-crops uploads. Until that uploader is changed, supply a source already matching 512×776 (or the exact same aspect ratio) so no meaningful edge content is lost. A future admin improvement should reject/contain mismatched full-card faces rather than crop them silently.
+
 **As of Phase K, the art *is* the card face for every archetype except
 Hero.** `CardView` no longer draws a frame, name, cost, rarity, or
 rules-text overlay for Creature/Building/Spell/Ability/Equipment — the
@@ -516,67 +534,8 @@ or URL, or `""` for the plain dark background. No other code involved.
 
 ## Generating cards with an LLM
 
-Paste this (plus a short description of what you want) to any LLM, and
-drop its JSON output straight into the array in
-`src/data/customCards.json`:
+Use the schema in this file as authority; do **not** reuse older prompts that mention Stealth, the pre-Phase-K Frenzy behavior, or the old Ability-only-activated model. A compact current prompt:
 
-> Generate cards for a browser card game as a JSON array. Each object
-> must match this schema: `id` (unique kebab-case string), `name`,
-> `archetype` (one of `hero`, `creature`, `building`, `spell`,
-> `ability`, `equipment`), `cost` (number, 0 for hero), `rarity` (one of
-> `common`, `uncommon`, `rare`, `epic`, `legendary`), `text` (optional
-> flavor/rules string), `element` (optional, one of `frost`, `fire`,
-> `nature`, `light`, `darkness`, `arcane`, `martial`, `blood`,
-> `infernal`, `chaos`), `faction` (optional, one of `infernal-court`,
-> `roseguard-kingdom`, `moonveil-coven`, `velvet-syndicate`,
-> `wildheart-tribes`, `celestial-academy`, `necropolitan`,
-> `arcane-industries`), `race` (optional, one of `beast`, `demon`,
-> `dragon`, `elemental`, `mech`, `human`, `undead`, `goblin`, `dwarf`,
-> `elf`, `pixie`, `ogre`, `giant`, `dark-elf`, `angel`, `orc`, `gnome`,
-> `troll`, `dryad`, `fairy`, `harpy`, `fiend`, `vampire` — only
-> meaningful on `hero`/`creature`). Hero cards additionally need
-> `attack`, `hp`. Creatures additionally need `attack`, `hp`,
-> `keywords` (array, any of `ranged`, `reach`, `infiltrate`, `charge`,
-> `warcry`, `taunt`, `counter`, `revenge`, `frenzy`, `immune`,
-> `poison`, `protector`, `flank`, `formation`, `advance`, `push`,
-> `stealth`, `ward`, `cleave`, `drain`, `bloodied`, `summon`, `armiger`),
-> `triggers` (array of `{on, effect}`, `on` one of
-> `onPlay`/`onAttack`/`onDeath`/`onDefend`/`startOfTurn`/`endOfTurn`).
-> Creatures can optionally add `spaceCost` (number, Massive — default
-> 1), `flankBonus`/`formationBonus`/`bloodiedBonus` (`{ attackDelta:
-> number }`, paired with the `flank`/`formation`/`bloodied` keywords).
-> Buildings need `hp` and `triggers`, and can optionally add `passive`
-> (`{ kind: "auraBuff", filter: "all" | { race } | { faction },
-> attackDelta: number }`) and/or `ability` (`{ effect: CardEffect,
-> activateCost: number, pool?: "resource" | "mana" | "energy" }` —
-> `pool` defaults to `"resource"`, and unlike a Spell/Ability there's no
-> `charges`/cap). Spells additionally need
-> `spellForm` (one of `instant`, `ritual`, `charged`) and a single
-> `effect`; `instant` casts straight from hand and takes no
-> `activateCost`/`charges`, while `ritual`/`charged` also need
-> `activateCost` (number) and `charges` (number, or `"unlimited"` —
-> `ritual` normally uses `"unlimited"`, `charged` a fixed number).
-> Abilities are always the `ritual`/`charged` shape (no `spellForm`
-> field) and need `activateCost`, `charges`, and `effect` the same way.
-> Equipment needs `category` (one of `weapon`, `armor`, `accessory`,
-> `mount` — only a `weapon`, once assigned, lets its bearer's Hero
-> attack), `attackBonus`, and `damageReduction`.
-> An `effect` object has a `kind` (`damage`, `heal`, `applyStatus`,
-> `buff`, `drawCard`, `gainGuard`, `gainCap`, `summonCreature`,
-> `consume`, `transform`, or `garrison`) plus kind-specific fields:
-> `damage`/`heal` need `amount` + `target`; `applyStatus` needs `status`
-> (`"burn"` or `"poison"`) + `amount` + `target`; `buff` needs `target` +
-> `attackDelta`/`hpDelta`; `drawCard` needs `amount`; `gainGuard` needs
-> `amount`; `gainCap` needs `pool` (`"resource"`/`"mana"`/`"energy"`) +
-> `amount`; `summonCreature` needs `creatureId` (must match an existing
-> Creature card's `id`) and optionally `count` (Swarm — defaults to 1),
-> no `target`; `consume` needs `target` and optionally
-> `attackDelta`/`hpDelta`; `transform` needs `target` + `creatureId`
-> (must match an existing Creature card's `id`); `garrison` needs only
-> `target`. `target` is one of
-> `targetCreature`, `targetBuilding`, `targetCreatureOrBuilding`,
-> `targetAny`, `targetPlayer`, `allEnemyCreatures`,
-> `allFriendlyCreatures`, `selfHero`.
+> Generate browser-card-game cards as a JSON array matching `CARDS.md`. Every card needs unique kebab-case `id`, `name`, `archetype`, `cost`, `rarity`; optional `text`, `art`, `element`, `faction`, `race`. Hero: `attack`, `hp`, optional `passive`, `heroPower`, `signature`, `allegiance`, `ruleBreaks`. Creature: `attack`, `hp`, `keywords`, `triggers`, optional `creatureType` (1-2 live values), `spaceCost`, and matching keyword payloads (`flankBonus`, `formationBonus`, `bloodiedBonus`, `frenzyBonus`, `enrageBonus`, `deadeyeBonus`, `crowdPleaserBonus`, `duel`, `resistantAmount`). Building: `hp`, `triggers`, optional aura `passive`, activated `ability` (which may have lifetime `charges`), or `spellAmplify`. Spell: `spellForm` = `instant|ritual|charged`; Ability: `abilityForm` = `instant|activated`. Instant has only play `cost`; slotted forms also use `activateCost` and `charges`. Equipment: `category`, `attackBonus`, `damageReduction`, optional `keywords`, `charges`. Current keywords include ranged, reach, infiltrate, charge, warcry, taunt, counter, revenge, frenzy, enrage, immune, poison, bleed, burn, frostArmor, resistant, deadeye, doubleStrike, duel, crowdPleaser, massive, protector, flank, formation, advance, push, vanish, ward, cleave, drain, bloodied, summon, armiger. Current status types are poison, bleed, burn, freeze. Current effects include damage, heal, applyStatus, buff, drawCard, gainGuard, gainCap, gainIncome, drawCreature, devour, multi, summonCreature, consume, transform, garrison. Use only target values and enum values documented above; anything unsupported is skipped by validation. Do not invent a world `faction` tag merely because a card belongs to a named culture/company; leave mechanical Faction omitted for Neutral cards unless Allegiance actually needs it.
 
-Anything that doesn't fit the schema gets skipped at load time with a
-console warning, not a crash — so it's safe to iterate.
+For designs requiring mechanics not currently represented by the schema (especially temporary “this turn/until next turn” modifiers, top-N choose/reorder, Mark/Grudge/Trap/Counterspell windows, temporary control, silence/rules copying), return the card as a **design proposal** and explicitly label the missing engine primitive instead of fabricating JSON that looks valid but cannot work.
