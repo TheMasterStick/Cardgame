@@ -197,6 +197,11 @@ export function PlayerBoard({
             <div className="portrait__guard">
               {guardLabel(heroDef?.faction)} {playerState.guard.current}/{playerState.guard.max}
             </div>
+            {heroDef && (
+              <div className="portrait__specialization" title={heroDef.specializations.find((s) => s.id === playerState.hero.chosenSpecializationId)?.text}>
+                {heroDef.specializations.find((s) => s.id === playerState.hero.chosenSpecializationId)?.name}
+              </div>
+            )}
             {(() => {
               const weapon = findBearerEquipment(state, owner, { kind: "hero" });
               const hasWeapon = !!weapon && (CARD_DEFINITIONS[weapon.defId] as EquipmentDefinition).category === "weapon";

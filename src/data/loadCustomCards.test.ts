@@ -557,4 +557,46 @@ describe("custom card validation", () => {
       expect(card.charges).toBe(3);
     }
   });
+
+  it("accepts a Hero with three Specializations, a Hero Power, and Rule-Breaks (Phase P — previously unsupported entirely)", () => {
+    const card = validateCard({
+      id: "custom-hero",
+      name: "Custom Hero",
+      archetype: "hero",
+      cost: 0,
+      rarity: "legendary",
+      class: "mage",
+      attack: 0,
+      hp: 20,
+      specializations: [
+        { id: "a", name: "A", text: "Your creatures have +1 Attack.", effect: { kind: "auraBuff", filter: "all", attackDelta: 1 } },
+        { id: "b", name: "B", text: "Your creatures have +1 Health.", effect: { kind: "auraBuff", filter: "all", hpDelta: 1 } },
+        { id: "c", name: "C", text: "Spells cost less.", effect: { kind: "firstSpellDiscount", amount: 1 } },
+      ],
+      heroPower: { effect: { kind: "drawCard", amount: 1 }, activateCost: 2, text: "Draw a card." },
+      ruleBreaks: { vanguardSlotDelta: 1 },
+    });
+    expect(card).not.toBeNull();
+    if (card?.archetype === "hero") {
+      expect(card.specializations).toHaveLength(3);
+      expect(card.specializations[1].effect).toEqual({ kind: "auraBuff", filter: "all", hpDelta: 1 });
+      expect(card.heroPower?.effect).toEqual({ kind: "drawCard", amount: 1 });
+      expect(card.ruleBreaks).toEqual({ vanguardSlotDelta: 1 });
+    }
+  });
+
+  it("rejects a Hero with fewer than three Specializations", () => {
+    const card = validateCard({
+      id: "bad-hero",
+      name: "Bad Hero",
+      archetype: "hero",
+      cost: 0,
+      rarity: "legendary",
+      class: "fighter",
+      attack: 0,
+      hp: 20,
+      specializations: [{ id: "a", name: "A", text: "", effect: { kind: "auraBuff", filter: "all", attackDelta: 1 } }],
+    });
+    expect(card).toBeNull();
+  });
 });

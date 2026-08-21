@@ -387,6 +387,11 @@ body {
   color: var(--text-dim);
 }
 
+.portrait__specialization {
+  color: var(--gold);
+  font-size: 0.75rem;
+}
+
 .portrait__attack {
   color: var(--attack);
 }
@@ -1003,6 +1008,54 @@ body {
   max-width: 640px;
 }
 
+/* Specialization select (Phase P, DESIGN.md §19) */
+.specialization-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  max-width: 720px;
+}
+
+.specialization-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.specialization-card:hover {
+  border-color: var(--gold);
+}
+
+.specialization-card strong {
+  color: var(--gold);
+}
+
+.specialization-reveal {
+  display: flex;
+  gap: 24px;
+  max-width: 720px;
+}
+
+.specialization-reveal__side {
+  flex: 1;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.specialization-reveal__side h3 {
+  margin-top: 0;
+  color: var(--gold);
+}
+
 /* Collection */
 .collection-grid {
   display: flex;
@@ -1250,6 +1303,19 @@ body {
 .admin-effect legend {
   color: var(--gold);
   padding: 0 4px;
+}
+
+.admin-specialization {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.admin-specialization:first-child {
+  border-top: none;
+  padding-top: 0;
 }
 
 .admin-form__preview {

@@ -27,7 +27,21 @@ export function getBuildingAuraAttackBonus(state: GameState, owner: PlayerId, ca
     if (!passive) continue;
     const filter = passive.filter;
     const matches = filter === "all" || ("race" in filter ? (def.races?.includes(filter.race) ?? false) : def.faction === filter.faction);
-    if (matches) bonus += passive.attackDelta;
+    if (matches) bonus += passive.attackDelta ?? 0;
+  }
+  return bonus;
+}
+
+/** Display-only Health counterpart to `getBuildingAuraAttackBonus`, for a Building passive's `hpDelta` (Phase P) — folds into `getEffectiveCreatureMaxHp`, never `currentHp` directly. */
+export function getBuildingAuraHpBonus(state: GameState, owner: PlayerId, card: CardInstance): number {
+  const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
+  let bonus = 0;
+  for (const building of ownedBuildings(state, owner)) {
+    const passive = (CARD_DEFINITIONS[building.defId] as BuildingDefinition).passive;
+    if (!passive) continue;
+    const filter = passive.filter;
+    const matches = filter === "all" || ("race" in filter ? (def.races?.includes(filter.race) ?? false) : def.faction === filter.faction);
+    if (matches) bonus += passive.hpDelta ?? 0;
   }
   return bonus;
 }

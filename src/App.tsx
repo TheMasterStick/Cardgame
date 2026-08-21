@@ -34,6 +34,7 @@ import { MainMenu } from "./ui/components/MainMenu";
 import { PackOpening } from "./ui/components/PackOpening";
 import { PlayerBoard } from "./ui/components/PlayerBoard";
 import { ResourceBar } from "./ui/components/ResourceBar";
+import { SpecializationSelect, type PendingMatch } from "./ui/components/SpecializationSelect";
 import {
   effectHasLegalTarget,
   effectNeedsExplicitTarget,
@@ -43,7 +44,7 @@ import {
   type PendingAction,
 } from "./ui/targeting";
 
-type Screen = "menu" | "heroSelect" | "collection" | "packs" | "deckBuilder" | "admin" | "playing";
+type Screen = "menu" | "heroSelect" | "collection" | "packs" | "deckBuilder" | "admin" | "chooseSpecialization" | "playing";
 
 const AI_STEP_DELAY_MS = 700;
 
@@ -57,6 +58,7 @@ export default function App() {
   const [aiHighlight, setAiHighlight] = useState<AiHighlight>(NO_AI_HIGHLIGHT);
   const [message, setMessage] = useState<string>("");
   const [screen, setScreen] = useState<Screen>("menu");
+  const [pendingMatch, setPendingMatch] = useState<PendingMatch | null>(null);
   const [collection, setCollection] = useState<Collection>(() => loadCollection());
   const [customDeck, setCustomDeck] = useState<DeckDraft>(() => loadCustomDeck());
   const { user, profile } = useAuth();
@@ -122,26 +124,46 @@ export default function App() {
     setMessage(reason ?? "That's not allowed right now.");
   }
 
-  function beginMatch(heroDefId: string, deckIds: string[]) {
-    const aiHeroIds = Object.keys(STARTER_DECKS);
-    const aiHeroId = aiHeroIds[Math.floor(Math.random() * aiHeroIds.length)];
-    const state = createInitialGameState(heroDefId, deckIds, aiHeroId, STARTER_DECKS[aiHeroId]);
+  function beginMatch(playerSpecializationId: string, aiSpecializationId: string) {
+    if (!pendingMatch) return;
+    const { heroDefId, deckIds, aiHeroId, aiDeckIds } = pendingMatch;
+    const state = createInitialGameState(
+      heroDefId,
+      deckIds,
+      aiHeroId,
+      aiDeckIds,
+      "player",
+      playerSpecializationId,
+      aiSpecializationId,
+    );
     startGame(state); // draws hands and begins turn 1 for "player"
     gameRef.current = state;
     matchRewardGivenRef.current = false;
     setPending(null);
     setAiHighlight(NO_AI_HIGHLIGHT);
     setMessage("");
+    setPendingMatch(null);
     setScreen("playing");
     commit();
   }
 
+  // Hero+deck are settled here, but the match doesn't start yet — DESIGN.md
+  // §19 (Phase P) has the player choose one of their Hero's three
+  // Specializations first, with the opponent's Hero known but not their
+  // deck/hand/in-progress pick, via the chooseSpecialization screen below.
+  function startPendingMatch(heroDefId: string, deckIds: string[]) {
+    const aiHeroIds = Object.keys(STARTER_DECKS);
+    const aiHeroId = aiHeroIds[Math.floor(Math.random() * aiHeroIds.length)];
+    setPendingMatch({ heroDefId, deckIds, aiHeroId, aiDeckIds: STARTER_DECKS[aiHeroId] });
+    setScreen("chooseSpecialization");
+  }
+
   function handleSelectHero(heroDefId: string) {
-    beginMatch(heroDefId, STARTER_DECKS[heroDefId]);
+    startPendingMatch(heroDefId, STARTER_DECKS[heroDefId]);
   }
 
   function handlePlayCustomDeck(heroDefId: string) {
-    beginMatch(heroDefId, deckToIds(customDeck));
+    startPendingMatch(heroDefId, deckToIds(customDeck));
   }
 
   function handleOpenPack(): string[] {
@@ -568,6 +590,28 @@ export default function App() {
           onSetCoins={handleSetCoins}
           onCardsChanged={refreshRemoteCards}
           onBack={() => setScreen("menu")}
+        />
+      </div>
+    );
+  }
+
+  if (screen === "chooseSpecialization") {
+    if (!pendingMatch) {
+      setScreen("menu");
+      return null;
+    }
+    const heroDef = CARD_DEFINITIONS[pendingMatch.heroDefId] as HeroCardDefinition;
+    const aiHeroDef = CARD_DEFINITIONS[pendingMatch.aiHeroId] as HeroCardDefinition;
+    return (
+      <div className="app" style={appStyle}>
+        <SpecializationSelect
+          heroDef={heroDef}
+          aiHeroDef={aiHeroDef}
+          onConfirm={beginMatch}
+          onBack={() => {
+            setPendingMatch(null);
+            setScreen("menu");
+          }}
         />
       </div>
     );

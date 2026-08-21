@@ -1,6 +1,6 @@
 import { CARD_DEFINITIONS } from "../data/cards";
 import { resolveEffect, type EffectTargetRef } from "./effects";
-import type { CardInstance, CreatureDefinition, GameState, HeroCardDefinition, PlayerId } from "./types";
+import type { CardInstance, CreatureDefinition, GameState, HeroCardDefinition, PassiveEffect, PlayerId } from "./types";
 
 export interface ActionResult {
   ok: boolean;
@@ -12,20 +12,46 @@ function heroDefOf(state: GameState, owner: PlayerId): HeroCardDefinition {
 }
 
 /**
- * Live Attack bonus from the controller's Hero Passive (DESIGN.md §9), if
- * it's an auraBuff matching this creature. Same "recomputed on demand,
- * never stored on the CardInstance" approach as Flank/Formation
- * (getEffectiveCreatureAttack in combat.ts calls this too) — and the same
- * Attack-only simplification, for the same reason (see PassiveEffect's
- * doc comment in types.ts).
+ * The effect behind whichever Specialization (Phase P) this player has
+ * chosen for the match — undefined only if `chosenSpecializationId`
+ * somehow doesn't match any of the Hero's three (shouldn't happen;
+ * factory.ts always seeds a valid id).
+ */
+function chosenPassiveOf(state: GameState, owner: PlayerId): PassiveEffect | undefined {
+  const heroDef = heroDefOf(state, owner);
+  const chosenId = state.players[owner].hero.chosenSpecializationId;
+  return heroDef.specializations.find((s) => s.id === chosenId)?.effect;
+}
+
+/**
+ * Live Attack bonus from the controller's chosen Specialization (DESIGN.md
+ * §19), if it's an auraBuff matching this creature. Same "recomputed on
+ * demand, never stored on the CardInstance" approach as Flank/Formation
+ * (getEffectiveCreatureAttack in combat.ts calls this too).
  */
 export function getAuraAttackBonus(state: GameState, owner: PlayerId, card: CardInstance): number {
-  const passive = heroDefOf(state, owner).passive;
+  const passive = chosenPassiveOf(state, owner);
   if (!passive || passive.kind !== "auraBuff") return 0;
   const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
   const filter = passive.filter;
   const matches = filter === "all" || ("race" in filter ? (def.races?.includes(filter.race) ?? false) : def.faction === filter.faction);
-  return matches ? passive.attackDelta : 0;
+  return matches ? (passive.attackDelta ?? 0) : 0;
+}
+
+/**
+ * Live, display-only Health bonus from the controller's chosen
+ * Specialization (Phase P), same shape/semantics as `getAuraAttackBonus`
+ * but for `auraBuff.hpDelta` — folded into `getEffectiveCreatureMaxHp`
+ * (combat.ts), never `currentHp` directly, matching Formation/Duel/Crowd
+ * Pleaser/TemporaryModifier's own `hpDelta` convention.
+ */
+export function getAuraHpBonus(state: GameState, owner: PlayerId, card: CardInstance): number {
+  const passive = chosenPassiveOf(state, owner);
+  if (!passive || passive.kind !== "auraBuff") return 0;
+  const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
+  const filter = passive.filter;
+  const matches = filter === "all" || ("race" in filter ? (def.races?.includes(filter.race) ?? false) : def.faction === filter.faction);
+  return matches ? (passive.hpDelta ?? 0) : 0;
 }
 
 /**
@@ -37,7 +63,7 @@ export function getAuraAttackBonus(state: GameState, owner: PlayerId, card: Card
  */
 export function peekSpellDiscount(state: GameState, owner: PlayerId, baseCost: number): number {
   const player = state.players[owner];
-  const passive = heroDefOf(state, owner).passive;
+  const passive = chosenPassiveOf(state, owner);
   if (!passive || passive.kind !== "firstSpellDiscount" || player.hero.firstSpellDiscountUsedThisTurn) {
     return baseCost;
   }

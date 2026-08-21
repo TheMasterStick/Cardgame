@@ -1,8 +1,8 @@
 import { CARD_DEFINITIONS } from "../data/cards";
 import { damageCard, damagePlayer, hasKeyword, resolveEffect, restoreGuard, type EffectTargetRef } from "./effects";
-import { getBuildingAuraAttackBonus } from "./building";
+import { getBuildingAuraAttackBonus, getBuildingAuraHpBonus } from "./building";
 import { getBearerAttackBonus, findBearerEquipment, heroHasVanish, tickEquipmentChargesOnHeroAttack } from "./equipment";
-import { getAuraAttackBonus } from "./hero";
+import { getAuraAttackBonus, getAuraHpBonus } from "./hero";
 import { isFrozen } from "./status";
 import {
   otherPlayer,
@@ -181,7 +181,12 @@ export function getEffectiveCreatureAttack(state: GameState, owner: PlayerId, ca
  */
 export function getEffectiveCreatureMaxHp(state: GameState, owner: PlayerId, card: CardInstance): number {
   const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
-  let hp = def.hp + card.hpDelta + card.temporaryModifiers.reduce((sum, m) => sum + (m.hpDelta ?? 0), 0);
+  let hp =
+    def.hp +
+    card.hpDelta +
+    card.temporaryModifiers.reduce((sum, m) => sum + (m.hpDelta ?? 0), 0) +
+    getAuraHpBonus(state, owner, card) +
+    getBuildingAuraHpBonus(state, owner, card);
   if (def.crowdPleaserBonus && def.keywords.includes("crowdPleaser")) {
     const otherCount = allCreaturesOnBoard(state).filter((c) => c.instanceId !== card.instanceId).length;
     hp += Math.min(def.crowdPleaserBonus.hpCap, otherCount * def.crowdPleaserBonus.hpPerCreature);

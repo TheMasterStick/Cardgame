@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { pickAiSpecialization } from "./ai";
 import { activateBuildingAbility } from "./building";
 import {
   creatureCanAttack,
@@ -17,7 +18,7 @@ import { damageCard, damagePlayer, gainCap, healCard, resolveEffect } from "./ef
 import { assignEquipment } from "./equipment";
 import { createCardInstance, createInitialGameState } from "./factory";
 import { activateSlotCard, endTurn, playCardFromHand, startTurn } from "./game";
-import { activateHeroPower, activateHeroSignature } from "./hero";
+import { activateHeroPower, activateHeroSignature, peekSpellDiscount } from "./hero";
 import { applyStatus } from "./status";
 import {
   BUILDING_SLOTS,
@@ -28,6 +29,7 @@ import {
   SUPPORT_SIZE,
   VANGUARD_SIZE,
   type GameState,
+  type HeroCardDefinition,
 } from "./types";
 
 function makeState(): GameState {
@@ -1697,6 +1699,11 @@ describe("Hero Rule-Breaks (DESIGN.md §9)", () => {
       class: "fighter",
       attack: 0,
       hp: 20,
+      specializations: [
+        { id: "spec-a", name: "Spec A", text: "", effect: { kind: "auraBuff", filter: "all", attackDelta: 1 } },
+        { id: "spec-b", name: "Spec B", text: "", effect: { kind: "auraBuff", filter: "all", hpDelta: 1 } },
+        { id: "spec-c", name: "Spec C", text: "", effect: { kind: "firstSpellDiscount", amount: 1 } },
+      ],
       ruleBreaks: {
         vanguardSlotDelta: 1,
         supportSlotDelta: -1,
@@ -2282,6 +2289,47 @@ describe("Phase N mini-sets (ROADMAP.md #10 — FACTIONS.md §1/§7 converted to
     activateBuildingAbility(state, "player", 0);
     const summoned = state.players.player.board.vanguard[0];
     expect(summoned?.defId).toBe("totem-bound-spearwoman");
+  });
+});
+
+describe("Hero Specializations (Phase P, DESIGN.md §19)", () => {
+  it("defaults to specialization index 0 when none is specified — preserves pre-Phase-P behavior", () => {
+    const state = makeState(); // "fighter" vs "mage", no specializationId given
+    expect(state.players.player.hero.chosenSpecializationId).toBe("warlords-muster");
+    expect(state.players.opponent.hero.chosenSpecializationId).toBe("arcane-efficiency");
+  });
+
+  it("choosing an alternate Specialization changes the live aura bonus instead of the default one", () => {
+    const defaultState = createInitialGameState("fighter", [], "mage", []);
+    const footmanA = createCardInstance("footman", "player");
+    defaultState.players.player.board.vanguard[0] = footmanA;
+    expect(getEffectiveCreatureAttack(defaultState, "player", footmanA)).toBe(3); // 2 base + Warlord's Muster +1
+
+    const altState = createInitialGameState("fighter", [], "mage", [], "player", "battlefield-cunning");
+    const footmanB = createCardInstance("footman", "player");
+    altState.players.player.board.vanguard[0] = footmanB;
+    expect(getEffectiveCreatureAttack(altState, "player", footmanB)).toBe(2); // no attack aura under this Specialization
+  });
+
+  it("an auraBuff Specialization's hpDelta folds into effective max HP, display-only", () => {
+    const state = createInitialGameState("fighter", [], "mage", [], "player", "iron-discipline");
+    const footman = createCardInstance("footman", "player"); // base hp 3
+    state.players.player.board.vanguard[0] = footman;
+    expect(getEffectiveCreatureMaxHp(state, "player", footman)).toBe(4); // 3 base + Iron Discipline +1
+    expect(footman.currentHp).toBe(3); // never mutates currentHp directly
+  });
+
+  it("a firstSpellDiscount Specialization applies even when it isn't the Hero's default one", () => {
+    const state = createInitialGameState("rogue", [], "fighter", [], "player", "quick-fingers");
+    expect(peekSpellDiscount(state, "player", 3)).toBe(2);
+  });
+
+  it("pickAiSpecialization always returns one of the Hero's own three ids, independent of any player input", () => {
+    const heroDef = CARD_DEFINITIONS["mage"] as HeroCardDefinition;
+    const validIds = new Set(heroDef.specializations.map((s) => s.id));
+    for (let i = 0; i < 20; i++) {
+      expect(validIds.has(pickAiSpecialization(heroDef))).toBe(true);
+    }
   });
 });
 

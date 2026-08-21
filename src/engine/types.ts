@@ -405,18 +405,19 @@ interface CardDefinitionBase {
  * A Hero Passive (DESIGN.md §9): an always-on effect, built from a small
  * curated set of templates rather than free-form scripting — matches how
  * CardEffect is already a fixed set of `kind`s. Grows as new Heroes need
- * new patterns.
+ * new patterns. As of Phase P this is the `effect` inside a
+ * HeroSpecialization rather than a Hero's own single field — see there.
  */
 export type PassiveEffect =
   /**
-   * A live, continuously-recalculated Attack bonus to the controller's own
-   * matching creatures — same "recomputed on demand, never stored on the
-   * CardInstance" approach as Flank/Formation (DESIGN.md §5), and for the
-   * same reason: an HP-inclusive version would need a parallel "effective
-   * max HP" overlay threaded through every HP display/comparison, so this
-   * stays Attack-only as a documented simplification, same as Flank/Formation.
+   * A live, continuously-recalculated Attack and/or Health bonus to the
+   * controller's own matching creatures — same "recomputed on demand,
+   * never stored on the CardInstance" approach as Flank/Formation
+   * (DESIGN.md §5). `hpDelta` (Phase P) is display-only, exactly like
+   * Formation/Duel/Crowd Pleaser/TemporaryModifier's own `hpDelta` — it
+   * folds into `getEffectiveCreatureMaxHp`, never `currentHp` directly.
    */
-  | { kind: "auraBuff"; filter: "all" | { race: Race } | { faction: Faction }; attackDelta: number }
+  | { kind: "auraBuff"; filter: "all" | { race: Race } | { faction: Faction }; attackDelta?: number; hpDelta?: number }
   /** Reduces the Mana cost of the controller's first Spell activation each turn by `amount` (floored at 0). Resets at the start of that player's turn. */
   | { kind: "firstSpellDiscount"; amount: number };
 
@@ -427,16 +428,41 @@ export interface HeroActivatedAbility {
   text?: string;
 }
 
+/**
+ * A named, flavorful doctrine choice (Phase P, DESIGN.md §19) — one of a
+ * Hero's three Specializations, built from the same curated `PassiveEffect`
+ * templates a single `passive` field used to hold directly. `id` only needs
+ * to be unique within the owning Hero's own `specializations` tuple (not
+ * globally), since it's only ever looked up alongside that Hero's own
+ * `defId` via `HeroInstance.chosenSpecializationId`.
+ */
+export interface HeroSpecialization {
+  id: string;
+  /** Character-specific doctrine name shown to the player — not a literal "Offensive/Defensive/Support" label. */
+  name: string;
+  text: string;
+  effect: PassiveEffect;
+}
+
 export interface HeroCardDefinition extends CardDefinitionBase {
   archetype: "hero";
   attack: number;
   hp: number;
   /** Broad class fantasy (DESIGN.md §9) — see HeroClass's own doc comment. */
   class: HeroClass;
-  passive?: PassiveEffect;
-  /** Usable once per turn (not charge-based) — resets every startTurn. */
+  /**
+   * Three Specializations (Phase P) — a player picks one per match (not at
+   * deck-build time), simultaneously/hidden against the opponent's own pick,
+   * before either player sees the other's deck/hand. Replaces the original
+   * single `passive` field outright. Index 0 is a fixed convention across
+   * every shipped Hero: it reproduces exactly what that Hero's old `passive`
+   * used to be, so existing tests/behavior default to it unchanged whenever
+   * a caller doesn't specify a `chosenSpecializationId`.
+   */
+  specializations: [HeroSpecialization, HeroSpecialization, HeroSpecialization];
+  /** Usable once per turn (not charge-based) — resets every startTurn. Fixed regardless of which Specialization is chosen (DESIGN.md §19) — it's the Hero's one permanent active identity. */
   heroPower?: HeroActivatedAbility;
-  /** A stronger effect gated to a small number of uses per *match* instead of per turn. */
+  /** A stronger effect gated to a small number of uses per *match* instead of per turn. Not assumed for every new Hero going forward (DESIGN.md §19) — kept on Heroes that already have one. */
   signature?: HeroActivatedAbility & { usesPerMatch: number };
   /** Rule-Breaks (DESIGN.md §9) — a curated menu of numeric deltas a Legendary-tier Hero can carry. Applied once at match start. Omit entirely for a Hero that plays by the standard board/pool shape. */
   ruleBreaks?: HeroRuleBreaks;
@@ -663,6 +689,8 @@ export interface HeroInstance {
   signatureUsesRemaining?: number;
   /** Whether this player's firstSpellDiscount Passive (if they have one) has already applied this turn. Resets every startTurn; harmless/unused for Heroes without that Passive. */
   firstSpellDiscountUsedThisTurn: boolean;
+  /** Which of this Hero's three Specializations (Phase P) is active for this match — an id from the Hero's own `specializations` tuple. Chosen once, before the match starts; never changes mid-match. */
+  chosenSpecializationId: string;
 }
 
 export interface BoardState {

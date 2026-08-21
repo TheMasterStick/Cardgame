@@ -29,8 +29,27 @@ const heroes: HeroCardDefinition[] = [
     art: "/cards/Fighter.jpg",
     hp: 20,
     attack: 10,
-    text: "Passive: your creatures have +1 Attack. Hero Power (2 Energy): gain 2 Guard. Signature (3 Energy, 2 uses/match): give all friendly creatures +2 Attack.",
-    passive: { kind: "auraBuff", filter: "all", attackDelta: 1 },
+    text: "Hero Power (2 Energy): gain 2 Guard. Signature (3 Energy, 2 uses/match): give all friendly creatures +2 Attack. Choose one of three Specializations at the start of each match.",
+    specializations: [
+      {
+        id: "warlords-muster",
+        name: "Warlord's Muster",
+        text: "Your creatures have +1 Attack.",
+        effect: { kind: "auraBuff", filter: "all", attackDelta: 1 },
+      },
+      {
+        id: "iron-discipline",
+        name: "Iron Discipline",
+        text: "Your creatures have +1 Health.",
+        effect: { kind: "auraBuff", filter: "all", hpDelta: 1 },
+      },
+      {
+        id: "battlefield-cunning",
+        name: "Battlefield Cunning",
+        text: "Your first Spell each turn costs 1 less Mana.",
+        effect: { kind: "firstSpellDiscount", amount: 1 },
+      },
+    ],
     heroPower: { effect: { kind: "gainGuard", amount: 2 }, activateCost: 2, text: "Gain 2 Guard." },
     signature: {
       effect: { kind: "buff", attackDelta: 2, target: "allFriendlyCreatures" },
@@ -49,8 +68,27 @@ const heroes: HeroCardDefinition[] = [
     art: "/cards/Mage.jpg",
     hp: 10,
     attack: 20,
-    text: "Passive: your first Spell each turn costs 1 less. Hero Power (2 Energy): deal 2 damage. Signature (4 Energy, 1 use/match): deal 3 damage to all enemy creatures.",
-    passive: { kind: "firstSpellDiscount", amount: 1 },
+    text: "Hero Power (2 Energy): deal 2 damage. Signature (4 Energy, 1 use/match): deal 3 damage to all enemy creatures. Choose one of three Specializations at the start of each match.",
+    specializations: [
+      {
+        id: "arcane-efficiency",
+        name: "Arcane Efficiency",
+        text: "Your first Spell each turn costs 1 less Mana.",
+        effect: { kind: "firstSpellDiscount", amount: 1 },
+      },
+      {
+        id: "battle-conjuration",
+        name: "Battle Conjuration",
+        text: "Your creatures have +1 Attack.",
+        effect: { kind: "auraBuff", filter: "all", attackDelta: 1 },
+      },
+      {
+        id: "warding-sigils",
+        name: "Warding Sigils",
+        text: "Your creatures have +1 Health.",
+        effect: { kind: "auraBuff", filter: "all", hpDelta: 1 },
+      },
+    ],
     heroPower: { effect: { kind: "damage", amount: 2, target: "targetAny" }, activateCost: 2, text: "Deal 2 damage." },
     signature: {
       effect: { kind: "damage", amount: 3, target: "allEnemyCreatures" },
@@ -69,8 +107,27 @@ const heroes: HeroCardDefinition[] = [
     art: "/cards/Rogue.jpg",
     hp: 15,
     attack: 15,
-    text: "Passive: your Goblin creatures have +2 Attack. Hero Power (2 Energy): Poison an enemy creature for 1. Signature (3 Energy, 2 uses/match): deal 6 damage to a creature.",
-    passive: { kind: "auraBuff", filter: { race: "goblin" }, attackDelta: 2 },
+    text: "Hero Power (2 Energy): Poison an enemy creature for 1. Signature (3 Energy, 2 uses/match): deal 6 damage to a creature. Choose one of three Specializations at the start of each match.",
+    specializations: [
+      {
+        id: "goblin-contract",
+        name: "Goblin Contract",
+        text: "Your Goblin creatures have +2 Attack.",
+        effect: { kind: "auraBuff", filter: { race: "goblin" }, attackDelta: 2 },
+      },
+      {
+        id: "cutpurse-reflexes",
+        name: "Cutpurse Reflexes",
+        text: "Your creatures have +1 Health.",
+        effect: { kind: "auraBuff", filter: "all", hpDelta: 1 },
+      },
+      {
+        id: "quick-fingers",
+        name: "Quick Fingers",
+        text: "Your first Spell each turn costs 1 less Mana.",
+        effect: { kind: "firstSpellDiscount", amount: 1 },
+      },
+    ],
     heroPower: {
       effect: { kind: "applyStatus", status: "poison", amount: 1, target: "targetCreature" },
       activateCost: 2,
@@ -92,8 +149,28 @@ const heroes: HeroCardDefinition[] = [
     class: "fighter",
     hp: 22,
     attack: 0,
-    text: "Rule-Break: commands a wider battlefront — +1 Vanguard slot, +1 Support slot (DESIGN.md §9). Hero Power (2 Energy): gain 2 Guard.",
+    text: "Rule-Break: commands a wider battlefront — +1 Vanguard slot, +1 Support slot (DESIGN.md §9). Hero Power (2 Energy): gain 2 Guard. Choose one of three Specializations at the start of each match.",
     ruleBreaks: { vanguardSlotDelta: 1, supportSlotDelta: 1 },
+    specializations: [
+      {
+        id: "iron-vanguard",
+        name: "Iron Vanguard",
+        text: "Your creatures have +1 Attack.",
+        effect: { kind: "auraBuff", filter: "all", attackDelta: 1 },
+      },
+      {
+        id: "fortified-line",
+        name: "Fortified Line",
+        text: "Your creatures have +1 Health.",
+        effect: { kind: "auraBuff", filter: "all", hpDelta: 1 },
+      },
+      {
+        id: "command-cadence",
+        name: "Command Cadence",
+        text: "Your first Spell each turn costs 1 less Mana.",
+        effect: { kind: "firstSpellDiscount", amount: 1 },
+      },
+    ],
     heroPower: { effect: { kind: "gainGuard", amount: 2 }, activateCost: 2, text: "Gain 2 Guard." },
   },
   {
@@ -106,8 +183,27 @@ const heroes: HeroCardDefinition[] = [
     hp: 12,
     attack: 0,
     faction: "arcane-industries",
-    text: "Passive: your Arcane Industries creatures have +1 Attack. Hero Power (2 Energy): draw a card. Signature (3 Energy, 2 uses/match): gain +1 max Mana.",
-    passive: { kind: "auraBuff", filter: { faction: "arcane-industries" }, attackDelta: 1 },
+    text: "Hero Power (2 Energy): draw a card. Signature (3 Energy, 2 uses/match): gain +1 max Mana. Choose one of three Specializations at the start of each match.",
+    specializations: [
+      {
+        id: "cataloged-might",
+        name: "Cataloged Might",
+        text: "Your Arcane Industries creatures have +1 Attack.",
+        effect: { kind: "auraBuff", filter: { faction: "arcane-industries" }, attackDelta: 1 },
+      },
+      {
+        id: "reinforced-chassis",
+        name: "Reinforced Chassis",
+        text: "Your Arcane Industries creatures have +1 Health.",
+        effect: { kind: "auraBuff", filter: { faction: "arcane-industries" }, hpDelta: 1 },
+      },
+      {
+        id: "efficient-calculations",
+        name: "Efficient Calculations",
+        text: "Your first Spell each turn costs 1 less Mana.",
+        effect: { kind: "firstSpellDiscount", amount: 1 },
+      },
+    ],
     heroPower: { effect: { kind: "drawCard", amount: 1 }, activateCost: 2, text: "Draw a card." },
     signature: {
       effect: { kind: "gainCap", pool: "mana", amount: 1 },
@@ -130,8 +226,27 @@ const heroes: HeroCardDefinition[] = [
     attack: 0,
     faction: "roseguard-kingdom",
     races: ["human"],
-    text: "Passive — Royal Muster: your Roseguard Kingdom creatures have +1 Attack. Hero Power (2 Energy) — Rally: a friendly character gains +2 Attack this turn.",
-    passive: { kind: "auraBuff", filter: { faction: "roseguard-kingdom" }, attackDelta: 1 },
+    text: "Hero Power (2 Energy) — Rally: a friendly character gains +2 Attack this turn. Choose one of three Specializations at the start of each match.",
+    specializations: [
+      {
+        id: "royal-muster",
+        name: "Royal Muster",
+        text: "Your Roseguard Kingdom creatures have +1 Attack.",
+        effect: { kind: "auraBuff", filter: { faction: "roseguard-kingdom" }, attackDelta: 1 },
+      },
+      {
+        id: "shieldwall-decree",
+        name: "Shieldwall Decree",
+        text: "Your Roseguard Kingdom creatures have +1 Health.",
+        effect: { kind: "auraBuff", filter: { faction: "roseguard-kingdom" }, hpDelta: 1 },
+      },
+      {
+        id: "court-patronage",
+        name: "Court Patronage",
+        text: "Your first Spell each turn costs 1 less Mana.",
+        effect: { kind: "firstSpellDiscount", amount: 1 },
+      },
+    ],
     heroPower: {
       effect: { kind: "buff", attackDelta: 2, target: "targetCreature", duration: 1 },
       activateCost: 2,
@@ -152,8 +267,27 @@ const heroes: HeroCardDefinition[] = [
     attack: 0,
     faction: "wildheart-tribes",
     races: ["orc"],
-    text: "Passive — Voices Beyond: your Wildheart Tribes creatures have +1 Attack. Hero Power (2 Energy) — Ancestral Blessing: restore 2 Health to a friendly character.",
-    passive: { kind: "auraBuff", filter: { faction: "wildheart-tribes" }, attackDelta: 1 },
+    text: "Hero Power (2 Energy) — Ancestral Blessing: restore 2 Health to a friendly character. Choose one of three Specializations at the start of each match.",
+    specializations: [
+      {
+        id: "voices-beyond",
+        name: "Voices Beyond",
+        text: "Your Wildheart Tribes creatures have +1 Attack.",
+        effect: { kind: "auraBuff", filter: { faction: "wildheart-tribes" }, attackDelta: 1 },
+      },
+      {
+        id: "ancestral-ward",
+        name: "Ancestral Ward",
+        text: "Your Wildheart Tribes creatures have +1 Health.",
+        effect: { kind: "auraBuff", filter: { faction: "wildheart-tribes" }, hpDelta: 1 },
+      },
+      {
+        id: "spirit-guided-rites",
+        name: "Spirit-Guided Rites",
+        text: "Your first Spell each turn costs 1 less Mana.",
+        effect: { kind: "firstSpellDiscount", amount: 1 },
+      },
+    ],
     heroPower: {
       effect: { kind: "heal", amount: 2, target: "targetCreature" },
       activateCost: 2,

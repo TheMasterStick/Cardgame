@@ -7,6 +7,10 @@ import type {
   Element,
   EquipmentCategory,
   Faction,
+  HeroActivatedAbility,
+  HeroClass,
+  HeroRuleBreaks,
+  HeroSpecialization,
   Keyword,
   PassiveEffect,
   Race,
@@ -20,7 +24,8 @@ import rawCustomCards from "./customCards.json";
 // Invalid entries are skipped with a console warning rather than crashing the
 // app, so a typo in a hand- or LLM-generated card doesn't break the game.
 
-const VALID_ARCHETYPES: CardArchetype[] = ["creature", "building", "spell", "ability", "equipment"];
+const VALID_ARCHETYPES: CardArchetype[] = ["hero", "creature", "building", "spell", "ability", "equipment"];
+const VALID_HERO_CLASSES: HeroClass[] = ["fighter", "mage", "rogue"];
 const VALID_RARITIES: Rarity[] = ["common", "uncommon", "rare", "epic", "legendary"];
 const VALID_KEYWORDS: Keyword[] = [
   "ranged",
@@ -170,19 +175,81 @@ function parseRaces(raw: unknown): Race[] | undefined {
   return races.length > 0 ? races : undefined;
 }
 
-/** Only the auraBuff template is accepted for a custom Building's passive — see BuildingDefinition's doc comment in types.ts. */
-function parseBuildingPassive(raw: unknown): Extract<PassiveEffect, { kind: "auraBuff" }> | undefined {
-  if (!isRecord(raw) || raw.kind !== "auraBuff") return undefined;
-  if (typeof raw.attackDelta !== "number") return undefined;
+/** Shared by a custom Building's passive and each Hero Specialization's effect (Phase P) — the same curated PassiveEffect template set either one draws from. */
+function parsePassiveEffect(raw: unknown): PassiveEffect | undefined {
+  if (!isRecord(raw)) return undefined;
+  if (raw.kind === "firstSpellDiscount") {
+    return typeof raw.amount === "number" ? { kind: "firstSpellDiscount", amount: raw.amount } : undefined;
+  }
+  if (raw.kind !== "auraBuff") return undefined;
+  const attackDelta = typeof raw.attackDelta === "number" ? raw.attackDelta : undefined;
+  const hpDelta = typeof raw.hpDelta === "number" ? raw.hpDelta : undefined;
+  if (attackDelta === undefined && hpDelta === undefined) return undefined;
   const filter = raw.filter;
-  if (filter === "all") return { kind: "auraBuff", filter: "all", attackDelta: raw.attackDelta };
+  if (filter === "all") return { kind: "auraBuff", filter: "all", attackDelta, hpDelta };
   if (isRecord(filter) && typeof filter.race === "string") {
-    return { kind: "auraBuff", filter: { race: filter.race as never }, attackDelta: raw.attackDelta };
+    return { kind: "auraBuff", filter: { race: filter.race as never }, attackDelta, hpDelta };
   }
   if (isRecord(filter) && typeof filter.faction === "string") {
-    return { kind: "auraBuff", filter: { faction: filter.faction as never }, attackDelta: raw.attackDelta };
+    return { kind: "auraBuff", filter: { faction: filter.faction as never }, attackDelta, hpDelta };
   }
   return undefined;
+}
+
+/** Only the auraBuff template is accepted for a custom Building's passive — see BuildingDefinition's doc comment in types.ts. */
+function parseBuildingPassive(raw: unknown): Extract<PassiveEffect, { kind: "auraBuff" }> | undefined {
+  const passive = parsePassiveEffect(raw);
+  return passive?.kind === "auraBuff" ? passive : undefined;
+}
+
+/** Hero Power/Signature (Phase C/P) — same activated-ability shape either one uses. `requireUsesPerMatch` is set for Signature only. */
+function parseHeroActivatedAbility(raw: unknown): HeroActivatedAbility | undefined {
+  if (!isRecord(raw)) return undefined;
+  if (typeof raw.activateCost !== "number") return undefined;
+  if (!isValidEffect(raw.effect)) return undefined;
+  return {
+    effect: raw.effect,
+    activateCost: raw.activateCost,
+    text: typeof raw.text === "string" ? raw.text : undefined,
+  };
+}
+
+function parseHeroSignature(raw: unknown): (HeroActivatedAbility & { usesPerMatch: number }) | undefined {
+  const ability = parseHeroActivatedAbility(raw);
+  if (!ability || !isRecord(raw) || typeof raw.usesPerMatch !== "number") return undefined;
+  return { ...ability, usesPerMatch: raw.usesPerMatch };
+}
+
+/** Exactly three named Specializations (Phase P) — see HeroSpecialization's doc comment in types.ts. Any malformed entry invalidates the whole Hero, same "skip rather than half-load" policy as everything else in this file. */
+function parseSpecializations(raw: unknown): [HeroSpecialization, HeroSpecialization, HeroSpecialization] | undefined {
+  if (!Array.isArray(raw) || raw.length !== 3) return undefined;
+  const specs: HeroSpecialization[] = [];
+  for (const entry of raw) {
+    if (!isRecord(entry)) return undefined;
+    if (typeof entry.id !== "string" || !entry.id) return undefined;
+    if (typeof entry.name !== "string" || !entry.name) return undefined;
+    if (typeof entry.text !== "string") return undefined;
+    const effect = parsePassiveEffect(entry.effect);
+    if (!effect) return undefined;
+    specs.push({ id: entry.id, name: entry.name, text: entry.text, effect });
+  }
+  return specs as [HeroSpecialization, HeroSpecialization, HeroSpecialization];
+}
+
+function parseRuleBreaks(raw: unknown): HeroRuleBreaks | undefined {
+  if (!isRecord(raw)) return undefined;
+  const numOrUndef = (v: unknown) => (typeof v === "number" ? v : undefined);
+  const ruleBreaks: HeroRuleBreaks = {
+    extraSpellAbilitySlots: numOrUndef(raw.extraSpellAbilitySlots),
+    extraBuildingSlots: numOrUndef(raw.extraBuildingSlots),
+    vanguardSlotDelta: numOrUndef(raw.vanguardSlotDelta),
+    supportSlotDelta: numOrUndef(raw.supportSlotDelta),
+    startingGuardDelta: numOrUndef(raw.startingGuardDelta),
+    resourceCapDelta: numOrUndef(raw.resourceCapDelta),
+    manaCapDelta: numOrUndef(raw.manaCapDelta),
+    energyCapDelta: numOrUndef(raw.energyCapDelta),
+  };
+  return Object.values(ruleBreaks).some((v) => v !== undefined) ? ruleBreaks : undefined;
 }
 
 function parseBuildingAbility(raw: unknown): BuildingActivatedAbility | undefined {
@@ -216,6 +283,23 @@ export function validateCard(raw: unknown): CardDefinition | null {
   const base = { id, name, cost, rarity: rarity as Rarity, text, art, element, faction, races };
 
   switch (archetype) {
+    case "hero": {
+      if (typeof raw.attack !== "number" || typeof raw.hp !== "number") return null;
+      if (typeof raw.class !== "string" || !VALID_HERO_CLASSES.includes(raw.class as HeroClass)) return null;
+      const specializations = parseSpecializations(raw.specializations);
+      if (!specializations) return null;
+      return {
+        ...base,
+        archetype: "hero",
+        attack: raw.attack,
+        hp: raw.hp,
+        class: raw.class as HeroClass,
+        specializations,
+        heroPower: parseHeroActivatedAbility(raw.heroPower),
+        signature: parseHeroSignature(raw.signature),
+        ruleBreaks: parseRuleBreaks(raw.ruleBreaks),
+      };
+    }
     case "creature": {
       if (typeof raw.attack !== "number" || typeof raw.hp !== "number") return null;
       return {

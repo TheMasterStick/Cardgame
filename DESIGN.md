@@ -556,6 +556,65 @@ known but not their deck, hand, or in-progress choice) and revealed
 before the mulligan. See the §19 priorities list for the full spec and
 open questions.
 
+**Phase P builds the Hero Specialization system spec'd in §19**, the
+direct follow-up to Phase O: `HeroCardDefinition.passive?: PassiveEffect`
+(a single, always-on field) is replaced outright by
+`specializations: [HeroSpecialization, HeroSpecialization,
+HeroSpecialization]` — three named, flavorful doctrine choices, each
+just a `{ id, name, text, effect }` wrapper around the same curated
+`PassiveEffect` templates a lone `passive` used to hold directly, so no
+new mechanical *shape* was invented. `HeroInstance` gained
+`chosenSpecializationId: string`; `createHeroInstance`/
+`createInitialPlayerState`/`createInitialGameState` all take an optional
+specialization id and default to `specializations[0].id` when omitted —
+and **every shipped Hero's index 0 is defined to be byte-for-byte what
+that Hero's old `passive` used to be**, so the entire pre-Phase-P engine
+test suite (150+ tests) needed zero behavioral updates, only a few
+`CardDefinition` object-literal fixtures that now require the field at
+all. `hero.ts`'s `getAuraAttackBonus`/`peekSpellDiscount` now resolve
+through a new `chosenPassiveOf` lookup instead of reading `.passive`
+directly. `auraBuff` also gained an optional `hpDelta` alongside
+`attackDelta` (both now optional, at least one must be set) — a genuine
+new capability, not just a rename: Phase M's temporary-modifier work
+already built the "effective max HP" overlay the original `auraBuff`
+doc comment cited as the reason Attack-only was a deliberate
+simplification, so extending it was now actually cheap. `getAuraHpBonus`
+(hero.ts) and `getBuildingAuraHpBonus` (building.ts, for symmetry — a
+Building's own `passive` can use `hpDelta` too now) fold into
+`getEffectiveCreatureMaxHp`, same display-only convention as Formation/
+Duel/Crowd Pleaser/TemporaryModifier's own `hpDelta`. Every shipped Hero
+(Fighter/Mage/Rogue/Grand Marshal/Archivist/Queen Maerwyn/Matron Shara
+Earthsong) got 3 real Specializations authored — Grand Marshal is the
+one deliberate exception to the "index 0 = old behavior" rule, since he
+never had a `passive` at all before (nothing tested or depended on that
+absence, confirmed by grep before writing his 3). A new
+`chooseSpecialization` screen (`SpecializationSelect.tsx`) sits between
+Hero+deck selection and the match actually starting — Quick Play and the
+Deck Builder's "Play This Deck" both route through it now via App.tsx's
+`startPendingMatch`. The player sees the opponent's Hero (not their
+deck/hand/pick) and picks one of their own Hero's three; a new
+`pickAiSpecialization` (ai.ts) — deliberately typed to take only the AI's
+own `HeroCardDefinition`, never the player's choice or Hero, so it can't
+become a counter-pick even by accident — computes the AI's pick, and
+both are shown together before `startGame` runs, matching the "reveal
+after both lock in, before the match really begins" recommendation
+(explicitly not finalized canon — see §19). **Two things were
+deliberately left alone**, matching explicit user direction: the fixed
+Hero Power/optional Signature Ability are completely unaffected by any
+of this (Archivist keeps her Signature; new Heroes aren't expected to
+define one); and true hidden selection between two humans sharing one
+screen (local hot-seat) isn't solved here — only the vs-AI path actually
+achieves independence today. Two pre-existing gaps were also closed as a
+side effect of the required-field change: `AdminPanel.tsx` never had any
+Hero Passive/Power/Signature authoring UI at all (only `class`/`attack`/
+`hp`), so it gained a full 3-Specialization authoring fieldset; and
+`loadCustomCards.ts`'s `validateCard` never had a `"hero"` case in its
+switch at all — `VALID_ARCHETYPES` didn't even list `"hero"` — meaning a
+custom or Admin-Panel-saved Hero was silently rejected on every
+`fetchRemoteCards()` round-trip. Both are fixed now, with a Hero
+validation path covering `specializations`/`heroPower`/`signature`/
+`ruleBreaks`.
+
 CARDS.md/BACKEND.md describe what's live today; check them (not just
 this doc) for current schema.
 
@@ -856,12 +915,12 @@ A Hero card carries:
 
 | Field | Notes |
 |---|---|
-| Faction | A flavor/synergy tag only (§10, rewritten Phase O) — never restricts what a deck can contain. Typically referenced by the Hero's own Passive (`auraBuff` filtered to that Faction) as a bonus for fielding it, never a requirement. |
+| Faction | A flavor/synergy tag only (§10, rewritten Phase O) — never restricts what a deck can contain. Typically referenced by one of the Hero's own Specializations (`auraBuff` filtered to that Faction, §19 Phase P) as a bonus for fielding it, never a requirement. |
 | Class | `class: "fighter" \| "mage" \| "rogue"` (required, Phase L) — broad **class fantasy** for the player's chosen main character, not a strict deck lockout and not the same taxonomy as a CreatureType. Fighter leans toward direct pressure/combat, Mage toward Spell/supernatural synergy, Rogue toward precision/indirect play. Purely descriptive today — no mechanic keys off it yet, same as Race/Element. |
 | Health, Attack | Attack only matters once Equipment is assigned (unchanged from v1) — but a Hero's own base Attack should now be **low or 0**, since a Weapon's `attackBonus` is meant to be the primary source of a Hero's Attack, not a bonus layered on top of an already-large base. **Open default / known exception:** the three original starter Heroes (Fighter 10, Mage 20, Rogue 15 base Attack) predate this convention and haven't been retconned — they still hit hard the moment *any* Equipment is assigned, weapon or not. Revisit those three numbers whenever they're touched again; every faction Hero authored from here on should follow the low/0-base convention. |
-| Passive | An always-on effect. **Open default:** built from a small curated set of templates (aura buff to a matching Faction/Race/Class, a first-spell-cheaper-per-turn discount, an on-reveal-enemy-card effect, etc.) rather than a free-form scripting language — matches how `CardEffect` is already a fixed set of `kind`s, not arbitrary code. The template set grows as new Heroes need new patterns. **Planned, not live (§19 Phase P):** this single field is slated to become three named Specializations built from the same templates, one chosen per match. |
-| Hero Power | An activated effect using the same `CardEffect` shape as a Spell/Ability, Energy-costed, usable **once per turn** (not charge-based). Stays fixed/unchanged by the planned Specialization redesign above — it's the Hero's one permanent active identity regardless of which Specialization is chosen. |
-| Signature Ability *(optional)* | Same shape as Hero Power, but a stronger effect gated to a small number of uses **per match** (e.g. 1) instead of per turn. Not assumed for every future Hero (§19 Phase P) — kept as-is on Heroes that already have one. |
+| Specializations | **Live as of Phase P.** Exactly three named `HeroSpecialization` entries (`{ id, name, text, effect }`), each `effect` an always-on `PassiveEffect` from the same small curated template set the old single `passive` field used (aura buff to a matching Faction/Race/Class — now with an optional `hpDelta` alongside `attackDelta` — or a first-spell-cheaper-per-turn discount). One is chosen per **match**, not baked into the card or picked at deck-build time: the player sees the opponent's Hero (never their deck/hand/in-progress pick) and locks in a choice, the AI's own pick (`pickAiSpecialization`, computed without ever reading the player's choice) is revealed alongside it, before `startGame` runs. `HeroInstance.chosenSpecializationId` tracks the active one for the match; every shipped Hero's index 0 reproduces exactly what that Hero's old `passive` used to be, so untouched code defaults to unchanged behavior. See §19 for the full spec, including the still-open reveal-timing/hot-seat questions. |
+| Hero Power | An activated effect using the same `CardEffect` shape as a Spell/Ability, Energy-costed, usable **once per turn** (not charge-based). Fixed regardless of which Specialization is chosen — it's the Hero's one permanent active identity. |
+| Signature Ability *(optional)* | Same shape as Hero Power, but a stronger effect gated to a small number of uses **per match** (e.g. 1) instead of per turn. Not assumed for every Hero going forward (§19 Phase P) — kept as-is on Heroes that already have one. |
 | Rule-Breaks *(optional, Legendary-tier)* | A curated menu of numeric deltas a Hero can carry: extra Spell slots, extra Building slots, Vanguard/Support slot count changes, starting Guard delta, max Energy/Mana/Resources cap delta. **Open default:** only numeric-delta modifiers are supported at first; a fully bespoke rule-break (e.g. "Harpies may overfill Support by forming Flocks") is one-off card-specific code, done when that specific card is actually built, not a general system. **Implementation status:** live and engine-tested — `HeroCardDefinition.ruleBreaks` is applied once at match start. `grand-marshal` (Legendary, +1 Vanguard/+1 Support slot) is the first shipped Hero to exercise it. |
 
 **Example Signature Ability — Raise Dead** (a Necromancer-archetype
@@ -1093,6 +1152,7 @@ Suggested build order, each phase individually shippable/testable:
 | **M — Temporary-modifier primitive (ROADMAP.md #7)** ✅ *(live)* | `buff` gained an optional `duration?: number` — omit for the original permanent buff, give it a number and it becomes temporary instead: pushed onto a new `CardInstance.temporaryModifiers` array, summed live into Attack/effective-max-HP, never touching the permanent `attackDelta`/`hpDelta`. Ticks down at the end of *every* turn — both players', not just the bearer's own controller's — deliberately different timing from Poison/Bleed/Burn/Freeze's per-owner-turn-end tick, so `duration: 1` ("this turn") is symmetric for a self-buff and a hostile debuff alike. New Neutral bonus Spell `battle-fury` demonstrates it. Fixed an unrelated pre-existing bug found along the way: `loadCustomCards.ts`'s `VALID_RARITIES` never included `"uncommon"` despite it being a live `Rarity` value since Phase 0. See the implementation-status note above for the full writeup. |
 | **N — First archetype mini-sets (ROADMAP.md #10)** ✅ *(live)* | Roseguard Kingdom (FACTIONS.md §1, Human) and Wildheart Tribes (FACTIONS.md §7, Orc) converted into real cards under the previously-empty `roseguard-kingdom`/`wildheart-tribes` Factions — 10 cards each (a Legendary Hero + 9 supporting cards) plus a 30-card starter deck each, pure content with no engine changes. See the implementation-status note above for the conversion notes and the `onDeath`-trigger-target constraint it surfaced. |
 | **O — Allegiance reversed to pure synergy (§10)** ✅ *(live)* | Faction no longer restricts deckbuilding at all — any card is legal in any deck regardless of Hero. `HeroCardDefinition.allegiance` and `customDeck.ts`'s Allegiance-gate functions were deleted, along with the Deck Builder's Faction-mismatch warnings. A Faction's own Hero still grants a bonus for fielding that Faction (unchanged `auraBuff` Passives on Archivist/Queen Maerwyn/Matron Shara Earthsong), just never a requirement. See the implementation-status note above and the rewritten §10. |
+| **P — Hero Specializations (§19)** ✅ *(live)* | The single `passive` field is replaced by 3 named Specializations per Hero, chosen once per match (defaulting to index 0 = the old `passive`, so the whole pre-Phase-P test suite needed no behavioral changes). `auraBuff` gained an `hpDelta` alongside `attackDelta`, folded into `getEffectiveCreatureMaxHp` for both Hero and Building auras. A new `chooseSpecialization` screen sits between Hero+deck selection and match start, showing the opponent's Hero (not their deck/hand/pick); the AI's pick (`pickAiSpecialization`, ai.ts) is computed independently of the player's. Hero Power/Signature are unaffected. Fixed two pre-existing gaps found along the way: AdminPanel.tsx had no Hero Passive/Power/Signature authoring UI at all, and `loadCustomCards.ts` never had a `"hero"` case (`VALID_ARCHETYPES` didn't even list it) — both fixed. See the implementation-status note above. |
 
 Each phase gets the same verification pass as prior work: `tsc
 --noEmit`, `eslint`, `vitest`, `vite build`, plus a Playwright smoke
@@ -1111,9 +1171,11 @@ admin panel are all otherwise unaffected and stay as documented in
 
 ## 19. Next rules-layer priorities (planned, not live)
 
-0. **Hero Specializations — planned, not live (Phase P).** A direct
+0. **Hero Specializations.** **Done (Phase P).** A direct
    follow-up to Phase O's Allegiance rewrite, specified by the user in
-   detail:
+   detail — implementation notes and any deviation from the original
+   spec are inline below; the full writeup is in the Phase P
+   implementation-status note above:
    - **Hero Power stays exactly as-is** — one fixed, always-on active
      ability per Hero (§9), unaffected by anything below. It already
      functions as the Hero's signature identity; a future Hero doesn't
@@ -1142,6 +1204,11 @@ admin panel are all otherwise unaffected and stay as documented in
      immediately after both players lock in, before the opening-hand
      mulligan — preserves the prediction game without hiding a passive
      that's already influencing the board once the match is underway.
+     **Implementation note:** this codebase has no mulligan step at all
+     (hands are just drawn at match start) — the reveal happens
+     immediately after the player locks in, right before `startGame`
+     runs, which is the earliest point "before the match really begins"
+     actually exists here. Revisit if a mulligan phase is ever added.
    - Every existing Hero (Fighter/Mage/Rogue/Grand Marshal/Archivist/
      Queen Maerwyn/Matron Shara Earthsong) needs three Specializations
      authored, not just the Faction Heroes — Fighter/Mage/Rogue/Grand

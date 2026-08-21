@@ -55,8 +55,15 @@ export function createCardInstance(defId: string, owner: PlayerId): CardInstance
   return instance;
 }
 
-/** `heroDefId` must reference a CardDefinition with archetype "hero". */
-export function createHeroInstance(heroDefId: string): HeroInstance {
+/**
+ * `heroDefId` must reference a CardDefinition with archetype "hero".
+ * `specializationId` picks which of the Hero's three Specializations
+ * (Phase P) is active for the match — omit to default to index 0, which
+ * is the fixed convention every shipped Hero follows for "this is what
+ * `passive` used to be" so untouched call sites (including the entire
+ * pre-Phase-P test suite) keep their existing behavior unchanged.
+ */
+export function createHeroInstance(heroDefId: string, specializationId?: string): HeroInstance {
   const def = CARD_DEFINITIONS[heroDefId];
   if (!def || def.archetype !== "hero") {
     throw new Error(`Unknown Hero card: ${heroDefId}`);
@@ -73,6 +80,7 @@ export function createHeroInstance(heroDefId: string): HeroInstance {
     heroPowerUsedThisTurn: false,
     signatureUsesRemaining: heroDef.signature?.usesPerMatch,
     firstSpellDiscountUsedThisTurn: false,
+    chosenSpecializationId: specializationId ?? heroDef.specializations[0].id,
   };
 }
 
@@ -91,6 +99,7 @@ export function createInitialPlayerState(
   id: PlayerId,
   heroDefId: string,
   deckDefIds: string[],
+  specializationId?: string,
 ): PlayerState {
   const deck = shuffle(deckDefIds.map((defId) => createCardInstance(defId, id)));
   const heroDef = CARD_DEFINITIONS[heroDefId];
@@ -101,7 +110,7 @@ export function createInitialPlayerState(
   const energyCap = Math.min(MAX_POOL, STARTING_POOL + (ruleBreaks?.energyCapDelta ?? 0));
   return {
     id,
-    hero: createHeroInstance(heroDefId),
+    hero: createHeroInstance(heroDefId, specializationId),
     guard: { current: startingGuard, max: startingGuard },
     resources: { current: resourceCap, cap: resourceCap, income: 1 },
     mana: { current: manaCap, cap: manaCap },
@@ -120,11 +129,13 @@ export function createInitialGameState(
   opponentHeroDefId: string,
   opponentDeck: string[],
   firstPlayer: PlayerId = "player",
+  playerSpecializationId?: string,
+  opponentSpecializationId?: string,
 ): GameState {
   return {
     players: {
-      player: createInitialPlayerState("player", playerHeroDefId, playerDeck),
-      opponent: createInitialPlayerState("opponent", opponentHeroDefId, opponentDeck),
+      player: createInitialPlayerState("player", playerHeroDefId, playerDeck, playerSpecializationId),
+      opponent: createInitialPlayerState("opponent", opponentHeroDefId, opponentDeck, opponentSpecializationId),
     },
     activePlayer: firstPlayer,
     turnNumber: 1,

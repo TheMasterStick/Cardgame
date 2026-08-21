@@ -32,6 +32,21 @@ import {
 
 const AI: PlayerId = "opponent";
 
+/**
+ * Picks which of `heroDef`'s three Specializations (Phase P, DESIGN.md §19)
+ * the AI brings into the match. Deliberately takes only the AI's own Hero
+ * definition — never the human player's pick or Hero — so the choice can't
+ * become a counter-pick even by accident; the whole point of a hidden,
+ * simultaneous selection is that neither side's choice can react to the
+ * other's. Random for now (an explicit Open default, matching how the AI's
+ * own Hero is picked in App.tsx's beginMatch) — a stronger heuristic can
+ * read the AI Hero's own kit later without touching this function's shape.
+ */
+export function pickAiSpecialization(heroDef: HeroCardDefinition): string {
+  const options = heroDef.specializations;
+  return options[Math.floor(Math.random() * options.length)].id;
+}
+
 /** Non-null cards in a row, deduped by instanceId — a Massive creature (DESIGN.md §5) occupies more than one slot with the same instance. */
 function alive(cards: (CardInstance | null)[]): CardInstance[] {
   const seen = new Set<string>();

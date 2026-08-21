@@ -30,6 +30,7 @@ import type {
   EquipmentCategory,
   Faction,
   HeroClass,
+  HeroSpecialization,
   Keyword,
   Race,
   Rarity,
@@ -114,6 +115,34 @@ interface CardDraft {
   buildingPassiveEnabled: boolean;
   buildingPassiveFilterKind: "all" | "race" | "faction";
   buildingPassiveFilterValue: Race | Faction | "";
+  /** Hero only (Phase P): exactly 3 named Specializations, one chosen per match — see HeroSpecialization in types.ts. */
+  heroSpecializations: [HeroSpecDraft, HeroSpecDraft, HeroSpecDraft];
+}
+
+interface HeroSpecDraft {
+  id: string;
+  name: string;
+  text: string;
+  kind: "auraBuff" | "firstSpellDiscount";
+  filterKind: "all" | "race" | "faction";
+  filterValue: Race | Faction | "";
+  attackDelta: number;
+  hpDelta: number;
+  discountAmount: number;
+}
+
+function emptyHeroSpecDraft(n: number): HeroSpecDraft {
+  return {
+    id: `specialization-${n}`,
+    name: `Specialization ${n}`,
+    text: "",
+    kind: "auraBuff",
+    filterKind: "all",
+    filterValue: "",
+    attackDelta: 1,
+    hpDelta: 0,
+    discountAmount: 1,
+  };
 }
 
 function emptyDraft(): CardDraft {
@@ -155,6 +184,7 @@ function emptyDraft(): CardDraft {
     buildingPassiveEnabled: false,
     buildingPassiveFilterKind: "all",
     buildingPassiveFilterValue: "",
+    heroSpecializations: [emptyHeroSpecDraft(1), emptyHeroSpecDraft(2), emptyHeroSpecDraft(3)],
   };
 }
 
@@ -210,6 +240,23 @@ function draftFromCard(def: CardDefinition): CardDraft {
     draft.attack = def.attack;
     draft.hp = def.hp;
     draft.heroClass = def.class;
+    draft.heroSpecializations = def.specializations.map((spec): HeroSpecDraft => {
+      const base = emptyHeroSpecDraft(0);
+      base.id = spec.id;
+      base.name = spec.name;
+      base.text = spec.text;
+      if (spec.effect.kind === "firstSpellDiscount") {
+        base.kind = "firstSpellDiscount";
+        base.discountAmount = spec.effect.amount;
+      } else {
+        base.kind = "auraBuff";
+        base.filterKind = spec.effect.filter === "all" ? "all" : "race" in spec.effect.filter ? "race" : "faction";
+        base.filterValue = spec.effect.filter === "all" ? "" : "race" in spec.effect.filter ? spec.effect.filter.race : spec.effect.filter.faction;
+        base.attackDelta = spec.effect.attackDelta ?? 0;
+        base.hpDelta = spec.effect.hpDelta ?? 0;
+      }
+      return base;
+    }) as [HeroSpecDraft, HeroSpecDraft, HeroSpecDraft];
   } else if (def.archetype === "creature") {
     draft.attack = def.attack;
     draft.hp = def.hp;
@@ -225,7 +272,7 @@ function draftFromCard(def: CardDefinition): CardDraft {
       draft.buildingPassiveFilterKind = def.passive.filter === "all" ? "all" : "race" in def.passive.filter ? "race" : "faction";
       draft.buildingPassiveFilterValue =
         def.passive.filter === "all" ? "" : "race" in def.passive.filter ? def.passive.filter.race : def.passive.filter.faction;
-      draft.effectAttackDelta = def.passive.attackDelta;
+      draft.effectAttackDelta = def.passive.attackDelta ?? 0;
     }
     if (def.ability) {
       draft.buildingEffectTarget = "ability";
@@ -324,7 +371,29 @@ function buildCardDefinition(draft: CardDraft): CardDefinition | { error: string
   };
 
   if (draft.archetype === "hero") {
-    return { ...base, archetype: "hero", attack: draft.attack, hp: draft.hp, class: draft.heroClass };
+    for (const spec of draft.heroSpecializations) {
+      if (!spec.id.trim() || !spec.name.trim()) return { error: "Every Specialization needs an id and a name." };
+    }
+    const specializations = draft.heroSpecializations.map((spec): HeroSpecialization => ({
+      id: spec.id.trim(),
+      name: spec.name.trim(),
+      text: spec.text.trim(),
+      effect:
+        spec.kind === "firstSpellDiscount"
+          ? { kind: "firstSpellDiscount", amount: spec.discountAmount }
+          : {
+              kind: "auraBuff",
+              filter:
+                spec.filterKind === "all"
+                  ? "all"
+                  : spec.filterKind === "race"
+                    ? { race: spec.filterValue as Race }
+                    : { faction: spec.filterValue as Faction },
+              attackDelta: spec.attackDelta || undefined,
+              hpDelta: spec.hpDelta || undefined,
+            },
+    })) as [HeroSpecialization, HeroSpecialization, HeroSpecialization];
+    return { ...base, archetype: "hero", attack: draft.attack, hp: draft.hp, class: draft.heroClass, specializations };
   }
   if (draft.archetype === "creature") {
     const effect = buildEffect(draft);
@@ -623,6 +692,183 @@ export function AdminPanel({ collection, userId, onSetCoins, onCardsChanged, onB
                   ))}
                 </select>
               </label>
+            )}
+            {draft.archetype === "hero" && (
+              <fieldset className="admin-effect">
+                <legend>Specializations (choose 1 of 3 per match)</legend>
+                {draft.heroSpecializations.map((spec, i) => (
+                  <div key={i} className="admin-specialization">
+                    <strong>Specialization {i + 1}</strong>
+                    <label>
+                      Id
+                      <input
+                        type="text"
+                        value={spec.id}
+                        onChange={(e) =>
+                          setDraft((d) => {
+                            const next = [...d.heroSpecializations] as CardDraft["heroSpecializations"];
+                            next[i] = { ...next[i], id: e.target.value };
+                            return { ...d, heroSpecializations: next };
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Name
+                      <input
+                        type="text"
+                        value={spec.name}
+                        onChange={(e) =>
+                          setDraft((d) => {
+                            const next = [...d.heroSpecializations] as CardDraft["heroSpecializations"];
+                            next[i] = { ...next[i], name: e.target.value };
+                            return { ...d, heroSpecializations: next };
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Text
+                      <input
+                        type="text"
+                        value={spec.text}
+                        onChange={(e) =>
+                          setDraft((d) => {
+                            const next = [...d.heroSpecializations] as CardDraft["heroSpecializations"];
+                            next[i] = { ...next[i], text: e.target.value };
+                            return { ...d, heroSpecializations: next };
+                          })
+                        }
+                      />
+                    </label>
+                    <label>
+                      Effect
+                      <select
+                        value={spec.kind}
+                        onChange={(e) =>
+                          setDraft((d) => {
+                            const next = [...d.heroSpecializations] as CardDraft["heroSpecializations"];
+                            next[i] = { ...next[i], kind: e.target.value as HeroSpecDraft["kind"] };
+                            return { ...d, heroSpecializations: next };
+                          })
+                        }
+                      >
+                        <option value="auraBuff">Aura buff to matching creatures</option>
+                        <option value="firstSpellDiscount">First Spell each turn costs less</option>
+                      </select>
+                    </label>
+                    {spec.kind === "auraBuff" && (
+                      <>
+                        <label>
+                          Applies to
+                          <select
+                            value={spec.filterKind}
+                            onChange={(e) =>
+                              setDraft((d) => {
+                                const next = [...d.heroSpecializations] as CardDraft["heroSpecializations"];
+                                next[i] = { ...next[i], filterKind: e.target.value as HeroSpecDraft["filterKind"], filterValue: "" };
+                                return { ...d, heroSpecializations: next };
+                              })
+                            }
+                          >
+                            <option value="all">All friendly creatures</option>
+                            <option value="race">Creatures of a Race</option>
+                            <option value="faction">Creatures of a Faction</option>
+                          </select>
+                        </label>
+                        {spec.filterKind === "race" && (
+                          <label>
+                            Race
+                            <select
+                              value={spec.filterValue}
+                              onChange={(e) =>
+                                setDraft((d) => {
+                                  const next = [...d.heroSpecializations] as CardDraft["heroSpecializations"];
+                                  next[i] = { ...next[i], filterValue: e.target.value as Race };
+                                  return { ...d, heroSpecializations: next };
+                                })
+                              }
+                            >
+                              <option value="">Choose…</option>
+                              {RACE_OPTIONS.map((r) => (
+                                <option key={r} value={r}>
+                                  {RACE_LABELS[r]}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
+                        {spec.filterKind === "faction" && (
+                          <label>
+                            Faction
+                            <select
+                              value={spec.filterValue}
+                              onChange={(e) =>
+                                setDraft((d) => {
+                                  const next = [...d.heroSpecializations] as CardDraft["heroSpecializations"];
+                                  next[i] = { ...next[i], filterValue: e.target.value as Faction };
+                                  return { ...d, heroSpecializations: next };
+                                })
+                              }
+                            >
+                              <option value="">Choose…</option>
+                              {FACTION_OPTIONS.map((f) => (
+                                <option key={f} value={f}>
+                                  {FACTION_LABELS[f]}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
+                        <label>
+                          Attack Delta
+                          <input
+                            type="number"
+                            value={spec.attackDelta}
+                            onChange={(e) =>
+                              setDraft((d) => {
+                                const next = [...d.heroSpecializations] as CardDraft["heroSpecializations"];
+                                next[i] = { ...next[i], attackDelta: Number(e.target.value) };
+                                return { ...d, heroSpecializations: next };
+                              })
+                            }
+                          />
+                        </label>
+                        <label>
+                          HP Delta
+                          <input
+                            type="number"
+                            value={spec.hpDelta}
+                            onChange={(e) =>
+                              setDraft((d) => {
+                                const next = [...d.heroSpecializations] as CardDraft["heroSpecializations"];
+                                next[i] = { ...next[i], hpDelta: Number(e.target.value) };
+                                return { ...d, heroSpecializations: next };
+                              })
+                            }
+                          />
+                        </label>
+                      </>
+                    )}
+                    {spec.kind === "firstSpellDiscount" && (
+                      <label>
+                        Mana Discount
+                        <input
+                          type="number"
+                          value={spec.discountAmount}
+                          onChange={(e) =>
+                            setDraft((d) => {
+                              const next = [...d.heroSpecializations] as CardDraft["heroSpecializations"];
+                              next[i] = { ...next[i], discountAmount: Number(e.target.value) };
+                              return { ...d, heroSpecializations: next };
+                            })
+                          }
+                        />
+                      </label>
+                    )}
+                  </div>
+                ))}
+              </fieldset>
             )}
             {(draft.archetype === "hero" || draft.archetype === "creature") && (
               <div className="admin-keywords">
