@@ -14,6 +14,7 @@ import {
   type AttackTarget,
 } from "../../engine/combat";
 import { assignEquipment } from "../../engine/equipment";
+import type { EffectTargetRef } from "../../engine/effects";
 import { createInitialGameState } from "../../engine/factory";
 import { activateSlotCard, endTurn, playCardFromHand, startGame, type PlayCardOptions } from "../../engine/game";
 import { activateHeroPower, activateHeroSignature } from "../../engine/hero";
@@ -23,7 +24,6 @@ import type {
   CardDefinition,
   CardEffect,
   CardInstance,
-  CreatureDefinition,
   EquipmentDefinition,
   GameState,
   HeroCardDefinition,
@@ -83,6 +83,8 @@ type SlotRef = {
   rect: Phaser.GameObjects.Rectangle;
 };
 
+type Point = { x: number; y: number };
+
 type PendingTarget =
   | {
       kind: "play";
@@ -92,10 +94,32 @@ type PendingTarget =
       sourceArchetype?: CardArchetype;
       ghost?: { x: number; y: number; width: number; height: number; defId: string };
     }
-  | { kind: "activate"; slotIndex: number; effect: CardEffect; sourceArchetype: CardArchetype; source: { x: number; y: number } }
-  | { kind: "building"; slotIndex: number; effect: CardEffect; source: { x: number; y: number } }
-  | { kind: "heroPower"; effect: CardEffect; source: { x: number; y: number } }
-  | { kind: "signature"; effect: CardEffect; source: { x: number; y: number } };
+  | {
+      kind: "activate";
+      slotIndex: number;
+      effect: CardEffect;
+      sourceArchetype?: CardArchetype;
+      source: Point;
+    }
+  | {
+      kind: "building";
+      slotIndex: number;
+      effect: CardEffect;
+      sourceArchetype?: CardArchetype;
+      source: Point;
+    }
+  | {
+      kind: "heroPower";
+      effect: CardEffect;
+      sourceArchetype?: CardArchetype;
+      source: Point;
+    }
+  | {
+      kind: "signature";
+      effect: CardEffect;
+      sourceArchetype?: CardArchetype;
+      source: Point;
+    };
 
 type CardRenderRef = {
   instanceId: string;
@@ -171,9 +195,9 @@ export class EngineBattleScene extends Phaser.Scene {
     this.input.on("dragend", (pointer: Phaser.Input.Pointer, gameObject: Phaser.GameObjects.GameObject) => {
       const id = gameObject.getData("handInstanceId") as string | undefined;
       if (!id) return;
+      gameObject.setData("wasDragged", false);
       const handled = this.handleHandDrop(id, pointer.worldX, pointer.worldY);
       if (!handled) this.layoutHand(true);
-      this.time.delayedCall(0, () => gameObject.setData("wasDragged", false));
     });
 
     this.renderScene();
@@ -617,7 +641,7 @@ export class EngineBattleScene extends Phaser.Scene {
       const selected = this.selectedHandId === card.instanceId;
       const frame = this.add.rectangle(0, 0, CARD_WIDTH, CARD_HEIGHT, 0x292929).setStrokeStyle(selected ? 5 : 3, selected ? 0xf0d270 : this.handColor(def.archetype), 1);
       const label = this.add
-        .text(0, 0, this.handCardText(card, def), {
+        .text(0, 0, this.handCardText(def), {
           align: "center",
           fontFamily: "Georgia, serif",
           fontSize: "10px",
@@ -685,7 +709,7 @@ export class EngineBattleScene extends Phaser.Scene {
     return 0xc8a66a;
   }
 
-  private handCardText(card: CardInstance, def: CardDefinition) {
+  private handCardText(def: CardDefinition) {
     const pool = def.archetype === "spell" ? "MANA" : def.archetype === "creature" || def.archetype === "ability" ? "ENERGY" : "RES";
     if (def.archetype === "creature") return `${def.name}\n\n${def.cost} ${pool}\n${def.attack} / ${def.hp}\n\n${def.keywords.join(" • ")}`;
     if (def.archetype === "building") return `${def.name}\n\n${def.cost} ${pool}\n${def.hp} HP`;
@@ -726,11 +750,9 @@ export class EngineBattleScene extends Phaser.Scene {
 
   private onHandCardClick(instanceId: string) {
     if (!this.isPlayerActionTime()) return;
-    if (this.pendingTarget) {
-      this.cancelPending();
-    }
+    if (this.pendingTarget) this.cancelPending();
 
-    const card = this.state.players.player.hand.find((c) => c.instanceId === instanceId);
+    const card = this.state.players.player.hand.find((candidate) => candidate.instanceId === instanceId);
     if (!card) return;
     const def = CARD_DEFINITIONS[card.defId];
 
@@ -774,7 +796,12 @@ export class EngineBattleScene extends Phaser.Scene {
     }
 
     if (slot.owner !== "player" || !this.selectedHandId) return;
-    const card = this.state.players.player.hand.find((c) => c.instanceId === this.selectedHandId);
+    if (this.slotIsOccupied(slot)) {
+      this.setStatus("That slot is already occupied.");
+      return;
+    }
+
+    const card = this.state.players.player.hand.find((candidate) => candidate.instanceId === this.selectedHandId);
     if (!card) return;
     const def = CARD_DEFINITIONS[card.defId];
 
@@ -800,7 +827,9 @@ export class EngineBattleScene extends Phaser.Scene {
 
   private preparePlacement(card: CardInstance, options: PlayCardOptions, slot: SlotRef) {
     const def = CARD_DEFINITIONS[card.defId];
-    const trigger = (def.archetype === "creature" || def.archetype === "building") ? def.triggers.find((t) => t.on === "onPlay") : undefined;
+    const trigger = def.archetype === "creature" || def.archetype === "building"
+      ? def.triggers.find((candidate) => candidate.on === "onPlay")
+      : undefined;
 
     if (trigger && this.needsTarget(trigger.effect) && effectHasLegalTarget(this.state, trigger.effect, undefined)) {
       this.pendingTarget = {
@@ -821,12 +850,12 @@ export class EngineBattleScene extends Phaser.Scene {
 
   private handleHandDrop(instanceId: string, x: number, y: number) {
     if (!this.isPlayerActionTime()) return false;
-    const card = this.state.players.player.hand.find((c) => c.instanceId === instanceId);
+    const card = this.state.players.player.hand.find((candidate) => candidate.instanceId === instanceId);
     if (!card) return false;
     const def = CARD_DEFINITIONS[card.defId];
 
     const matching = this.playerSlots.find((slot) => {
-      if (!Phaser.Geom.Rectangle.Contains(slot.rect.getBounds(), x, y)) return false;
+      if (this.slotIsOccupied(slot) || !Phaser.Geom.Rectangle.Contains(slot.rect.getBounds(), x, y)) return false;
       if (def.archetype === "creature") return slot.kind === "vanguard" || slot.kind === "support";
       if (def.archetype === "building") return slot.kind === "building";
       if (def.archetype === "equipment") return slot.kind === "equipment";
@@ -864,13 +893,15 @@ export class EngineBattleScene extends Phaser.Scene {
     }
 
     if (owner === "player" && row === "buildings") {
-      const index = this.state.players.player.board.buildings.findIndex((c) => c?.instanceId === card.instanceId);
+      const index = this.state.players.player.board.buildings.findIndex((candidate) => candidate?.instanceId === card.instanceId);
       if (index >= 0) this.beginBuildingAbility(index, card);
       return;
     }
 
     if (owner === "opponent" && this.selectedAttacker) {
-      const target: AttackTarget = row === "buildings" ? { type: "building", instanceId: card.instanceId } : { type: "creature", instanceId: card.instanceId };
+      const target: AttackTarget = row === "buildings"
+        ? { type: "building", instanceId: card.instanceId }
+        : { type: "creature", instanceId: card.instanceId };
       this.resolveAttack(target);
     }
   }
@@ -1031,7 +1062,7 @@ export class EngineBattleScene extends Phaser.Scene {
     }
   }
 
-  private resolvePendingTarget(target: NonNullable<Parameters<typeof playCardFromHand>[3]>["target"] | { kind: "row"; owner: PlayerId; row: BoardRow }) {
+  private resolvePendingTarget(target: EffectTargetRef) {
     const pending = this.pendingTarget;
     if (!pending) return;
 
@@ -1140,7 +1171,7 @@ export class EngineBattleScene extends Phaser.Scene {
     this.arrow.strokePath();
   }
 
-  private selectionSource() {
+  private selectionSource(): Point | null {
     if (this.pendingTarget) {
       if (this.pendingTarget.kind === "play") {
         if (this.pendingTarget.ghost) return { x: this.pendingTarget.ghost.x, y: this.pendingTarget.ghost.y };
@@ -1170,7 +1201,7 @@ export class EngineBattleScene extends Phaser.Scene {
   private arrowTargetAt(x: number, y: number): { x: number; y: number; valid: boolean } | null {
     if (this.pendingTarget) {
       if (effectTargetCategory(this.pendingTarget.effect) === "targetRow") {
-        const slot = this.enemySlots.find((s) => (s.kind === "vanguard" || s.kind === "support") && Phaser.Geom.Rectangle.Contains(s.rect.getBounds(), x, y));
+        const slot = this.enemySlots.find((candidate) => (candidate.kind === "vanguard" || candidate.kind === "support") && Phaser.Geom.Rectangle.Contains(candidate.rect.getBounds(), x, y));
         return slot ? { x: slot.rect.x, y: slot.rect.y, valid: true } : null;
       }
       for (const ref of this.boardRefs.values()) {
@@ -1196,7 +1227,9 @@ export class EngineBattleScene extends Phaser.Scene {
         if (ref.owner !== "opponent" || (ref.archetype !== "creature" && ref.archetype !== "building")) continue;
         const bounds = new Phaser.Geom.Rectangle(ref.x - CARD_WIDTH / 2, ref.y - CARD_HEIGHT / 2, CARD_WIDTH, CARD_HEIGHT);
         if (!Phaser.Geom.Rectangle.Contains(bounds, x, y)) continue;
-        const target: AttackTarget = ref.archetype === "building" ? { type: "building", instanceId: ref.instanceId } : { type: "creature", instanceId: ref.instanceId };
+        const target: AttackTarget = ref.archetype === "building"
+          ? { type: "building", instanceId: ref.instanceId }
+          : { type: "creature", instanceId: ref.instanceId };
         return { x: ref.x, y: ref.y, valid: canAttack(this.state, "player", this.selectedAttacker, target) };
       }
       if (this.heroAt(x, y) === "opponent") {
@@ -1216,11 +1249,11 @@ export class EngineBattleScene extends Phaser.Scene {
     }
 
     if (this.selectedHandId) {
-      const card = this.state.players.player.hand.find((c) => c.instanceId === this.selectedHandId);
+      const card = this.state.players.player.hand.find((candidate) => candidate.instanceId === this.selectedHandId);
       if (!card) return null;
       const def = CARD_DEFINITIONS[card.defId];
       const slot = this.playerSlots.find((candidate) => {
-        if (!Phaser.Geom.Rectangle.Contains(candidate.rect.getBounds(), x, y)) return false;
+        if (this.slotIsOccupied(candidate) || !Phaser.Geom.Rectangle.Contains(candidate.rect.getBounds(), x, y)) return false;
         if (def.archetype === "creature") return candidate.kind === "vanguard" || candidate.kind === "support";
         if (def.archetype === "building") return candidate.kind === "building";
         if (def.archetype === "equipment") return candidate.kind === "equipment";
@@ -1231,6 +1264,15 @@ export class EngineBattleScene extends Phaser.Scene {
     }
 
     return null;
+  }
+
+  private slotIsOccupied(slot: SlotRef) {
+    const board = this.state.players[slot.owner].board;
+    if (slot.kind === "vanguard") return board.vanguard[slot.index] !== null;
+    if (slot.kind === "support") return board.support[slot.index] !== null;
+    if (slot.kind === "building") return board.buildings[slot.index] !== null;
+    if (slot.kind === "equipment") return board.equipment[slot.index] !== null;
+    return board.spellAbilitySlots[slot.index] !== null;
   }
 
   private heroAt(x: number, y: number): PlayerId | null {
@@ -1322,11 +1364,11 @@ export class EngineBattleScene extends Phaser.Scene {
       case "gainCap": return `Gain ${effect.amount} ${effect.pool} cap.`;
       case "gainIncome": return `Gain ${effect.amount} Resource income.`;
       case "summonCreature": return `Summon ${effect.count ?? 1} ${effect.creatureId}.`;
-      case "consume": return `Consume an allied creature.`;
+      case "consume": return "Consume an allied creature.";
       case "transform": return `Transform a creature into ${effect.creatureId}.`;
-      case "garrison": return `Garrison an allied creature.`;
-      case "devour": return `Devour a target creature.`;
-      case "multi": return effect.effects.map((sub) => this.effectSummary(sub)).join(" ");
+      case "garrison": return "Garrison an allied creature.";
+      case "devour": return "Devour a target creature.";
+      case "multi": return effect.effects.map((subEffect) => this.effectSummary(subEffect)).join(" ");
     }
   }
 
