@@ -983,6 +983,18 @@ const spells: SpellDefinition[] = [
     text: "Activation — 3 Mana: Apply Poison 2 for 3 turns to target creature or Hero.",
     effect: { kind: "applyStatus", status: "poison", amount: 2, duration: 3, target: "targetCreatureOrPlayer" },
   },
+  // -- Bonus content, outside the 59-card Neutral Core Set: demonstrates
+  // the ROADMAP.md #7 temporary-modifier primitive (BuffEffect.duration).
+  {
+    id: "battle-fury",
+    name: "Battle Fury",
+    archetype: "spell",
+    spellForm: "instant",
+    cost: 2,
+    rarity: "uncommon",
+    text: "Friendly creatures gain +2 Attack this turn.",
+    effect: { kind: "buff", attackDelta: 2, target: "allFriendlyCreatures", duration: 1 },
+  },
   {
     id: "wolf-pack",
     name: "Wolf Pack",

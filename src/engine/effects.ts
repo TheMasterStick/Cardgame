@@ -272,6 +272,18 @@ function applyStatBuff(card: CardInstance, attackDelta: number | undefined, hpDe
 }
 
 /**
+ * A `buff` effect with a `duration` (ROADMAP.md #7): pushes a
+ * TemporaryModifier instead of touching the permanent `attackDelta`/
+ * `hpDelta` — see that type's doc comment in types.ts. Each application
+ * is its own array entry (never merged into an existing one), so two
+ * "this turn" buffs on the same creature stack additively, each expiring
+ * on its own schedule, same as the permanent buff this mirrors.
+ */
+function applyTemporaryModifier(card: CardInstance, attackDelta: number | undefined, hpDelta: number | undefined, duration: number): void {
+  card.temporaryModifiers.push({ attackDelta, hpDelta, turnsRemaining: duration });
+}
+
+/**
  * Resolves any CardEffect against a chosen target (or no target, for
  * effects that don't need one). `actingPlayer` is the controller of the
  * card that produced the effect. `sourceArchetype` — pass "spell" for a
@@ -366,17 +378,21 @@ export function resolveEffect(
       return;
     }
     case "buff": {
+      const apply = (c: CardInstance) =>
+        effect.duration !== undefined
+          ? applyTemporaryModifier(c, effect.attackDelta, effect.hpDelta, effect.duration)
+          : applyStatBuff(c, effect.attackDelta, effect.hpDelta);
       if (effect.target === "allFriendlyCreatures" || effect.target === "allEnemyCreatures") {
         const owner = effect.target === "allFriendlyCreatures" ? actingPlayer : otherPlayer(actingPlayer);
         for (const c of allBoardCreatures(state.players[owner].board)) {
-          if (!isImmuneToSpell(c, sourceArchetype)) applyStatBuff(c, effect.attackDelta, effect.hpDelta);
+          if (!isImmuneToSpell(c, sourceArchetype)) apply(c);
         }
         return;
       }
       if (!target || target.kind !== "card") return;
       const found = findCard(state, target.owner, target.instanceId);
       if (!found || isImmuneToSpell(found.card, sourceArchetype)) return;
-      applyStatBuff(found.card, effect.attackDelta, effect.hpDelta);
+      apply(found.card);
       return;
     }
     case "drawCard": {

@@ -441,7 +441,7 @@ Used in a spell/ability's `effect` field, and in any creature/building
 | `damage` | `amount`, `target` | Deals damage. |
 | `heal` | `amount`, `target` | Restores HP. |
 | `applyStatus` | `status` (`StatusType`), `amount`, `target`, `duration`? | Applies a status — see "Status effects" above. Supports the AOE `target` values (`allEnemyCreatures`/`allFriendlyCreatures`) same as `damage`/`buff`. |
-| `buff` | `target`, `attackDelta`? , `hpDelta`? | Permanent stat change (negative deltas work too — a debuff). |
+| `buff` | `target`, `attackDelta`? , `hpDelta`?, `duration`? | Stat change (negative deltas work too — a debuff). Omit `duration` for the original permanent buff. With `duration: N` (ROADMAP.md #7), it's temporary instead: N turns, ticking down at the end of *every* turn — both players' — so `duration: 1` ("this turn") is gone by the time anyone's next turn starts, whether cast on an ally or an enemy. Stacks additively with itself and with a permanent buff; `hpDelta` under a duration is display-only (never heals `currentHp` or raises the real cap), matching Formation/Duel/Crowd Pleaser's `hpDelta`. |
 | `drawCard` | `amount` | Draws for the acting player. No `target`. |
 | `gainGuard` | `amount` | Grants Guard to the acting player. No `target`. |
 | `gainCap` | `pool` (`"resource"\|"mana"\|"energy"`), `amount` | Raises a resource cap (and current amount) for the acting player. No `target`. |

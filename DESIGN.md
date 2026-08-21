@@ -456,6 +456,51 @@ itself, so this fixes the bug for both the Supabase-Admin path and the
 `customCards.json` path (which had the identical gap — a hand-authored
 custom card's `element`/`faction`/`races` were quietly dropped too).
 
+**Phase M landed ROADMAP.md #7**, the temporary-modifier/duration
+primitive flagged as the highest-leverage missing piece for converting
+`FACTIONS.md`'s many "this turn"/"until your next turn" cards. `buff`
+(the existing permanent Attack/HP-change `CardEffect`) gained an
+optional `duration?: number`: omit it for the original permanent
+behavior; give it a number and the same effect becomes temporary
+instead. A temporary buff is pushed onto a new
+`CardInstance.temporaryModifiers: TemporaryModifier[]` array rather than
+touching the permanent `attackDelta`/`hpDelta` fields, summed live into
+`getEffectiveCreatureAttack`/`getEffectiveCreatureMaxHp` (the latter
+display-only for `hpDelta`, exactly like Formation/Duel/Crowd Pleaser's
+optional HP component — never mutates `currentHp`, never affects death
+checks). The interesting design decision was the *tick timing*, and it's
+deliberately different from how Poison/Bleed/Burn/Freeze already work:
+a Status ticks only at the *affected creature's own controller's*
+turn-end (`tickStatuses`, called from `processEndOfTurnStatuses` for
+just `state.activePlayer`'s board), which is exactly right for a
+DOT/control condition but wrong for "this turn" — a hostile "this turn"
+debuff cast on an enemy during your turn would otherwise still be sitting
+there for their *entire following turn*, since their board doesn't get
+ticked until *their* turn ends. A temporary modifier instead ticks via a
+new `tickTemporaryModifiers` (status.ts) called from a new
+`processEndOfTurnTemporaryModifiers` (game.ts) that sweeps *both*
+players' Vanguard+Support every single `endTurn()` call, regardless of
+whose turn is ending — so `duration: 1` ("this turn") is symmetric: gone
+by the time anyone's next turn starts, whether it was cast on an ally or
+an enemy. Each application pushes its own array entry rather than
+merging into an existing one (matching the permanent buff's own additive
+stacking), so two "this turn" buffs on the same creature really do add
+up, each expiring on its own independent schedule. Scope was kept to
+Creature targets only, matching the permanent `buff` effect's own
+existing scope (it's never supported targeting a Hero). The Admin Panel
+gained a "Duration (turns)" field on the buff effect form (0 =
+permanent, reusing the `attackDelta`/`hpDelta` fields' existing "0 means
+omit" convention rather than a new one). A new Neutral bonus Spell,
+`battle-fury` (Instant, "Friendly creatures gain +2 Attack this turn"),
+demonstrates it end-to-end — outside the 59-card Neutral Core Set, same
+precedent as `wolf-pack`/`alphas-call`'s bonus content. **Also fixed a
+second, unrelated pre-existing bug found while touching the JSON
+validator**: `loadCustomCards.ts`'s `VALID_RARITIES` never included
+`"uncommon"` even though it's been a fully live `Rarity` value since
+Phase 0 (many built-in cards already use it) — any custom or
+Admin-Panel-saved card with `rarity: "uncommon"` was silently rejected
+by `validateCard`. Fixed to match the live `Rarity` type exactly.
+
 CARDS.md/BACKEND.md describe what's live today; check them (not just
 this doc) for current schema.
 
@@ -978,6 +1023,7 @@ Suggested build order, each phase individually shippable/testable:
 | **J — Allegiance made live (§10)** ✅ *(live)* | Not a pre-planned phase — Allegiance (§10) was built and unit-tested back in Phase C but never actually restricted a real deck, since no starter Hero carried a Faction. `archivist` (`faction: "arcane-industries"`) ships with a real 30-card starter deck, so the restriction now genuinely bites. See the implementation-status note above. |
 | **K — Neutral Core Set adoption + card-art-is-the-card UI** ✅ *(live)* | Adopted an external 59-card spec as ground truth for the Neutral Core Set; every existing Phase A-J mechanic was explicitly kept, not reconciled against the new spec. Vanish replaces Stealth; new keywords Enrage, Frenzy (reassigned to a new card), Resistant, Deadeye, Double Strike, Duel, Crowd Pleaser, Bleed, Burn(-on-hit), Frost Armor, Massive; new `creatureType` field drives type-conditional Formation; new `gainIncome`/`drawCreature`/`devour`/`multi` CardEffect kinds; new `targetRow`/`targetCreatureOrPlayer` targeting; Building ability charges; Equipment keywords/charges; Ability gained the Instant/Activated split Spells already had. The card frame/text overlay was removed for every non-Hero archetype — the art itself now carries that information. Two genuine pre-existing bugs surfaced and fixed along the way: the onAttack trigger was built but never wired into combat, and `applyStatus` never supported AOE targets. See the implementation-status note above for the full list, the Open defaults, and the known gaps (no Duel UI button yet, Bulletin Board's scrying simplified, decks not reworked to include the 11 new cards). |
 | **L — Taxonomy migrations (ROADMAP.md #5/#6)** ✅ *(live)* | `race?: Race` became `races?: Race[]` everywhere (types.ts, the 8 cards that had one, the `auraBuff`/`neutralRaces` array-membership matching, CardView's Hero meta line, the Admin Panel's checkbox multi-select, the Supabase schema — `race` moved from a dedicated column into `data` jsonb like every other array field, migration `0004_multi_race.sql`). New required `class: HeroClass` field on every Hero (`"fighter" \| "mage" \| "rogue"`), purely descriptive today; new `rogue` CreatureType, retagged onto `assassin`/`shadow-infiltrator` in place of the generic `fighter` tag. Fixed a genuine pre-existing bug along the way: `validateCard` never actually included `element`/`faction`/`race` in its returned object, so an Admin-Panel-set Element/Faction/Race silently vanished on the next `fetchRemoteCards()` — fixed for both the Supabase and `customCards.json` paths. See the implementation-status note above for the full writeup. |
+| **M — Temporary-modifier primitive (ROADMAP.md #7)** ✅ *(live)* | `buff` gained an optional `duration?: number` — omit for the original permanent buff, give it a number and it becomes temporary instead: pushed onto a new `CardInstance.temporaryModifiers` array, summed live into Attack/effective-max-HP, never touching the permanent `attackDelta`/`hpDelta`. Ticks down at the end of *every* turn — both players', not just the bearer's own controller's — deliberately different timing from Poison/Bleed/Burn/Freeze's per-owner-turn-end tick, so `duration: 1` ("this turn") is symmetric for a self-buff and a hostile debuff alike. New Neutral bonus Spell `battle-fury` demonstrates it. Fixed an unrelated pre-existing bug found along the way: `loadCustomCards.ts`'s `VALID_RARITIES` never included `"uncommon"` despite it being a live `Rarity` value since Phase 0. See the implementation-status note above for the full writeup. |
 
 Each phase gets the same verification pass as prior work: `tsc
 --noEmit`, `eslint`, `vitest`, `vite build`, plus a Playwright smoke
@@ -996,7 +1042,7 @@ otherwise unaffected by this rework and stay as documented in
 
 ## 19. Next rules-layer priorities (planned, not live)
 
-1. **Temporary modifiers/durations** — a generic way to express “this turn”, “until your next turn”, or N-turn buffs/debuffs. This is the highest-leverage missing primitive for converting `FACTIONS.md`.
+1. ~~Temporary modifiers/durations — a generic way to express "this turn", "until your next turn", or N-turn buffs/debuffs.~~ **Done (Phase M)** — `buff`'s `duration` field, see CARDS.md's Effects table. `FACTIONS.md` conversion can now use it for any card whose text is a straight temporary Attack/HP change; a "look/choose/reorder" or Mark/Grudge/Trap-style card still needs items #2/#4 below.
 2. **Deck inspection / choose / reorder** — enough interaction for top-N look, choose one, reorder/bottom the rest. This would replace Bulletin Board's current approximation and unlock many faction drafts.
 3. ~~Taxonomy migration — explicit Hero `class`; `rogue` CreatureType; multi-race representation.~~ **Done (Phase L).**
 4. **Selective faction mechanics** — Mark/Grudge/Trap/Counter-style systems only when an authored mini-set actually needs them. Prefer bespoke logic for truly one-off cards over a bloated universal scripting layer.

@@ -184,6 +184,44 @@ export interface BuffEffect {
   attackDelta?: number;
   hpDelta?: number;
   target: EffectTarget;
+  /**
+   * Omit for the original permanent buff (mutates the target's stored
+   * `attackDelta`/`hpDelta` directly). When given, this becomes a
+   * temporary modifier instead (ROADMAP.md #7 — the "this turn"/"N turns"
+   * primitive): pushed onto `CardInstance.temporaryModifiers` rather than
+   * touching the permanent deltas, summed live into
+   * `getEffectiveCreatureAttack`/`getEffectiveCreatureMaxHp`, and ticked
+   * down by 1 at the end of *every* turn (both players', not just the
+   * bearer's own) — see `TemporaryModifier`'s own doc comment for why that
+   * tick timing is deliberately different from a Status's. `duration: 1`
+   * is "this turn": applied during a turn and gone by the time anyone's
+   * next turn starts, whether it's a self-buff or a hostile debuff.
+   */
+  duration?: number;
+}
+
+/**
+ * A temporary Attack/HP delta with an expiry, backing `BuffEffect`'s
+ * optional `duration` (ROADMAP.md #7). Deliberately a separate mechanism
+ * from `StatusEffectInstance`, not a generalization of it: a Status is a
+ * *condition* (damage-over-time, Freeze) that ticks at the *affected
+ * player's own* turn-end (status.ts's `tickStatuses`), while a temporary
+ * modifier is a plain stat delta that must tick down at the end of *every*
+ * turn — both players' — so a "this turn" buff/debuff behaves the same
+ * whether it was cast on an ally (gone before the caster's own turn ends)
+ * or an enemy (gone before that enemy's turn starts), never leaking into
+ * someone else's turn just because of whose board it happens to sit on.
+ * Each application pushes its own entry rather than merging into an
+ * existing one — same additive-stacking behavior as the permanent buff
+ * this mirrors — so two "this turn" buffs on the same creature really do
+ * add up, each expiring on its own schedule. `hpDelta` is a display-only
+ * max-HP overlay exactly like `PositionalBonus.hpDelta` — never mutates
+ * `currentHp`, never affects death checks, never raises the heal cap.
+ */
+export interface TemporaryModifier {
+  attackDelta?: number;
+  hpDelta?: number;
+  turnsRemaining: number;
 }
 
 export interface DrawCardEffect {
@@ -603,6 +641,8 @@ export interface CardInstance {
   /** Double Strike bookkeeping (DESIGN.md §17): attacks already made this turn. `hasAttackedThisTurn` still means "exhausted, cannot attack again" for every existing caller — only creatureCanAttack/declareCreatureAttack look at this field directly. */
   attacksUsedThisTurn?: number;
   statuses: StatusEffectInstance[];
+  /** Temporary Attack/HP deltas from a duration-bearing `buff` effect (ROADMAP.md #7) — see `TemporaryModifier`'s doc comment for why this ticks separately from `statuses`. */
+  temporaryModifiers: TemporaryModifier[];
   /** Ward (DESIGN.md §7) is a one-time negation — set true once it's been consumed by a hostile targeted Spell/Ability. */
   wardConsumed?: boolean;
   /** Duel (DESIGN.md §17): the enemy creature instance this creature has marked, if any. Live-checked every time (still on the board?) rather than explicitly cleared when the mark's target dies — it just silently stops mattering. */

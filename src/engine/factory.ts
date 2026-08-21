@@ -31,6 +31,7 @@ export function createCardInstance(defId: string, owner: PlayerId): CardInstance
     attackDelta: 0,
     hpDelta: 0,
     statuses: [],
+    temporaryModifiers: [],
   };
 
   if (def.archetype === "creature" || def.archetype === "building") {

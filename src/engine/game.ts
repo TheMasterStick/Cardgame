@@ -3,7 +3,7 @@ import { findOpenContiguousSlots, findOpenSlot } from "./board";
 import { drawCard, drawStartingHand } from "./deck";
 import { killCardIfDead, resolveEffect, type EffectTargetRef } from "./effects";
 import { applySpellDiscount, peekSpellDiscount } from "./hero";
-import { tickStatuses } from "./status";
+import { tickStatuses, tickTemporaryModifiers } from "./status";
 import {
   STARTING_HAND_SIZE,
   otherPlayer,
@@ -54,6 +54,26 @@ function processEndOfTurnStatuses(state: GameState, owner: PlayerId): void {
     if (player.hero.currentHp <= 0 && !state.winner) {
       state.winner = otherPlayer(owner);
       state.log.push(`${state.winner} wins! ${owner}'s Hero fell to status damage.`);
+    }
+  }
+}
+
+/**
+ * Ticks every creature's temporary Attack/HP modifiers (ROADMAP.md #7) —
+ * unlike `processEndOfTurnStatuses`, this sweeps *both* players' boards
+ * every single `endTurn()` call, not just the departing active player's
+ * own. That's what makes `duration: 1` ("this turn") behave the same for
+ * a self-buff and a hostile debuff: whoever's board it's sitting on, it's
+ * gone the moment this same turn ends — see TemporaryModifier's doc
+ * comment in types.ts for the full reasoning.
+ */
+function processEndOfTurnTemporaryModifiers(state: GameState): void {
+  for (const owner of ["player", "opponent"] as const) {
+    const player = state.players[owner];
+    for (const row of ["vanguard", "support"] as const) {
+      for (const card of uniqueCards(player.board[row])) {
+        tickTemporaryModifiers(card);
+      }
     }
   }
 }
@@ -111,6 +131,7 @@ export function startGame(state: GameState): void {
 
 export function endTurn(state: GameState): void {
   processEndOfTurnStatuses(state, state.activePlayer);
+  processEndOfTurnTemporaryModifiers(state);
   state.phase = "end";
   if (state.winner) return;
 

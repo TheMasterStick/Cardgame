@@ -1,4 +1,4 @@
-import type { CardInstance, HeroInstance, StatusEffectInstance, StatusType } from "./types";
+import type { CardInstance, HeroInstance, StatusEffectInstance, StatusType, TemporaryModifier } from "./types";
 
 type Statused = CardInstance | HeroInstance;
 
@@ -57,4 +57,19 @@ export function tickStatuses(target: Statused): number {
 /** Freeze (DESIGN.md §17): a control status — stops the affected creature/Hero from attacking, Advancing, or using an activated ability for as long as it holds. */
 export function isFrozen(target: Statused): boolean {
   return target.statuses.some((s) => s.type === "freeze");
+}
+
+/**
+ * Ticks a creature's temporary Attack/HP modifiers (ROADMAP.md #7),
+ * dropping any that expire. Deliberately separate from `tickStatuses`:
+ * this is called for *every* creature at the end of *every* turn — both
+ * players', not just the bearer's own — see `TemporaryModifier`'s doc
+ * comment in types.ts for why "this turn" needs that different timing.
+ * No damage to return; a temporary modifier is a plain stat delta, never
+ * a damage-over-time source.
+ */
+export function tickTemporaryModifiers(card: CardInstance): void {
+  card.temporaryModifiers = card.temporaryModifiers
+    .map((m): TemporaryModifier => ({ ...m, turnsRemaining: m.turnsRemaining - 1 }))
+    .filter((m) => m.turnsRemaining > 0);
 }

@@ -103,6 +103,8 @@ interface CardDraft {
   effectDuration: number;
   effectAttackDelta: number;
   effectHpDelta: number;
+  /** Buff only (ROADMAP.md #7): turns until the buff expires. 0 = the original permanent buff. */
+  buffDuration: number;
   effectPool: "resource" | "mana" | "energy";
   effectCreatureId: string;
   /** Swarm only (summonCreature's count field, DESIGN.md §16) — how many copies to summon at once. */
@@ -145,6 +147,7 @@ function emptyDraft(): CardDraft {
     effectDuration: 2,
     effectAttackDelta: 1,
     effectHpDelta: 1,
+    buffDuration: 0,
     effectPool: "resource",
     effectCreatureId: "",
     effectCount: 1,
@@ -169,6 +172,7 @@ function loadEffectIntoDraft(draft: CardDraft, effect: CardEffect): void {
     draft.effectTarget = effect.target as CardDraft["effectTarget"];
     draft.effectAttackDelta = effect.attackDelta ?? 0;
     draft.effectHpDelta = effect.hpDelta ?? 0;
+    draft.buffDuration = effect.duration ?? 0;
   } else if (effect.kind === "drawCard" || effect.kind === "gainGuard") {
     draft.effectAmount = effect.amount;
   } else if (effect.kind === "gainCap") {
@@ -271,6 +275,7 @@ function buildEffect(draft: CardDraft): CardEffect | null {
         attackDelta: draft.effectAttackDelta || undefined,
         hpDelta: draft.effectHpDelta || undefined,
         target: draft.effectTarget,
+        duration: draft.buffDuration || undefined,
       };
     case "drawCard":
       return { kind: "drawCard", amount: draft.effectAmount };
@@ -987,6 +992,17 @@ export function AdminPanel({ collection, userId, onSetCoins, onCardsChanged, onB
                     {draft.effectKind === "consume" && (
                       <span className="admin-hint">Target is the ally destroyed — these deltas apply to every other friendly creature.</span>
                     )}
+                    {draft.effectKind === "buff" && (
+                      <label>
+                        Duration (turns)
+                        <input
+                          type="number"
+                          value={draft.buffDuration}
+                          onChange={(e) => setDraft((d) => ({ ...d, buffDuration: Number(e.target.value) }))}
+                        />
+                        <span className="admin-hint">0 = permanent. 1 = "this turn" — gone by the time anyone's next turn starts.</span>
+                      </label>
+                    )}
                   </>
                 )}
                 {draft.effectKind === "gainCap" && (
@@ -1061,6 +1077,7 @@ export function AdminPanel({ collection, userId, onSetCoins, onCardsChanged, onB
                   attackDelta: 0,
                   hpDelta: 0,
                   statuses: [],
+                  temporaryModifiers: [],
                   currentHp: "hp" in previewDef ? previewDef.hp : undefined,
                   chargesRemaining: "charges" in previewDef ? previewDef.charges : undefined,
                 }}

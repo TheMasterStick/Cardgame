@@ -21,7 +21,7 @@ import rawCustomCards from "./customCards.json";
 // app, so a typo in a hand- or LLM-generated card doesn't break the game.
 
 const VALID_ARCHETYPES: CardArchetype[] = ["creature", "building", "spell", "ability", "equipment"];
-const VALID_RARITIES: Rarity[] = ["common", "rare", "epic", "legendary"];
+const VALID_RARITIES: Rarity[] = ["common", "uncommon", "rare", "epic", "legendary"];
 const VALID_KEYWORDS: Keyword[] = [
   "ranged",
   "reach",

@@ -10,7 +10,7 @@ This tracks the ten recommendations from the August documentation review and sep
 | 4 | Separate Allegiance/Race/Class/CreatureType/world identity | **Documentation done** | Keep WORLD.md as lore authority; avoid making every culture an engine Faction. |
 | 5 | Multi-race support | **Done (Phase L)** | `races: Race[]` live in TypeScript, validators, Supabase (`0004_multi_race.sql`), and the Admin form's checkbox multi-select. |
 | 6 | Explicit Hero Class + Rogue CreatureType | **Done (Phase L)** | `class: HeroClass` required on every Hero; `rogue` CreatureType added and retagged onto `assassin`/`shadow-infiltrator`. Purely descriptive — no mechanic keys off Class yet. |
-| 7 | Temporary modifier/duration primitive | **Highest-priority new engine primitive** | Design one generic effect model for “this turn/until next turn/N turns”, then convert faction cards that depend on it. |
+| 7 | Temporary modifier/duration primitive | **Done (Phase M)** | `buff`'s new `duration` field (`CardInstance.temporaryModifiers`), ticking symmetrically for both players at every turn end so "this turn" behaves the same for a self-buff and a hostile debuff. `battle-fury` demonstrates it. Covers straight temporary Attack/HP changes only — "until your next turn" phrasing not tied to a stat change, and look/choose/reorder or Mark/Grudge/Trap-style cards, still need their own work (see #2/#4 in the sequence below). |
 | 8 | Harden baked-card/Admin workflow | **Docs flagged; implementation pending** | Safe aspect-ratio upload, full schema form coverage, mechanics-vs-art warning. |
 | 9 | Create WORLD.md | **Done** | Expand only as cards establish cultures/places/races. |
 | 10 | Begin non-Human/archetype mini-sets | **Next content phase** | Use Neutral Core as balance baseline; author small representative sets rather than all 19 at once. |
@@ -19,6 +19,6 @@ This tracks the ten recommendations from the August documentation review and sep
 
 1. ~~Review/approve these revised docs.~~ **Done.**
 2. ~~Make the small taxonomy engine changes (#5-6).~~ **Done (Phase L).**
-3. Add temporary modifiers (#7) — next up.
-4. Pick one Human and one non-Human archetype mini-set and convert 8-12 cards each against the current Neutral Core.
+3. ~~Add temporary modifiers (#7).~~ **Done (Phase M).**
+4. Pick one Human and one non-Human archetype mini-set and convert 8-12 cards each against the current Neutral Core — next up.
 5. Let those first real sets reveal which bespoke mechanics (Mark, Grudge, Trap, etc.) are actually worth implementing next.

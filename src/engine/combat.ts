@@ -125,6 +125,7 @@ export function getEffectiveCreatureAttack(state: GameState, owner: PlayerId, ca
   let attack =
     def.attack +
     card.attackDelta +
+    card.temporaryModifiers.reduce((sum, m) => sum + (m.attackDelta ?? 0), 0) +
     getAuraAttackBonus(state, owner, card) +
     getBuildingAuraAttackBonus(state, owner, card) +
     getBearerAttackBonus(state, owner, { kind: "creature", instanceId: card.instanceId });
@@ -170,16 +171,17 @@ export function getEffectiveCreatureAttack(state: GameState, owner: PlayerId, ca
 /**
  * Live effective max HP — a display-only overlay (DESIGN.md's live-bonus
  * "Open default", see PositionalBonus's doc comment in types.ts): folds in
- * Formation's optional `hpDelta`, Crowd Pleaser, and Duel, purely for
- * showing an accurate "X / Y" in the UI. `currentHp`, death checks
- * (killCardIfDead), and healCard's cap are all computed from the base
- * `def.hp + card.hpDelta` only and never consult this function — losing a
- * live bonus (an ally dying, a Formation partner stepping away) must never
+ * Formation's optional `hpDelta`, Crowd Pleaser, Duel, and any temporary
+ * modifiers (ROADMAP.md #7), purely for showing an accurate "X / Y" in the
+ * UI. `currentHp`, death checks (killCardIfDead), and healCard's cap are
+ * all computed from the base `def.hp + card.hpDelta` only and never
+ * consult this function — losing a live bonus (an ally dying, a Formation
+ * partner stepping away, a "this turn" buff expiring) must never
  * retroactively kill a creature just because its displayed max HP dropped.
  */
 export function getEffectiveCreatureMaxHp(state: GameState, owner: PlayerId, card: CardInstance): number {
   const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
-  let hp = def.hp + card.hpDelta;
+  let hp = def.hp + card.hpDelta + card.temporaryModifiers.reduce((sum, m) => sum + (m.hpDelta ?? 0), 0);
   if (def.crowdPleaserBonus && def.keywords.includes("crowdPleaser")) {
     const otherCount = allCreaturesOnBoard(state).filter((c) => c.instanceId !== card.instanceId).length;
     hp += Math.min(def.crowdPleaserBonus.hpCap, otherCount * def.crowdPleaserBonus.hpPerCreature);

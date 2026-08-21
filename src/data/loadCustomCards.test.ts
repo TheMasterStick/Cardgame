@@ -522,6 +522,22 @@ describe("custom card validation", () => {
     expect(card).not.toBeNull();
   });
 
+  it("accepts a temporary buff effect with a duration (ROADMAP.md #7)", () => {
+    const card = validateCard({
+      id: "x",
+      name: "X",
+      archetype: "spell",
+      spellForm: "instant",
+      cost: 2,
+      rarity: "uncommon",
+      effect: { kind: "buff", attackDelta: 2, target: "allFriendlyCreatures", duration: 1 },
+    });
+    expect(card).not.toBeNull();
+    if (card?.archetype === "spell") {
+      expect(card.effect).toEqual({ kind: "buff", attackDelta: 2, target: "allFriendlyCreatures", duration: 1 });
+    }
+  });
+
   it("accepts equipment with keywords and a charge count", () => {
     const card = validateCard({
       id: "x",

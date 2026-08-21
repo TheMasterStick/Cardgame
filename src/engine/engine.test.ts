@@ -16,7 +16,7 @@ import { drawCard } from "./deck";
 import { damageCard, damagePlayer, gainCap, healCard, resolveEffect } from "./effects";
 import { assignEquipment } from "./equipment";
 import { createCardInstance, createInitialGameState } from "./factory";
-import { activateSlotCard, playCardFromHand, startTurn } from "./game";
+import { activateSlotCard, endTurn, playCardFromHand, startTurn } from "./game";
 import { activateHeroPower, activateHeroSignature } from "./hero";
 import { applyStatus } from "./status";
 import {
@@ -2101,6 +2101,129 @@ describe("Multi effect (DESIGN.md §17 — Frost Nova)", () => {
     expect(result.ok).toBe(true);
     expect(enemy.currentHp).toBe(1); // 3 - 2
     expect(enemy.statuses).toContainEqual({ type: "freeze", amount: 0, turnsRemaining: 1 });
+  });
+});
+
+describe("Temporary modifiers (ROADMAP.md #7 — the 'this turn'/'N turns' primitive)", () => {
+  it("a duration-bearing buff raises live Attack without touching the permanent attackDelta", () => {
+    const state = makeState();
+    const footman = createCardInstance("footman", "player");
+    state.players.player.board.vanguard[0] = footman;
+    const before = getEffectiveCreatureAttack(state, "player", footman);
+
+    resolveEffect(state, "player", { kind: "buff", attackDelta: 2, target: "targetCreature", duration: 1 }, {
+      kind: "card",
+      owner: "player",
+      instanceId: footman.instanceId,
+    });
+
+    expect(getEffectiveCreatureAttack(state, "player", footman)).toBe(before + 2);
+    expect(footman.attackDelta).toBe(0); // still permanent-zero — the bonus lives in temporaryModifiers only
+    expect(footman.temporaryModifiers).toEqual([{ attackDelta: 2, hpDelta: undefined, turnsRemaining: 1 }]);
+  });
+
+  it("'this turn' (duration 1) on a self-buff is gone by the time this same turn ends", () => {
+    const state = makeState();
+    const footman = createCardInstance("footman", "player");
+    state.players.player.board.vanguard[0] = footman;
+    const before = getEffectiveCreatureAttack(state, "player", footman);
+
+    resolveEffect(state, "player", { kind: "buff", attackDelta: 2, target: "allFriendlyCreatures", duration: 1 }, null);
+    expect(getEffectiveCreatureAttack(state, "player", footman)).toBe(before + 2);
+
+    endTurn(state); // player's turn ends, hands off to opponent
+    expect(getEffectiveCreatureAttack(state, "player", footman)).toBe(before);
+    expect(footman.temporaryModifiers).toEqual([]);
+  });
+
+  it("'this turn' (duration 1) on a hostile debuff is gone before the debuffed player's own turn starts — not still active through their whole turn like a Status would be", () => {
+    const state = makeState();
+    const enemy = createCardInstance("footman", "opponent");
+    state.players.opponent.board.vanguard[0] = enemy;
+    const before = getEffectiveCreatureAttack(state, "opponent", enemy);
+
+    // Player debuffs the opponent's creature "this turn" during player's own turn.
+    resolveEffect(state, "player", { kind: "buff", attackDelta: -1, target: "targetCreature", duration: 1 }, {
+      kind: "card",
+      owner: "opponent",
+      instanceId: enemy.instanceId,
+    });
+    expect(getEffectiveCreatureAttack(state, "opponent", enemy)).toBe(before - 1);
+
+    endTurn(state); // player's turn ends — activePlayer flips to opponent
+    expect(state.activePlayer).toBe("opponent");
+    // The debuff must already be gone here: it was cast "this turn" during
+    // player's turn, so it should not bleed into the opponent's turn at all.
+    expect(getEffectiveCreatureAttack(state, "opponent", enemy)).toBe(before);
+    expect(enemy.temporaryModifiers).toEqual([]);
+  });
+
+  it("a multi-turn duration survives one full round and expires exactly on schedule", () => {
+    const state = makeState();
+    const footman = createCardInstance("footman", "player");
+    state.players.player.board.vanguard[0] = footman;
+    const before = getEffectiveCreatureAttack(state, "player", footman);
+
+    resolveEffect(state, "player", { kind: "buff", attackDelta: 3, target: "allFriendlyCreatures", duration: 3 }, null);
+
+    endTurn(state); // -> opponent, 1 tick consumed
+    expect(getEffectiveCreatureAttack(state, "player", footman)).toBe(before + 3);
+    endTurn(state); // -> player, 2 ticks consumed
+    expect(getEffectiveCreatureAttack(state, "player", footman)).toBe(before + 3);
+    endTurn(state); // -> opponent, 3 ticks consumed — expires
+    expect(getEffectiveCreatureAttack(state, "player", footman)).toBe(before);
+  });
+
+  it("two separate temporary buffs stack additively, each on its own countdown", () => {
+    const state = makeState();
+    const footman = createCardInstance("footman", "player");
+    state.players.player.board.vanguard[0] = footman;
+    const before = getEffectiveCreatureAttack(state, "player", footman);
+
+    resolveEffect(state, "player", { kind: "buff", attackDelta: 2, target: "allFriendlyCreatures", duration: 1 }, null);
+    resolveEffect(state, "player", { kind: "buff", attackDelta: 1, target: "allFriendlyCreatures", duration: 2 }, null);
+    expect(getEffectiveCreatureAttack(state, "player", footman)).toBe(before + 3);
+
+    endTurn(state); // the duration-1 buff expires, the duration-2 one has one tick left
+    expect(getEffectiveCreatureAttack(state, "player", footman)).toBe(before + 1);
+  });
+
+  it("a temporary hpDelta is a display-only max-HP overlay — never heals currentHp or raises the real cap", () => {
+    const state = makeState();
+    const footman = createCardInstance("footman", "player"); // 2/3
+    state.players.player.board.vanguard[0] = footman;
+    footman.currentHp = 3;
+
+    resolveEffect(state, "player", { kind: "buff", hpDelta: 2, target: "targetCreature", duration: 1 }, {
+      kind: "card",
+      owner: "player",
+      instanceId: footman.instanceId,
+    });
+
+    expect(getEffectiveCreatureMaxHp(state, "player", footman)).toBe(5); // 3 + 2, display only
+    expect(footman.currentHp).toBe(3); // unchanged — no real healing happened
+    expect(footman.hpDelta).toBe(0); // permanent delta untouched
+  });
+
+  it("Battle Fury buffs only friendly creatures this turn, expiring by the end of that same turn", () => {
+    const state = makeState();
+    const fury = createCardInstance("battle-fury", "player");
+    state.players.player.hand.push(fury);
+    const ally = createCardInstance("footman", "player");
+    state.players.player.board.vanguard[0] = ally;
+    const enemy = createCardInstance("footman", "opponent");
+    state.players.opponent.board.vanguard[0] = enemy;
+    const allyBefore = getEffectiveCreatureAttack(state, "player", ally);
+    const enemyBefore = getEffectiveCreatureAttack(state, "opponent", enemy);
+
+    const result = playCardFromHand(state, "player", fury.instanceId);
+    expect(result.ok).toBe(true);
+    expect(getEffectiveCreatureAttack(state, "player", ally)).toBe(allyBefore + 2);
+    expect(getEffectiveCreatureAttack(state, "opponent", enemy)).toBe(enemyBefore); // not friendly, untouched
+    expect(state.players.player.discard).toContain(fury); // Instant Spell, straight to discard
+
+    endTurn(state);
+    expect(getEffectiveCreatureAttack(state, "player", ally)).toBe(allyBefore);
   });
 });
 
