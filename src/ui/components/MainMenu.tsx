@@ -21,6 +21,10 @@ export function MainMenu({ coins, onQuickPlay, onCollection, onPacks, onDeckBuil
           <div className="menu-option__title">Deck Builder</div>
           <div className="menu-option__desc">Build a 30-card deck from your collection and play with it.</div>
         </button>
+        <a className="menu-option" href="/card-builder.html">
+          <div className="menu-option__title">Card Builder</div>
+          <div className="menu-option__desc">Author cards and preview them on the layered card bases.</div>
+        </a>
         <button className="menu-option" onClick={onPacks}>
           <div className="menu-option__title">Card Packs</div>
           <div className="menu-option__desc">Spend coins on packs to grow your collection.</div>
