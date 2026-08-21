@@ -67,6 +67,16 @@ Buildings: 2–3R for 5–7 Durability.
 
 *Chivalric, heraldic.*
 
+**Converted to real content in Phase N** (ROADMAP.md #10) under the live
+`roseguard-kingdom` Faction: Queen Maerwyn (Hero), Lioness of the Royal
+Guard, Court Enchantress, Sky-Lion Archer, Gilded Knight-Errant, Sky-Lion
+Lancer, Raise the Lion Banner, Reinforcements, Roseguard Barracks, and
+Lionguard Cuirass — see `src/data/cards.ts`. The draft below is kept for
+its remaining unconverted cards and as a naming/tone reference; the
+converted cards' actual stats/text follow current CARDS.md primitives,
+not this legacy wording verbatim (see the checklist at the bottom of this
+file).
+
 **Basic Cards**
 1. **Lioness of the Royal Guard** — Common · Fighter · 2E · 2/3
    Gains +1 Attack while adjacent to another Kingdom Fighter.
@@ -289,6 +299,18 @@ Buildings: 2–3R for 5–7 Durability.
 ## 7. Orc Spirit Tribe
 
 *Tribal, ancestral, painted.*
+
+**Converted to real content in Phase N** (ROADMAP.md #10) under the live
+`wildheart-tribes` Faction: Matron Shara Earthsong (Hero), Totem-Bound
+Spearwoman, Painted Spirit-Mother, Barehide Beast-Stalker, War-Painted
+Charger, Ancestor-Bound Huntress, Totem-Flesh Colossus, Blood Calls to
+Blood, Grove of Painted Bones, and Spiritbone Spear — see
+`src/data/cards.ts`. Revenge (`onDeath` trigger) is the set's signature
+mechanic; its effect must be an AOE (`allFriendlyCreatures`) or
+untargeted effect, since an `onDeath` trigger always resolves with a
+`null` target — a single-target "give another friendly character +2/+1"
+as originally drafted below isn't reachable that way. The draft below is
+kept for its remaining unconverted cards and as a naming/tone reference.
 
 **Basic Cards**
 1. **Totem-Bound Spearwoman** — Common · Fighter · 2E · 2/4

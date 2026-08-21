@@ -501,6 +501,36 @@ Phase 0 (many built-in cards already use it) — any custom or
 Admin-Panel-saved card with `rarity: "uncommon"` was silently rejected
 by `validateCard`. Fixed to match the live `Rarity` type exactly.
 
+**Phase N landed ROADMAP.md #10**, the first two real archetype
+mini-sets converted from FACTIONS.md's draft content: **Roseguard
+Kingdom** (§1 Human Kingdom, chivalric/heraldic) and **Wildheart
+Tribes** (§7 Orc Spirit Tribe, tribal/ancestral), 10 cards each (a
+Legendary Hero plus 9 supporting cards) under the two previously-empty
+`roseguard-kingdom`/`wildheart-tribes` Faction tags — no engine changes
+were needed, since every mechanic used (`formation`, `taunt`, `ranged`,
+`charge`, `reach`, `revenge`/`onDeath`, `cleave`, `warcry`/`onPlay`, the
+Phase M `buff` `duration`, an `auraBuff` Hero Passive, a Building
+`ability`) already existed — this phase is pure content plus two
+starter decks (`queen-maerwyn`/`matron-shara-earthsong` in
+`decks.ts`, following the `ARCHIVIST_DECK` precedent). Both mini-sets
+were deliberately **converted, not transcribed**: several of
+FACTIONS.md's original card texts describe effects the engine has no
+primitive for (a one-time non-cap "gain 1 Mana now," a live
+race-membership Attack bonus, granting a keyword like Vanish via a
+spell, an aura that reacts to *other* cards' triggers, auto-reassigning
+Equipment on the bearer's death) and were reflavored to use only real
+`CardEffect`/keyword primitives rather than inventing new engine
+surface for a first content pass — see FACTIONS.md §1/§7 for the
+per-card conversion notes. This surfaced one genuine engine
+constraint worth flagging for future Revenge-style cards: an `onDeath`
+trigger's effect always resolves via `resolveEffect(state, owner,
+trigger.effect, null)` (`effects.ts`) — a `targetCreature`-scoped effect
+silently fizzles from a trigger since there's no player-supplied target
+to fill that slot, so a Revenge effect must use an AOE target
+(`allFriendlyCreatures`) or no target at all. Ancestor-Bound Huntress
+was designed around this from the start; Totem-Flesh Colossus's
+Revenge already used the AOE shape for the same reason.
+
 CARDS.md/BACKEND.md describe what's live today; check them (not just
 this doc) for current schema.
 
@@ -1024,6 +1054,7 @@ Suggested build order, each phase individually shippable/testable:
 | **K — Neutral Core Set adoption + card-art-is-the-card UI** ✅ *(live)* | Adopted an external 59-card spec as ground truth for the Neutral Core Set; every existing Phase A-J mechanic was explicitly kept, not reconciled against the new spec. Vanish replaces Stealth; new keywords Enrage, Frenzy (reassigned to a new card), Resistant, Deadeye, Double Strike, Duel, Crowd Pleaser, Bleed, Burn(-on-hit), Frost Armor, Massive; new `creatureType` field drives type-conditional Formation; new `gainIncome`/`drawCreature`/`devour`/`multi` CardEffect kinds; new `targetRow`/`targetCreatureOrPlayer` targeting; Building ability charges; Equipment keywords/charges; Ability gained the Instant/Activated split Spells already had. The card frame/text overlay was removed for every non-Hero archetype — the art itself now carries that information. Two genuine pre-existing bugs surfaced and fixed along the way: the onAttack trigger was built but never wired into combat, and `applyStatus` never supported AOE targets. See the implementation-status note above for the full list, the Open defaults, and the known gaps (no Duel UI button yet, Bulletin Board's scrying simplified, decks not reworked to include the 11 new cards). |
 | **L — Taxonomy migrations (ROADMAP.md #5/#6)** ✅ *(live)* | `race?: Race` became `races?: Race[]` everywhere (types.ts, the 8 cards that had one, the `auraBuff`/`neutralRaces` array-membership matching, CardView's Hero meta line, the Admin Panel's checkbox multi-select, the Supabase schema — `race` moved from a dedicated column into `data` jsonb like every other array field, migration `0004_multi_race.sql`). New required `class: HeroClass` field on every Hero (`"fighter" \| "mage" \| "rogue"`), purely descriptive today; new `rogue` CreatureType, retagged onto `assassin`/`shadow-infiltrator` in place of the generic `fighter` tag. Fixed a genuine pre-existing bug along the way: `validateCard` never actually included `element`/`faction`/`race` in its returned object, so an Admin-Panel-set Element/Faction/Race silently vanished on the next `fetchRemoteCards()` — fixed for both the Supabase and `customCards.json` paths. See the implementation-status note above for the full writeup. |
 | **M — Temporary-modifier primitive (ROADMAP.md #7)** ✅ *(live)* | `buff` gained an optional `duration?: number` — omit for the original permanent buff, give it a number and it becomes temporary instead: pushed onto a new `CardInstance.temporaryModifiers` array, summed live into Attack/effective-max-HP, never touching the permanent `attackDelta`/`hpDelta`. Ticks down at the end of *every* turn — both players', not just the bearer's own controller's — deliberately different timing from Poison/Bleed/Burn/Freeze's per-owner-turn-end tick, so `duration: 1` ("this turn") is symmetric for a self-buff and a hostile debuff alike. New Neutral bonus Spell `battle-fury` demonstrates it. Fixed an unrelated pre-existing bug found along the way: `loadCustomCards.ts`'s `VALID_RARITIES` never included `"uncommon"` despite it being a live `Rarity` value since Phase 0. See the implementation-status note above for the full writeup. |
+| **N — First archetype mini-sets (ROADMAP.md #10)** ✅ *(live)* | Roseguard Kingdom (FACTIONS.md §1, Human) and Wildheart Tribes (FACTIONS.md §7, Orc) converted into real cards under the previously-empty `roseguard-kingdom`/`wildheart-tribes` Factions — 10 cards each (a Legendary Hero + 9 supporting cards) plus a 30-card starter deck each, pure content with no engine changes. See the implementation-status note above for the conversion notes and the `onDeath`-trigger-target constraint it surfaced. |
 
 Each phase gets the same verification pass as prior work: `tsc
 --noEmit`, `eslint`, `vitest`, `vite build`, plus a Playwright smoke

@@ -122,6 +122,65 @@ const ARCHIVIST_DECK: DeckList = [
   ["warded-acolyte", 1],
 ];
 
+// Roseguard Kingdom (ROADMAP.md #10 / FACTIONS.md §1, converted in Phase N)
+// — Queen Maerwyn is Fighter-classed, so the Neutral fill leans the same way
+// FIGHTER_DECK does.
+const QUEEN_MAERWYN_DECK: DeckList = [
+  ["lioness-of-the-royal-guard", 2],
+  ["court-enchantress", 2],
+  ["sky-lion-archer", 2],
+  ["gilded-knight-errant", 1],
+  ["sky-lion-lancer", 1],
+  ["raise-the-lion-banner", 2],
+  ["reinforcements", 1],
+  ["roseguard-barracks", 1],
+  ["lionguard-cuirass", 1],
+  ["militia-recruit", 1],
+  ["footman", 2],
+  ["shield-bearer", 1],
+  ["cleric", 1],
+  ["shield-sister", 1],
+  ["hill-giant", 1],
+  ["gold-mine", 1],
+  ["bulletin-board", 1],
+  ["training-field", 1],
+  ["exercise", 1],
+  ["war-cry", 1],
+  ["iron-sword", 1],
+  ["battle-shield", 1],
+  ["garrison-post", 1],
+  ["shieldwall-veteran", 1],
+  ["steel-barding", 1],
+];
+
+// Wildheart Tribes (ROADMAP.md #10 / FACTIONS.md §7, converted in Phase N)
+// — Matron Shara is Mage-classed, so the Neutral fill leans the same way
+// MAGE_DECK does.
+const MATRON_SHARA_DECK: DeckList = [
+  ["totem-bound-spearwoman", 2],
+  ["painted-spirit-mother", 2],
+  ["barehide-beast-stalker", 2],
+  ["war-painted-charger", 2],
+  ["ancestor-bound-huntress", 1],
+  ["totem-flesh-colossus", 1],
+  ["blood-calls-to-blood", 2],
+  ["grove-of-painted-bones", 1],
+  ["spiritbone-spear", 1],
+  ["apprentice-mage", 2],
+  ["arrow-archer", 2],
+  ["footman", 1],
+  ["gold-mine", 1],
+  ["lumbermill", 1],
+  ["mana-pool", 1],
+  ["bulletin-board", 1],
+  ["fireball", 1],
+  ["lightning-bolt", 2],
+  ["frost-nova", 1],
+  ["focus", 1],
+  ["plague-rat", 1],
+  ["renewal", 1],
+];
+
 // Keyed by Hero card id (see data/cards.ts's `heroes` array). Quick Play
 // only offers heroes that have an entry here — a Hero card without a
 // starter deck is only playable via the Deck Builder.
@@ -130,4 +189,6 @@ export const STARTER_DECKS: Record<string, string[]> = {
   mage: expand(MAGE_DECK),
   rogue: expand(ROGUE_DECK),
   archivist: expand(ARCHIVIST_DECK),
+  "queen-maerwyn": expand(QUEEN_MAERWYN_DECK),
+  "matron-shara-earthsong": expand(MATRON_SHARA_DECK),
 };

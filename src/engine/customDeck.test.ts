@@ -128,4 +128,21 @@ describe("Allegiance (DESIGN.md §10)", () => {
     for (const id of deckIds) draft[id] = (draft[id] ?? 0) + 1;
     expect(deckAllegianceViolations(draft, archivistDef)).toEqual([]);
   });
+
+  it.each([
+    ["queen-maerwyn", "roseguard-kingdom"],
+    ["matron-shara-earthsong", "wildheart-tribes"],
+  ] as const)(
+    "the %s starter deck (Phase N, ROADMAP.md #10) is exactly 30 cards and entirely Allegiance-legal",
+    (heroId, faction) => {
+      const heroDef = CARD_DEFINITIONS[heroId] as HeroCardDefinition;
+      expect(heroDef.faction).toBe(faction);
+      const deckIds = STARTER_DECKS[heroId];
+      expect(deckIds).toHaveLength(30);
+
+      const draft: DeckDraft = {};
+      for (const id of deckIds) draft[id] = (draft[id] ?? 0) + 1;
+      expect(deckAllegianceViolations(draft, heroDef)).toEqual([]);
+    },
+  );
 });

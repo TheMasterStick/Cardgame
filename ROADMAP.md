@@ -13,12 +13,12 @@ This tracks the ten recommendations from the August documentation review and sep
 | 7 | Temporary modifier/duration primitive | **Done (Phase M)** | `buff`'s new `duration` field (`CardInstance.temporaryModifiers`), ticking symmetrically for both players at every turn end so "this turn" behaves the same for a self-buff and a hostile debuff. `battle-fury` demonstrates it. Covers straight temporary Attack/HP changes only — "until your next turn" phrasing not tied to a stat change, and look/choose/reorder or Mark/Grudge/Trap-style cards, still need their own work (see #2/#4 in the sequence below). |
 | 8 | Harden baked-card/Admin workflow | **Docs flagged; implementation pending** | Safe aspect-ratio upload, full schema form coverage, mechanics-vs-art warning. |
 | 9 | Create WORLD.md | **Done** | Expand only as cards establish cultures/places/races. |
-| 10 | Begin non-Human/archetype mini-sets | **Next content phase** | Use Neutral Core as balance baseline; author small representative sets rather than all 19 at once. |
+| 10 | Begin non-Human/archetype mini-sets | **Done (Phase N)** | Roseguard Kingdom (FACTIONS.md §1, Human) and Wildheart Tribes (FACTIONS.md §7, Orc) converted — 10 cards each (Hero + 9 supporting), starter decks in `decks.ts`. |
 
 ## Suggested immediate sequence
 
 1. ~~Review/approve these revised docs.~~ **Done.**
 2. ~~Make the small taxonomy engine changes (#5-6).~~ **Done (Phase L).**
 3. ~~Add temporary modifiers (#7).~~ **Done (Phase M).**
-4. Pick one Human and one non-Human archetype mini-set and convert 8-12 cards each against the current Neutral Core — next up.
-5. Let those first real sets reveal which bespoke mechanics (Mark, Grudge, Trap, etc.) are actually worth implementing next.
+4. ~~Pick one Human and one non-Human archetype mini-set and convert 8-12 cards each against the current Neutral Core.~~ **Done (Phase N)** — Roseguard Kingdom + Wildheart Tribes.
+5. Let those first real sets reveal which bespoke mechanics (Mark, Grudge, Trap, etc.) are actually worth implementing next — Phase N's Revenge-only Wildheart kit already surfaced one concrete gap: a Revenge/onDeath effect can't target one specific "another" creature since the trigger always resolves with a null target, only AOE or untargeted effects reach from there.

@@ -2227,6 +2227,64 @@ describe("Temporary modifiers (ROADMAP.md #7 — the 'this turn'/'N turns' primi
   });
 });
 
+describe("Phase N mini-sets (ROADMAP.md #10 — FACTIONS.md §1/§7 converted to real content)", () => {
+  it("Queen Maerwyn's Passive raises the live Attack of her own Faction's creatures only", () => {
+    const state = createInitialGameState("queen-maerwyn", [], "mage", []);
+    const lioness = createCardInstance("lioness-of-the-royal-guard", "player"); // faction: roseguard-kingdom
+    const footman = createCardInstance("footman", "player"); // Neutral
+    state.players.player.board.vanguard[0] = lioness;
+    state.players.player.board.support[0] = footman; // not adjacent — keeps Lioness's own Formation keyword out of this
+
+    expect(getEffectiveCreatureAttack(state, "player", lioness)).toBe(3); // 2 base + 1 Passive
+    expect(getEffectiveCreatureAttack(state, "player", footman)).toBe(2); // unaffected, off-Faction
+  });
+
+  it("Queen Maerwyn's Hero Power (Rally) grants a temporary buff that expires at her own turn's end", () => {
+    const state = createInitialGameState("queen-maerwyn", [], "mage", []);
+    const footman = createCardInstance("footman", "player");
+    state.players.player.board.vanguard[0] = footman;
+    state.players.player.energy.current = 2;
+
+    activateHeroPower(state, "player", { kind: "card", owner: "player", instanceId: footman.instanceId });
+    expect(getEffectiveCreatureAttack(state, "player", footman)).toBe(4); // 2 base + 2 Rally
+
+    endTurn(state); // player's own turn ends
+    expect(getEffectiveCreatureAttack(state, "player", footman)).toBe(2);
+  });
+
+  it("Matron Shara's Passive raises the live Attack of her own Faction's creatures only", () => {
+    const state = createInitialGameState("matron-shara-earthsong", [], "mage", []);
+    const spearwoman = createCardInstance("totem-bound-spearwoman", "player"); // faction: wildheart-tribes
+    state.players.player.board.vanguard[0] = spearwoman;
+    expect(getEffectiveCreatureAttack(state, "player", spearwoman)).toBe(3); // 2 base + 1 Passive
+  });
+
+  it("Ancestor-Bound Huntress's Revenge buffs another friendly creature when it dies", () => {
+    const state = makeState();
+    const huntress = createCardInstance("ancestor-bound-huntress", "player");
+    const ally = createCardInstance("footman", "player");
+    huntress.currentHp = 1;
+    state.players.player.board.vanguard[0] = huntress;
+    state.players.player.board.vanguard[1] = ally;
+
+    damageCard(state, "player", huntress.instanceId, 99);
+    expect(state.players.player.graveyard).toContain(huntress);
+    expect(ally.attackDelta).toBe(1);
+    expect(ally.hpDelta).toBe(1);
+  });
+
+  it("Grove of Painted Bones' activated ability summons a Totem-Bound Spearwoman", () => {
+    const state = makeState();
+    const grove = createCardInstance("grove-of-painted-bones", "player");
+    state.players.player.board.buildings[0] = grove;
+    state.players.player.resources.current = 2;
+
+    activateBuildingAbility(state, "player", 0);
+    const summoned = state.players.player.board.vanguard[0];
+    expect(summoned?.defId).toBe("totem-bound-spearwoman");
+  });
+});
+
 describe("Cloak of Shadows charges (DESIGN.md §17)", () => {
   it("discards itself after the Hero's 3rd attack while equipped", () => {
     const state = makeState();
