@@ -1131,6 +1131,12 @@ planned for this game.
   targets by reach tier, opportunistically hits column-clear
   Buildings). Advance and Building-defense judgment are still open —
   scoped into Wave B2, which introduces the mechanics they need.
+  Since Phase Q, it also checks once per combat phase whether its
+  current attackers already add up to lethal against the enemy Hero
+  (`isLethalAvailable`, ai.ts) and if so goes straight for the Hero
+  with every attacker that has a legal path there, instead of trading
+  through creatures/Buildings first — a reachable Taunt creature is
+  still the one thing that can force an attacker elsewhere.
 
 Suggested build order, each phase individually shippable/testable:
 
@@ -1153,6 +1159,7 @@ Suggested build order, each phase individually shippable/testable:
 | **N — First archetype mini-sets (ROADMAP.md #10)** ✅ *(live)* | Roseguard Kingdom (FACTIONS.md §1, Human) and Wildheart Tribes (FACTIONS.md §7, Orc) converted into real cards under the previously-empty `roseguard-kingdom`/`wildheart-tribes` Factions — 10 cards each (a Legendary Hero + 9 supporting cards) plus a 30-card starter deck each, pure content with no engine changes. See the implementation-status note above for the conversion notes and the `onDeath`-trigger-target constraint it surfaced. |
 | **O — Allegiance reversed to pure synergy (§10)** ✅ *(live)* | Faction no longer restricts deckbuilding at all — any card is legal in any deck regardless of Hero. `HeroCardDefinition.allegiance` and `customDeck.ts`'s Allegiance-gate functions were deleted, along with the Deck Builder's Faction-mismatch warnings. A Faction's own Hero still grants a bonus for fielding that Faction (unchanged `auraBuff` Passives on Archivist/Queen Maerwyn/Matron Shara Earthsong), just never a requirement. See the implementation-status note above and the rewritten §10. |
 | **P — Hero Specializations (§19)** ✅ *(live)* | The single `passive` field is replaced by 3 named Specializations per Hero, chosen once per match (defaulting to index 0 = the old `passive`, so the whole pre-Phase-P test suite needed no behavioral changes). `auraBuff` gained an `hpDelta` alongside `attackDelta`, folded into `getEffectiveCreatureMaxHp` for both Hero and Building auras. A new `chooseSpecialization` screen sits between Hero+deck selection and match start, showing the opponent's Hero (not their deck/hand/pick); the AI's pick (`pickAiSpecialization`, ai.ts) is computed independently of the player's. Hero Power/Signature are unaffected. Fixed two pre-existing gaps found along the way: AdminPanel.tsx had no Hero Passive/Power/Signature authoring UI at all, and `loadCustomCards.ts` never had a `"hero"` case (`VALID_ARCHETYPES` didn't even list it) — both fixed. See the implementation-status note above. |
+| **Q — AI lethal-priority (player-reported gameflow fix)** ✅ *(live)* | Not a pre-planned phase — direct feedback from an actual match: the AI cleared a Building then a Vanguard creature before finishing an undefended, low-HP Hero, when it already had enough attack on board to just end the game. `isLethalAvailable(state)` (ai.ts) sums each of the AI's currently-able-to-attack creatures' damage (Double Strike counted twice, reduced by the enemy's equipment damage reduction, excluding any attacker a reachable Taunt creature would force elsewhere) plus the Hero's own attack if it can swing, against the enemy's `guard.current + hero.currentHp`; it's a same-turn snapshot, not a sequential-kill simulation. When true, `chooseAttackTarget`'s new `preferLethal` parameter sends every attacker with a legal path straight at the enemy Hero instead of the usual creature/Building-trade logic — a reachable Taunt creature is still the one thing that can force a given attacker elsewhere (Infiltrate still bypasses it, same as always). See the implementation-status note above. |
 
 Each phase gets the same verification pass as prior work: `tsc
 --noEmit`, `eslint`, `vitest`, `vite build`, plus a Playwright smoke

@@ -409,6 +409,12 @@ function rowHasTaunt(row: (CardInstance | null)[]): boolean {
   return row.some((c) => c !== null && hasKeyword(c, "taunt"));
 }
 
+/** Whether a reachable Taunt creature forces this attacker away from the enemy Hero — the one thing that still blocks Hero-targeting (DESIGN.md §5), short of Infiltrate. */
+function tauntForcesAwayFromPlayer(enemyBoard: BoardState, reach: ReachProfile): boolean {
+  const canReachSupportForTaunt = reach.reach || reach.ranged || alive(enemyBoard.vanguard).length === 0;
+  return !reach.infiltrate && (rowHasTaunt(enemyBoard.vanguard) || (canReachSupportForTaunt && rowHasTaunt(enemyBoard.support)));
+}
+
 /**
  * Picks the best legal target for an attacker with the given reach tier.
  * The enemy Hero has no board-*population* gate (DESIGN.md §5) — a full
@@ -418,10 +424,28 @@ function rowHasTaunt(row: (CardInstance | null)[]): boolean {
  * Taunt creature is what's forcing a bad trade, there's no legal way
  * around it (short of Infiltrate), so the trade is taken anyway rather
  * than the attacker doing nothing.
+ *
+ * `preferLethal` (set once per combat phase by `isLethalAvailable`) skips
+ * all of that and goes straight for the enemy Hero — clearing a Building
+ * or a blocker first is pointless busywork when the kill is already on
+ * the board, and delaying it for even one attacker risks losing it to a
+ * combat trick before the last swing lands. Taunt still isn't optional:
+ * a Taunt-forced attacker falls through to the normal logic below exactly
+ * as it would without preferLethal, since there's no legal way past it.
  */
-function chooseAttackTarget(state: GameState, reach: ReachProfile, attackerAttack: number, attackerHp: number): AttackTarget {
+function chooseAttackTarget(
+  state: GameState,
+  reach: ReachProfile,
+  attackerAttack: number,
+  attackerHp: number,
+  preferLethal = false,
+): AttackTarget {
   const enemy = otherPlayer(AI);
   const enemyBoard = state.players[enemy].board;
+
+  if (preferLethal && !tauntForcesAwayFromPlayer(enemyBoard, reach)) {
+    return { type: "player" };
+  }
 
   const reachable = reachableCreatures(enemyBoard, reach);
   if (reachable.length > 0) {
@@ -438,9 +462,7 @@ function chooseAttackTarget(state: GameState, reach: ReachProfile, attackerAttac
     if (killable.length > 0 || willSurvive) {
       return { type: "creature", instanceId: target.instanceId };
     }
-    const canReachSupportForTaunt = reach.reach || reach.ranged || alive(enemyBoard.vanguard).length === 0;
-    const tauntForcesIt = !reach.infiltrate && (rowHasTaunt(enemyBoard.vanguard) || (canReachSupportForTaunt && rowHasTaunt(enemyBoard.support)));
-    if (tauntForcesIt) {
+    if (tauntForcesAwayFromPlayer(enemyBoard, reach)) {
       return { type: "creature", instanceId: target.instanceId };
     }
   }
@@ -454,6 +476,52 @@ function chooseAttackTarget(state: GameState, reach: ReachProfile, attackerAttac
   }
 
   return { type: "player" };
+}
+
+/**
+ * Whether the AI can kill the enemy Hero outright this turn if every
+ * attacker that's able to reach the player goes face instead of trading
+ * with creatures or smashing a Building — computed once, before the
+ * attack loop starts, and used to set `chooseAttackTarget`'s
+ * `preferLethal` for every attacker this turn. An attacker a reachable
+ * Taunt creature would force away from the player (see
+ * `tauntForcesAwayFromPlayer`) doesn't count toward the total, since it
+ * can't actually land on the Hero — same restriction `chooseAttackTarget`
+ * itself is bound by. Double Strike (DESIGN.md §17) counts twice, since
+ * both swings can go face. Doesn't simulate the turn (an attack that
+ * kills a blocking creature first and changes what's reachable next
+ * isn't modeled) — just a same-turn "can every current attacker already
+ * reach the Hero for enough total damage" check, which is exactly the
+ * situation Taunt aside.
+ */
+function isLethalAvailable(state: GameState): boolean {
+  const enemy = otherPlayer(AI);
+  const enemyPlayer = state.players[enemy];
+  const remainingLife = enemyPlayer.guard.current + enemyPlayer.hero.currentHp;
+  const damageReduction = equipmentDamageReduction(state, enemy);
+
+  const player = state.players[AI];
+  const vanguardAttackers = alive(player.board.vanguard);
+  const supportAttackers = alive(player.board.support).filter((c) =>
+    (CARD_DEFINITIONS[c.defId] as CreatureDefinition).keywords.includes("ranged"),
+  );
+
+  let total = 0;
+  for (const card of [...vanguardAttackers, ...supportAttackers]) {
+    if (!creatureCanAttack(state, card)) continue;
+    const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
+    const reach = reachProfileOf(def);
+    if (tauntForcesAwayFromPlayer(enemyPlayer.board, reach)) continue;
+    const swings = def.keywords.includes("doubleStrike") ? 2 : 1;
+    total += swings * Math.max(0, getEffectiveCreatureAttack(state, AI, card) - damageReduction);
+    if (total >= remainingLife) return true;
+  }
+
+  if (heroCanAttack(state, AI) && !tauntForcesAwayFromPlayer(enemyPlayer.board, NO_REACH)) {
+    total += Math.max(0, getHeroAttack(state, AI) - damageReduction);
+  }
+
+  return total >= remainingLife;
 }
 
 /** One atomic action the AI took, for step-by-step replay/animation in the UI. */
@@ -563,6 +631,12 @@ export function* runAiTurnSteps(state: GameState): Generator<AiTurnStep, void, v
   // (DESIGN.md §17) — a creature can remain attackable after its first
   // swing, so repeatedly pick the next attacker still able to act instead
   // of visiting each card exactly once.
+  // Computed once per combat phase (DESIGN.md §17 AI notes) — if the AI can
+  // already kill the enemy Hero this turn with its available attackers, it
+  // should go straight for the Hero instead of clearing board/Buildings
+  // first. Taunt still overrides this per-attacker (see chooseAttackTarget).
+  const preferLethal = isLethalAvailable(state);
+
   for (;;) {
     const vanguardAttackers = alive(player.board.vanguard);
     const supportAttackers = alive(player.board.support).filter((c) =>
@@ -572,7 +646,13 @@ export function* runAiTurnSteps(state: GameState): Generator<AiTurnStep, void, v
     if (!card) break;
     const def = CARD_DEFINITIONS[card.defId] as CreatureDefinition;
     const reach = reachProfileOf(def);
-    const target = chooseAttackTarget(state, reach, getEffectiveCreatureAttack(state, AI, card), card.currentHp ?? 0);
+    const target = chooseAttackTarget(
+      state,
+      reach,
+      getEffectiveCreatureAttack(state, AI, card),
+      card.currentHp ?? 0,
+      preferLethal,
+    );
     declareCreatureAttack(state, AI, card.instanceId, target);
     yield { kind: "attack", attackerId: card.instanceId, target };
     if (state.winner) return;
@@ -580,7 +660,7 @@ export function* runAiTurnSteps(state: GameState): Generator<AiTurnStep, void, v
 
   if (heroCanAttack(state, AI)) {
     const hero = player.hero;
-    const target = chooseAttackTarget(state, NO_REACH, getHeroAttack(state, AI), hero.currentHp);
+    const target = chooseAttackTarget(state, NO_REACH, getHeroAttack(state, AI), hero.currentHp, preferLethal);
     declareHeroAttack(state, AI, target);
     yield { kind: "heroAttack", target };
     if (state.winner) return;

@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { pickAiSpecialization } from "./ai";
+import { pickAiSpecialization, runAiTurn } from "./ai";
 import { activateBuildingAbility } from "./building";
 import {
   creatureCanAttack,
@@ -2348,5 +2348,94 @@ describe("Cloak of Shadows charges (DESIGN.md §17)", () => {
     declareHeroAttack(state, "player", { type: "player" });
     expect(state.players.player.board.equipment[0]).toBeNull();
     expect(state.players.player.discard).toContain(cloak);
+  });
+});
+
+describe("AI lethal-priority (Phase Q — go face instead of clearing the board when the kill is already available)", () => {
+  it("attacks the enemy Hero directly instead of trading with a weaker, non-Taunt creature when lethal damage is already available", () => {
+    const state = createInitialGameState("rogue", [], "mage", [], "opponent");
+    const ai = state.players.opponent;
+    const enemy = state.players.player;
+    ai.hero.heroPowerUsedThisTurn = true;
+    ai.hero.signatureUsesRemaining = 0;
+    ai.energy.current = 0;
+    ai.mana.current = 0;
+
+    enemy.guard.current = 0;
+    enemy.hero.currentHp = 2; // exactly what the Footman's 2 Attack can finish
+
+    const attacker = createCardInstance("footman", "opponent"); // 2/3, no keywords
+    attacker.summonedTurn = 0;
+    ai.board.vanguard[0] = attacker;
+
+    // A weak, killable, non-Taunt creature sitting right where the AI would
+    // otherwise "clear the board" first — the exact sequence reported from
+    // play: face open at low HP, AI clears Building/board before finishing.
+    const weakling = createCardInstance("footman", "player");
+    weakling.currentHp = 1;
+    enemy.board.vanguard[0] = weakling;
+
+    runAiTurn(state);
+
+    expect(weakling.currentHp).toBe(1); // untouched — the AI skipped the trade
+    expect(state.winner).toBe("opponent"); // went face for lethal instead
+  });
+
+  it("still forces a Taunt-blocked attacker to trade even when the AI's other attackers make lethal available", () => {
+    const state = createInitialGameState("rogue", [], "mage", [], "opponent");
+    const ai = state.players.opponent;
+    const enemy = state.players.player;
+    ai.hero.heroPowerUsedThisTurn = true;
+    ai.hero.signatureUsesRemaining = 0;
+    ai.energy.current = 0;
+    ai.mana.current = 0;
+
+    enemy.guard.current = 0;
+    enemy.hero.currentHp = 3; // exactly what the Infiltrator alone can finish
+
+    const taunt = createCardInstance("shield-bearer", "player"); // 1/4, Taunt
+    enemy.board.vanguard[0] = taunt;
+
+    const blockedAttacker = createCardInstance("footman", "opponent"); // 2/3, base reach — no way past Taunt
+    blockedAttacker.summonedTurn = 0;
+    ai.board.vanguard[0] = blockedAttacker;
+
+    const infiltrator = createCardInstance("shadow-infiltrator", "opponent"); // 3/2, Infiltrate — bypasses Taunt
+    infiltrator.summonedTurn = 0;
+    ai.board.vanguard[1] = infiltrator;
+
+    runAiTurn(state);
+
+    // The base attacker has no legal way past Taunt, lethal or not — it still trades.
+    expect(taunt.currentHp).toBeLessThan(4);
+    // Infiltrate bypasses Taunt entirely, and with lethal on the table it goes
+    // straight for the Hero instead of piling onto the same Taunt creature.
+    expect(state.winner).toBe("opponent");
+  });
+
+  it("still clears a weaker creature first when no lethal is available this turn", () => {
+    const state = createInitialGameState("rogue", [], "mage", [], "opponent");
+    const ai = state.players.opponent;
+    const enemy = state.players.player;
+    ai.hero.heroPowerUsedThisTurn = true;
+    ai.hero.signatureUsesRemaining = 0;
+    ai.energy.current = 0;
+    ai.mana.current = 0;
+
+    enemy.guard.current = 0;
+    enemy.hero.currentHp = 20; // far out of reach this turn
+
+    const attacker = createCardInstance("footman", "opponent");
+    attacker.summonedTurn = 0;
+    ai.board.vanguard[0] = attacker;
+
+    const weakling = createCardInstance("footman", "player");
+    weakling.currentHp = 1;
+    enemy.board.vanguard[0] = weakling;
+
+    runAiTurn(state);
+
+    expect(weakling.currentHp).toBeLessThanOrEqual(0); // traded as before — no lethal to chase
+    expect(state.winner).toBeNull();
   });
 });
