@@ -29,26 +29,30 @@ type BaseSpec = {
   url: string;
 };
 
+function drivePreviewUrl(fileId: string) {
+  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w2000`;
+}
+
 const BASES: Record<Exclude<BaseKey, "">, BaseSpec> = {
   CreatureBase: {
     label: "Creature Base",
-    url: "https://drive.google.com/uc?export=view&id=1VZidSY9g2urE6LzIW2szt4zVCoMB-Yhh",
+    url: drivePreviewUrl("1VZidSY9g2urE6LzIW2szt4zVCoMB-Yhh"),
   },
   BuildingBase: {
     label: "Building Base",
-    url: "https://drive.google.com/uc?export=view&id=1AyqAd-q1GakrrEyuB4gTykWMEZOAgrkV",
+    url: drivePreviewUrl("1AyqAd-q1GakrrEyuB4gTykWMEZOAgrkV"),
   },
   SpellBase: {
     label: "Spell Base",
-    url: "https://drive.google.com/uc?export=view&id=1dj16J2n5GUcQAgRXK0Tj8ZyznAvAde91",
+    url: drivePreviewUrl("1dj16J2n5GUcQAgRXK0Tj8ZyznAvAde91"),
   },
   AbilityBase: {
     label: "Ability Base",
-    url: "https://drive.google.com/uc?export=view&id=1iPfx9VvZo9LgHnNuselSuwtt6cIbO0St",
+    url: drivePreviewUrl("1iPfx9VvZo9LgHnNuselSuwtt6cIbO0St"),
   },
   BaseAbility: {
     label: "BaseAbility (alternate / equipment candidate)",
-    url: "https://drive.google.com/uc?export=view&id=1mkUEIyk1XV4C6_XJFeHWENj1P1g5aZ7x",
+    url: drivePreviewUrl("1mkUEIyk1XV4C6_XJFeHWENj1P1g5aZ7x"),
   },
 };
 
@@ -171,7 +175,7 @@ function LayeredCardPreview({ draft, sourceDef }: { draft: BuilderDraft; sourceD
           <div className="cb-card__stat cb-card__stat--spell-damage">{damage}</div>
         )}
 
-        {base ? <img className="cb-card__base" src={base.url} alt={base.label} /> : <div className="cb-card__missing-base">No Hero base uploaded yet</div>}
+        {base ? <img className="cb-card__base" src={base.url} alt="" /> : <div className="cb-card__missing-base">No Hero base uploaded yet</div>}
       </div>
       <div className="cb-preview-caption">1152 × 1728 source geometry · live 2:3 preview</div>
     </div>
