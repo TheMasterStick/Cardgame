@@ -1,0 +1,6 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap');
+
+/*
+ * Builder-only preview dependency. The shipped game should eventually bundle
+ * its chosen licensed fonts locally so card rendering does not depend on a CDN.
+ */

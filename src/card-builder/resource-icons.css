@@ -1,0 +1,21 @@
+.cb-card__resource > span {
+  display: block;
+  width: 100%;
+  height: 100%;
+  font-size: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 72% 72%;
+}
+
+.cb-card__resource--energy > span {
+  background-image: url('/icons/resource-energy.svg');
+}
+
+.cb-card__resource--mana > span {
+  background-image: url('/icons/resource-mana.svg');
+}
+
+.cb-card__resource--resource > span {
+  background-image: url('/icons/resource-resources.svg');
+}

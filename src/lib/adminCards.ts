@@ -1,6 +1,6 @@
 import { validateCard } from "../data/loadCustomCards";
 import type { CardDefinition } from "../engine/types";
-import { resizeImageToCardArt } from "./resizeImage";
+import { resizeImageToCardArt, resizeImageToSquareCardArt } from "./resizeImage";
 import { supabase } from "./supabaseClient";
 
 const COMMON_FIELDS = new Set([
@@ -88,12 +88,33 @@ export async function saveRemoteCard(def: CardDefinition, userId: string): Promi
   return error ? error.message : null;
 }
 
-/** Resizes the given image to card-art proportions and uploads it, returning its public URL. */
+/** Resizes the given image to the legacy baked-card art proportions and uploads it, returning its public URL. */
 export async function uploadCardArt(file: File, cardId: string): Promise<{ url: string | null; error: string | null }> {
   if (!supabase) return { url: null, error: "No backend configured." };
   try {
     const blob = await resizeImageToCardArt(file);
     const path = `${cardId}-${Date.now()}.png`;
+    const { error: uploadError } = await supabase.storage
+      .from("card-art")
+      .upload(path, blob, { contentType: "image/png", upsert: true });
+    if (uploadError) return { url: null, error: uploadError.message };
+    const { data } = supabase.storage.from("card-art").getPublicUrl(path);
+    return { url: data.publicUrl, error: null };
+  } catch (err) {
+    return { url: null, error: err instanceof Error ? err.message : "Failed to process the image." };
+  }
+}
+
+/**
+ * Upload path for the layered Card Builder. Normalizes raw source art to the
+ * project's canonical 2048 x 2048 square before storing it. Kept separate
+ * from uploadCardArt so the legacy Admin workflow is not silently changed.
+ */
+export async function uploadSquareCardArt(file: File, cardId: string): Promise<{ url: string | null; error: string | null }> {
+  if (!supabase) return { url: null, error: "No backend configured." };
+  try {
+    const blob = await resizeImageToSquareCardArt(file);
+    const path = `layered/${cardId}-${Date.now()}.png`;
     const { error: uploadError } = await supabase.storage
       .from("card-art")
       .upload(path, blob, { contentType: "image/png", upsert: true });

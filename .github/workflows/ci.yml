@@ -1,0 +1,31 @@
+name: Cardgame CI
+
+on:
+  push:
+    branches:
+      - chatgpt/phaser-battlefield
+  pull_request:
+
+jobs:
+  test-and-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run engine tests
+        run: npm test
+
+      - name: Type-check and build
+        run: npm run build
