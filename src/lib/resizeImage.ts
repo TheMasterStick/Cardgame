@@ -1,15 +1,11 @@
 export const CARD_ART_WIDTH = 512;
 export const CARD_ART_HEIGHT = 776;
+export const CARD_ART_SOURCE_SIZE = 2048;
 
-/**
- * Normalizes any image file to exactly CARD_ART_WIDTH x CARD_ART_HEIGHT,
- * cover-fit (scaled to fill, centered, overflow cropped) — so every card's
- * art is a consistent size on-board no matter what the admin uploads.
- */
-export function resizeImageToCardArt(
+function resizeImage(
   file: File,
-  width = CARD_ART_WIDTH,
-  height = CARD_ART_HEIGHT,
+  width: number,
+  height: number,
 ): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const objectUrl = URL.createObjectURL(file);
@@ -47,4 +43,29 @@ export function resizeImageToCardArt(
 
     img.src = objectUrl;
   });
+}
+
+/**
+ * Legacy Admin-card normalizer. Kept unchanged for the old baked-card workflow:
+ * exactly 512 x 776, cover-fit, centered.
+ */
+export function resizeImageToCardArt(
+  file: File,
+  width = CARD_ART_WIDTH,
+  height = CARD_ART_HEIGHT,
+): Promise<Blob> {
+  return resizeImage(file, width, height);
+}
+
+/**
+ * New layered Card Builder artwork normalizer.
+ * Produces the project's canonical square 2048 x 2048 raw-art source image.
+ * Generated art should already be square whenever possible; non-square input
+ * is cover-fit and center-cropped as a fallback.
+ */
+export function resizeImageToSquareCardArt(
+  file: File,
+  size = CARD_ART_SOURCE_SIZE,
+): Promise<Blob> {
+  return resizeImage(file, size, size);
 }
