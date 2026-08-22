@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { CardBuilderApp } from "./CardBuilderApp";
 import "./card-builder.css";
 import "./art-guide.css";
+import "./resource-icons.css";
 
 const root = document.getElementById("card-builder-root");
 if (!root) throw new Error("Missing #card-builder-root");
