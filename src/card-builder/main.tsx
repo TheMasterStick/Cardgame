@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { CardBuilderApp } from "./CardBuilderApp";
+import "./font-preview.css";
 import "./card-builder.css";
 import "./art-guide.css";
 import "./resource-icons.css";
