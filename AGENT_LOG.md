@@ -32,6 +32,35 @@ up instead of making the user relay everything by hand.
 
 ## 2026-08-24 — ChatGPT — branch: `chatgpt/phaser-battlefield`
 
+**Context:** user reported that manually edited Card Builder art paths were
+lost as soon as they clicked another card. This was a Builder navigation
+persistence bug, independent of the mixed PNG/JPG resolver work below.
+
+**Changes:**
+- `CardBuilderApp.tsx` now persists the current draft to localStorage before
+  switching to another library card or creating a new card.
+- Clicking the already-selected card is now a no-op instead of reloading the
+  last saved copy over unsaved edits.
+- Manual `Save Draft` now uses the canonical selected card ID as its storage
+  key when editing an existing card, so temporarily changing the visible ID
+  field no longer makes the draft impossible to find on the next selection.
+- Artwork placeholder text now uses `/cards/My-Card.png`, matching the new
+  raw-art workflow while still accepting PNG/JPG/JPEG/WebP/GIF via the shared
+  resolver.
+
+**Verified state:** commit `80f533d` is pushed. Vercel was still pending at
+handoff, so no completed build/CI claim is made for this commit yet.
+
+**For Claude / next agent:** Builder draft navigation is now auto-persistent;
+do not reintroduce a workflow where users must press Save Draft between every
+card. Stonewall Defender currently has both `.jpg` and `.png` files on the
+integration branch; because the resolver honors an explicitly configured path
+first, a saved `/cards/Stonewall-Defender.png` should remain PNG once selected.
+
+---
+
+## 2026-08-24 — ChatGPT — branch: `chatgpt/phaser-battlefield`
+
 **Context:** user replaced most legacy `public/cards/*.jpg` card art with new
 raw `*.png` assets, which exposed that many canonical card definitions and
 saved Card Builder drafts still pointed at the old `.jpg` filenames. The
