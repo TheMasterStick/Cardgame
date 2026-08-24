@@ -30,6 +30,101 @@ up instead of making the user relay everything by hand.
 
 ---
 
+## 2026-08-24 — ChatGPT — branch: `chatgpt/phaser-battlefield`
+
+**Context:** user standardized the newly replaced local card-art library on
+PNG and asked that all current card-art paths prefer `.png`, with one explicit
+exception: Stonewall Defender remains `.jpg`.
+
+**Changes:**
+- `src/card-rendering/artAsset.ts` now treats `/cards/*` as PNG-first regardless
+  of an older authored `.jpg`/`.webp` extension. Supported raster fallbacks
+  remain PNG/JPG/JPEG/WebP/GIF.
+- `/cards/Stonewall-Defender` is the explicit JPG-first exception. This also
+  means a stale Builder draft pointing Stonewall at PNG will migrate back to
+  the intended JPG when both files exist.
+- Updated `artAsset.test.ts` for PNG-first behavior, the Stonewall exception,
+  suffix preservation, remote URL behavior, and non-card local assets.
+- Because the normal app, Card Builder, and Phaser bootstrap all call the
+  shared resolver before rendering, existing legacy `cards.ts` art strings
+  are normalized to the current PNG paths in memory and saved Builder drafts
+  are migrated on startup. No mass conversion of the actual image files is
+  performed.
+
+**Verified state:** commits `21e8bc6` and `7060a71` are pushed. Vercel was
+still pending at handoff; no completed build/CI claim is made here.
+
+**For Claude / next agent:** PNG is now the preferred canonical format for
+current `/cards/` artwork, except `Stonewall-Defender.jpg`. Keep the mixed-
+format fallback resolver; do not remove JPG/JPEG/WebP/GIF support merely
+because the current batch is PNG-heavy.
+
+---
+
+## 2026-08-24 — ChatGPT — branch: `chatgpt/phaser-battlefield`
+
+**Context:** user reported that manually edited Card Builder art paths were
+lost as soon as they clicked another card. This was a Builder navigation
+persistence bug, independent of the mixed PNG/JPG resolver work below.
+
+**Changes:**
+- `CardBuilderApp.tsx` now persists the current draft to localStorage before
+  switching to another library card or creating a new card.
+- Clicking the already-selected card is now a no-op instead of reloading the
+  last saved copy over unsaved edits.
+- Manual `Save Draft` now uses the canonical selected card ID as its storage
+  key when editing an existing card, so temporarily changing the visible ID
+  field no longer makes the draft impossible to find on the next selection.
+- Artwork placeholder text now uses `/cards/My-Card.png`, matching the new
+  raw-art workflow while still accepting PNG/JPG/JPEG/WebP/GIF via the shared
+  resolver.
+
+**Verified state:** commit `80f533d` is pushed. Vercel was still pending at
+handoff, so no completed build/CI claim is made for this commit yet.
+
+**For Claude / next agent:** Builder draft navigation is now auto-persistent;
+do not reintroduce a workflow where users must press Save Draft between every
+card. Stonewall Defender currently has both `.jpg` and `.png` files on the
+integration branch; because the resolver honors an explicitly configured path
+first, a saved `/cards/Stonewall-Defender.png` should remain PNG once selected.
+
+---
+
+## 2026-08-24 — ChatGPT — branch: `chatgpt/phaser-battlefield`
+
+**Context:** user replaced most legacy `public/cards/*.jpg` card art with new
+raw `*.png` assets, which exposed that many canonical card definitions and
+saved Card Builder drafts still pointed at the old `.jpg` filenames. The
+files themselves were present on GitHub; the broken images were extension
+mismatches, not missing pushes.
+
+**Changes:**
+- Added `src/card-rendering/artAsset.ts`, a shared local-card-art resolver.
+  It keeps the authored path first, then tries the same stem as PNG, JPG,
+  JPEG, WebP, and GIF. Remote/data/blob URLs are left untouched.
+- Wired the resolver into all three entrypoints: normal React app,
+  `card-builder.html`, and `phaser.html`, so format resolution happens before
+  their UIs start.
+- Card Builder startup also migrates saved `card-builder:draft:*`
+  localStorage drafts when their old extension can be resolved to an actual
+  local file, preventing stale `.jpg` draft data from overriding a newly
+  resolved `.png` canonical definition.
+- Added `src/card-rendering/artAsset.test.ts` covering fallback order,
+  suffix preservation, and remote/inline URL behavior.
+
+**Verified state:** source changes are pushed. At handoff the latest hosting
+check was still pending, so this entry does not claim a completed CI/build
+result yet. User can immediately smoke-test by refreshing the dev server;
+canonical `/cards/Foo.jpg` references should now find `/cards/Foo.png` when
+that is the file present.
+
+**For Claude / next agent:** do not mass-convert the new PNG assets back to
+JPG. Mixed standard raster formats are intentional. When the shared Phaser
+card renderer begins loading artwork textures, use the resolved `def.art`
+path rather than re-deriving an extension from card type/name.
+
+---
+
 ## 2026-08-24 — Claude — branches: `claude/card-game-framework-kmz2ol`, `chatgpt/phaser-battlefield`
 
 **Context:** picked up mid-session after Phase P (Hero Specializations)

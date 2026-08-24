@@ -391,21 +391,30 @@ export function CardBuilderApp() {
     return haystack.includes(query.trim().toLowerCase());
   });
 
+  function persistDraft(currentDraft = draft, currentSelectedId = selectedId) {
+    const storageId = (currentSelectedId || currentDraft.id).trim();
+    if (!storageId) return;
+    localStorage.setItem(`card-builder:draft:${storageId}`, JSON.stringify(currentDraft));
+  }
+
   function selectCard(def: CardDefinition) {
+    if (selectedId === def.id) return;
+
+    persistDraft();
     setSelectedId(def.id);
     const fallback = draftFromDefinition(def);
     const stored = localStorage.getItem(`card-builder:draft:${def.id}`);
     if (stored) {
       try {
         setDraft(hydrateDraft(JSON.parse(stored) as Partial<BuilderDraft>, fallback));
-        setMessage("Loaded your local draft.");
+        setMessage("Auto-saved the previous card and loaded your local draft.");
         return;
       } catch {
         localStorage.removeItem(`card-builder:draft:${def.id}`);
       }
     }
     setDraft(fallback);
-    setMessage("");
+    setMessage("Auto-saved the previous card.");
   }
 
   function patch<K extends keyof BuilderDraft>(key: K, value: BuilderDraft[K]) {
@@ -451,7 +460,7 @@ export function CardBuilderApp() {
   }
 
   function saveDraft() {
-    localStorage.setItem(`card-builder:draft:${draft.id}`, JSON.stringify(draft));
+    persistDraft();
     setMessage("Draft saved locally in this browser.");
   }
 
@@ -469,9 +478,10 @@ export function CardBuilderApp() {
   }
 
   function createNew() {
+    persistDraft();
     setSelectedId("");
     setDraft(emptyDraft());
-    setMessage("New unsaved card draft using the project default presentation.");
+    setMessage("Auto-saved the previous card. New unsaved card draft uses the project default presentation.");
   }
 
   return (
@@ -561,7 +571,7 @@ export function CardBuilderApp() {
           <p className="cb-note">These are presentation labels, so they can read Common • Neutral • Ranger, Rare • Skaldjborn • Human • Fighter, or any other 1–5 label combination without changing the engine taxonomy.</p>
 
           <div className="cb-section-title">Artwork</div>
-          <label>Art path or URL<input value={draft.art} onChange={(event) => patch("art", event.target.value)} placeholder="/cards/My-Card.jpg" /></label>
+          <label>Art path or URL<input value={draft.art} onChange={(event) => patch("art", event.target.value)} placeholder="/cards/My-Card.png" /></label>
           <div className="cb-slider-row">
             <label>Zoom <span>{draft.artScale.toFixed(2)}×</span><input type="range" min="0.75" max="2.2" step="0.01" value={draft.artScale} onChange={(event) => patch("artScale", Number(event.target.value))} /></label>
             <label>X <span>{draft.artX}%</span><input type="range" min="-50" max="50" step="1" value={draft.artX} onChange={(event) => patch("artX", Number(event.target.value))} /></label>
