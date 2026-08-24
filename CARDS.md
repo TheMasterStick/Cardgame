@@ -499,6 +499,27 @@ by design (a Hero's Attack/Health come from Equipment, not printed
 stats), so Hero cards still show a text layout (name/meta/rules
 text/base stats).
 
+> **Superseded as the primary card-creation path (2026-08-24), kept as
+> a supported legacy/fallback.** The fully-baked-512×776-image model
+> above is still valid — nothing is broken and no existing card needs
+> to be redone — but new cards are now made through the **layered Card
+> Builder** (`card-builder.html`, on the `chatgpt/phaser-battlefield`
+> integration branch, not yet merged onto this line) instead of
+> hand-baking name/cost/stats into the art in an external editor. The
+> reason is the same one Phase K's live-stat overlay already existed
+> for: printed/default stats need to be able to change (balance
+> passes, new auras) without repainting art, and the layered model
+> makes that a data edit instead of a re-paint. The Builder composites
+> a **raw 2048×2048 square** source image with separate rendered
+> layers — card base/frame, name, cost, resource icon, printed
+> categories, rules text, and Attack/Health/damage — instead of a
+> single flat image; see `CARD_RENDERING.md` on that branch for the
+> exact geometry/typography spec. The engine's *live* runtime overlay
+> (current HP, buffs, charges) is unchanged by any of this and still
+> renders on top of whichever face a card uses, baked or layered — see
+> DESIGN.md §20 for how this fits with the Phaser battlefield and the
+> engine. PNG export from the Builder is planned, not yet built.
+
 - **Admin Panel:** pick any image file; it's automatically resized
   (cover-fit crop, not stretched — think "object-fit: cover") to
   512×776 in the browser before upload, then stored in the `card-art`
