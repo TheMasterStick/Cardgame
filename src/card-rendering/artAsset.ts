@@ -4,6 +4,8 @@ export type CardArtExtension = (typeof CARD_ART_EXTENSIONS)[number];
 
 type HasArt = { art?: string };
 
+const STONEWALL_DEFENDER_STEM = "/cards/Stonewall-Defender";
+
 function splitSuffix(path: string) {
   const match = path.match(/^([^?#]*)([?#].*)?$/);
   return { pathname: match?.[1] ?? path, suffix: match?.[2] ?? "" };
@@ -11,6 +13,25 @@ function splitSuffix(path: string) {
 
 function isRemoteOrInline(path: string) {
   return /^(?:https?:|data:|blob:)/i.test(path);
+}
+
+function extensionOrder(stem: string, existingExtension?: string): CardArtExtension[] {
+  // The current raw-art library is PNG-first. Stonewall Defender is the one
+  // intentional JPG exception. Other local image paths keep their authored
+  // extension first so this helper remains useful outside /cards/ as well.
+  if (stem.toLowerCase() === STONEWALL_DEFENDER_STEM.toLowerCase()) {
+    return ["jpg", "png", "jpeg", "webp", "gif"];
+  }
+  if (stem.toLowerCase().startsWith("/cards/")) {
+    return ["png", "jpg", "jpeg", "webp", "gif"];
+  }
+
+  const supportedExisting = existingExtension && CARD_ART_EXTENSIONS.includes(existingExtension as CardArtExtension)
+    ? (existingExtension as CardArtExtension)
+    : undefined;
+  return supportedExisting
+    ? [supportedExisting, ...CARD_ART_EXTENSIONS.filter((extension) => extension !== supportedExisting)]
+    : [...CARD_ART_EXTENSIONS];
 }
 
 export function cardArtCandidates(path: string): string[] {
@@ -23,8 +44,8 @@ export function cardArtCandidates(path: string): string[] {
     ? pathname.slice(0, -extensionMatch[0].length)
     : pathname;
 
-  const candidates = [path];
-  for (const extension of CARD_ART_EXTENSIONS) {
+  const candidates: string[] = [];
+  for (const extension of extensionOrder(stem, existingExtension)) {
     const candidate = `${stem}.${extension}${suffix}`;
     if (!candidates.includes(candidate)) candidates.push(candidate);
   }
