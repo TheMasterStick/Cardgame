@@ -873,6 +873,18 @@ An independent mercenary organization rather than a nation. Its identity is prof
 
 **Anchor card:** Golden Company Captain.
 
+### Arcane Industries Consortium
+
+The **Arcane Industries Consortium** is not a nation. It is a Gnome-founded and predominantly Gnome-run commercial and research establishment devoted to combining **arcane magic with engineering, manufacturing and invention**. In gameplay it may use the live `arcane-industries` Faction tag, but in lore that tag represents organizational affiliation rather than a sovereign realm.
+
+Its core identity is **applied magic**. Gnomish engineers and arcanists build contraptions, arcane-powered machinery, crystal-driven devices, automated defenses, constructs, tools and experimental prototypes. Workshops and research facilities should feel like fantasy industrial laboratories: brass, copper, dark iron, gauges, lenses, rune-work, glowing conduits, violet/blue arcane crystals and magically suspended mechanisms.
+
+Arcane Industries should be capable, wealthy and technologically formidable rather than a purely comedic Gnome faction. Eccentric inventors and dangerous prototypes can exist, but the organization itself takes its work and commerce seriously and can operate workshops, research enclaves and commercial facilities throughout the civilized world.
+
+**Important boundary:** Arcane magic or arcane machinery does **not** automatically mean Arcane Industries. The Consortium is one major organization working in this field, not the inventor or owner of all arcane magic and technology.
+
+**Current anchors:** Archivist and Arcane Turret are direct organizational fits. Other existing arcane cards should only be associated with the Consortium when explicitly decided.
+
 ### Currently unaffiliated
 
 **Flankguard Outrider** remains culturally unaffiliated for now. The armored unicorn cavalry concept may eventually seed its own chivalric or regional tradition, but no culture should be assigned yet.
