@@ -624,7 +624,9 @@ don't match what you had in mind — they're easy to revisit before the
 phase that depends on them starts.
 
 For how to add/generate/reskin cards, see `CARDS.md`. For the
-account/admin backend, see `BACKEND.md`.
+account/admin backend, see `BACKEND.md`. If you're an AI agent working on
+this repo, see `AGENTS.md`/`CLAUDE.md` and check `AGENT_LOG.md` before
+starting — another agent may already be mid-task elsewhere in this repo.
 
 ---
 
