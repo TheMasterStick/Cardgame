@@ -30,6 +30,41 @@ up instead of making the user relay everything by hand.
 
 ---
 
+## 2026-08-24 — ChatGPT — branch: `chatgpt/phaser-battlefield`
+
+**Context:** user replaced most legacy `public/cards/*.jpg` card art with new
+raw `*.png` assets, which exposed that many canonical card definitions and
+saved Card Builder drafts still pointed at the old `.jpg` filenames. The
+files themselves were present on GitHub; the broken images were extension
+mismatches, not missing pushes.
+
+**Changes:**
+- Added `src/card-rendering/artAsset.ts`, a shared local-card-art resolver.
+  It keeps the authored path first, then tries the same stem as PNG, JPG,
+  JPEG, WebP, and GIF. Remote/data/blob URLs are left untouched.
+- Wired the resolver into all three entrypoints: normal React app,
+  `card-builder.html`, and `phaser.html`, so format resolution happens before
+  their UIs start.
+- Card Builder startup also migrates saved `card-builder:draft:*`
+  localStorage drafts when their old extension can be resolved to an actual
+  local file, preventing stale `.jpg` draft data from overriding a newly
+  resolved `.png` canonical definition.
+- Added `src/card-rendering/artAsset.test.ts` covering fallback order,
+  suffix preservation, and remote/inline URL behavior.
+
+**Verified state:** source changes are pushed. At handoff the latest hosting
+check was still pending, so this entry does not claim a completed CI/build
+result yet. User can immediately smoke-test by refreshing the dev server;
+canonical `/cards/Foo.jpg` references should now find `/cards/Foo.png` when
+that is the file present.
+
+**For Claude / next agent:** do not mass-convert the new PNG assets back to
+JPG. Mixed standard raster formats are intentional. When the shared Phaser
+card renderer begins loading artwork textures, use the resolved `def.art`
+path rather than re-deriving an extension from card type/name.
+
+---
+
 ## 2026-08-24 — Claude — branches: `claude/card-game-framework-kmz2ol`, `chatgpt/phaser-battlefield`
 
 **Context:** picked up mid-session after Phase P (Hero Specializations)
