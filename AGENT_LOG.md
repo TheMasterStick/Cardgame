@@ -32,6 +32,37 @@ up instead of making the user relay everything by hand.
 
 ## 2026-08-24 — ChatGPT — branch: `chatgpt/phaser-battlefield`
 
+**Context:** user standardized the newly replaced local card-art library on
+PNG and asked that all current card-art paths prefer `.png`, with one explicit
+exception: Stonewall Defender remains `.jpg`.
+
+**Changes:**
+- `src/card-rendering/artAsset.ts` now treats `/cards/*` as PNG-first regardless
+  of an older authored `.jpg`/`.webp` extension. Supported raster fallbacks
+  remain PNG/JPG/JPEG/WebP/GIF.
+- `/cards/Stonewall-Defender` is the explicit JPG-first exception. This also
+  means a stale Builder draft pointing Stonewall at PNG will migrate back to
+  the intended JPG when both files exist.
+- Updated `artAsset.test.ts` for PNG-first behavior, the Stonewall exception,
+  suffix preservation, remote URL behavior, and non-card local assets.
+- Because the normal app, Card Builder, and Phaser bootstrap all call the
+  shared resolver before rendering, existing legacy `cards.ts` art strings
+  are normalized to the current PNG paths in memory and saved Builder drafts
+  are migrated on startup. No mass conversion of the actual image files is
+  performed.
+
+**Verified state:** commits `21e8bc6` and `7060a71` are pushed. Vercel was
+still pending at handoff; no completed build/CI claim is made here.
+
+**For Claude / next agent:** PNG is now the preferred canonical format for
+current `/cards/` artwork, except `Stonewall-Defender.jpg`. Keep the mixed-
+format fallback resolver; do not remove JPG/JPEG/WebP/GIF support merely
+because the current batch is PNG-heavy.
+
+---
+
+## 2026-08-24 — ChatGPT — branch: `chatgpt/phaser-battlefield`
+
 **Context:** user reported that manually edited Card Builder art paths were
 lost as soon as they clicked another card. This was a Builder navigation
 persistence bug, independent of the mixed PNG/JPG resolver work below.
