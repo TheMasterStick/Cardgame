@@ -13,6 +13,41 @@ export type CardBaseKey =
   | "AbilityBase"
   | "BaseAbility";
 
+export interface CardBaseAsset {
+  label: string;
+  url: string;
+}
+
+function drivePreviewUrl(fileId: string): string {
+  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w2000`;
+}
+
+/** The exact frame assets used by the Card Builder preview. */
+export const CARD_BASE_ASSETS: Record<Exclude<CardBaseKey, "">, CardBaseAsset> = {
+  CreatureBase: {
+    label: "Creature Base",
+    url: drivePreviewUrl("1VZidSY9g2urE6LzIW2szt4zVCoMB-Yhh"),
+  },
+  BuildingBase: {
+    label: "Building Base",
+    url: drivePreviewUrl("1AyqAd-q1GakrrEyuB4gTykWMEZOAgrkV"),
+  },
+  SpellBase: {
+    label: "Spell Base",
+    url: drivePreviewUrl("1dj16J2n5GUcQAgRXK0Tj8ZyznAvAde91"),
+  },
+  AbilityBase: {
+    label: "Ability Base",
+    url: drivePreviewUrl("1iPfx9VvZo9LgHnNuselSuwtt6cIbO0St"),
+  },
+  BaseAbility: {
+    label: "BaseAbility (alternate / equipment candidate)",
+    url: drivePreviewUrl("1mkUEIyk1XV4C6_XJFeHWENj1P1g5aZ7x"),
+  },
+};
+
+export const LOCAL_CARD_BASE_FALLBACK = "/cardframes/NeutralCardDefault.png";
+
 export interface CardLayoutOffsets {
   nameX: number;
   nameY: number;
@@ -53,6 +88,12 @@ export interface CardPresentation {
   rulesSize: number;
   statSize: number;
   layout: CardLayoutOffsets;
+}
+
+export interface RuntimeCardPresentation {
+  art: string;
+  playPool: ResourceKind;
+  presentation: CardPresentation;
 }
 
 /** The centered project-default layout approved in the Card Builder. */
@@ -158,9 +199,63 @@ export function hydrateCardPresentation(
   if (!raw) return { ...fallback, layout: { ...fallback.layout }, categories: [...fallback.categories] };
 
   return {
-    ...fallback,
-    ...raw,
+    baseKey: raw.baseKey ?? fallback.baseKey,
+    resourceIcon: raw.resourceIcon ?? fallback.resourceIcon,
     categories: raw.categories?.slice(0, MAX_PRINTED_CATEGORIES) ?? [...fallback.categories],
+    artScale: raw.artScale ?? fallback.artScale,
+    artX: raw.artX ?? fallback.artX,
+    artY: raw.artY ?? fallback.artY,
+    titleFont: raw.titleFont ?? fallback.titleFont,
+    bodyFont: raw.bodyFont ?? fallback.bodyFont,
+    nameSize: raw.nameSize ?? fallback.nameSize,
+    costSize: raw.costSize ?? fallback.costSize,
+    resourceSize: raw.resourceSize ?? fallback.resourceSize,
+    categorySize: raw.categorySize ?? fallback.categorySize,
+    rulesSize: raw.rulesSize ?? fallback.rulesSize,
+    statSize: raw.statSize ?? fallback.statSize,
     layout: { ...fallback.layout, ...raw.layout },
   };
+}
+
+function isResourceKind(value: unknown): value is ResourceKind {
+  return typeof value === "string" && (RESOURCE_KINDS as readonly string[]).includes(value);
+}
+
+/**
+ * Loads the presentation last saved by the Card Builder for this card.
+ * Gameplay values still come from the authoritative CardDefinition; the
+ * local draft only supplies artwork/frame/typography/layout presentation.
+ */
+export function getRuntimeCardPresentation(
+  def: CardDefinition,
+  storage: Pick<Storage, "getItem"> | null = typeof localStorage === "undefined" ? null : localStorage,
+): RuntimeCardPresentation {
+  const fallback = createDefaultCardPresentation(def.archetype, defaultPrintedCategories(def));
+  let raw: (Partial<CardPresentation> & { art?: unknown; playPool?: unknown }) | undefined;
+
+  if (storage) {
+    try {
+      const stored = storage.getItem(`card-builder:draft:${def.id}`);
+      if (stored) raw = JSON.parse(stored) as typeof raw;
+    } catch {
+      // Invalid or unavailable local data falls back to the canonical card.
+    }
+  }
+
+  return {
+    art: typeof raw?.art === "string" && raw.art ? raw.art : def.art ?? "",
+    playPool: isResourceKind(raw?.playPool) ? raw.playPool : defaultResourceKindForArchetype(def.archetype),
+    presentation: hydrateCardPresentation(raw, fallback),
+  };
+}
+
+export function cardBaseAssetUrl(baseKey: CardBaseKey): string {
+  return baseKey ? CARD_BASE_ASSETS[baseKey].url : LOCAL_CARD_BASE_FALLBACK;
+}
+
+export function resourceIconUrl(kind: ResourceKind, customIcon = ""): string {
+  if (customIcon) return customIcon;
+  if (kind === "energy") return "/icons/resource-energy.svg";
+  if (kind === "mana") return "/icons/resource-mana.svg";
+  return "/icons/resource-resources.svg";
 }

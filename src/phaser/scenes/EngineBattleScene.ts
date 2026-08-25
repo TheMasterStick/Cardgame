@@ -8,7 +8,6 @@ import {
   declareCreatureAttack,
   declareHeroAttack,
   getEffectiveCreatureAttack,
-  getEffectiveCreatureMaxHp,
   getHeroAttack,
   heroCanAttack,
   type AttackTarget,
@@ -16,7 +15,14 @@ import {
 import { assignEquipment } from "../../engine/equipment";
 import type { EffectTargetRef } from "../../engine/effects";
 import { createInitialGameState } from "../../engine/factory";
-import { activateSlotCard, endTurn, playCardFromHand, startGame, type PlayCardOptions } from "../../engine/game";
+import {
+  activateSlotCard,
+  endTurn,
+  getHandCardPlayability,
+  playCardFromHand,
+  startGame,
+  type PlayCardOptions,
+} from "../../engine/game";
 import { activateHeroPower, activateHeroSignature } from "../../engine/hero";
 import type {
   BuildingDefinition,
@@ -35,6 +41,7 @@ import {
   effectTargetCategory,
   isEffectTargetable,
 } from "../../ui/targeting";
+import { createPhaserCardFace, preloadCardFaceAssets } from "../cardFace";
 
 const FIELD_CENTER_X = 960;
 const SLOT_WIDTH = 88;
@@ -157,6 +164,10 @@ export class EngineBattleScene extends Phaser.Scene {
 
   constructor() {
     super("EngineBattleScene");
+  }
+
+  preload() {
+    preloadCardFaceAssets(this);
   }
 
   create() {
@@ -364,42 +375,39 @@ export class EngineBattleScene extends Phaser.Scene {
   ) {
     const def = CARD_DEFINITIONS[card.defId];
     const selected = this.selectedAttacker === card.instanceId;
-    const frameColor = selected ? 0xf0d270 : owner === "player" ? 0xc8a66a : 0xb56e6e;
-    const rect = this.add
-      .rectangle(x, y, width, CARD_HEIGHT, 0x252525, 0.96)
-      .setStrokeStyle(selected ? 5 : 3, frameColor, 1)
+    const hitArea = this.add
+      .rectangle(x, y, width, CARD_HEIGHT, 0xffffff, 0.001)
       .setInteractive({ useHandCursor: true })
-      .setDepth(700);
+      .setDepth(702);
 
-    const text = this.boardCardText(owner, card, def);
-    this.add
-      .text(x, y, text, {
-        align: "center",
-        fontFamily: "Georgia, serif",
-        fontSize: width > SLOT_WIDTH ? "13px" : "11px",
-        color: "#f4ead6",
-        wordWrap: { width: Math.max(70, width - 10) },
-      })
-      .setOrigin(0.5)
-      .setDepth(701);
+    const faceWidth = Math.min(width, (CARD_HEIGHT * 2) / 3);
+    let attack: number | null = null;
+    let health: number | null = null;
+    let badge = "";
+    if (def.archetype === "creature") {
+      attack = getEffectiveCreatureAttack(this.state, owner, card);
+      health = card.currentHp ?? def.hp;
+      const statusText = card.statuses.map((status) => `${status.type}:${status.turnsRemaining ?? "∞"}`).join(" ");
+      const exhausted = card.hasAttackedThisTurn ? "EXHAUSTED" : card.summonedTurn === this.state.turnNumber ? "SUMMONING" : "";
+      badge = [statusText, exhausted].filter(Boolean).join(" • ");
+    } else if (def.archetype === "building") {
+      health = card.currentHp ?? def.hp;
+    }
+    const face = createPhaserCardFace(this, def, {
+      width: faceWidth,
+      height: CARD_HEIGHT,
+      attack,
+      health,
+      selected,
+      badge,
+    }).setPosition(x, y).setDepth(700);
 
     this.boardRefs.set(card.instanceId, { instanceId: card.instanceId, owner, archetype: card.archetype, x, y, row });
 
-    rect.on("pointerdown", () => this.onBoardCardClick(owner, card, row));
-    rect.on("pointerover", () => this.showCardTooltip(card, x + (owner === "player" ? 130 : -130), y));
-    rect.on("pointerout", () => this.hideTooltip());
-  }
-
-  private boardCardText(owner: PlayerId, card: CardInstance, def: CardDefinition) {
-    if (def.archetype === "creature") {
-      const attack = getEffectiveCreatureAttack(this.state, owner, card);
-      const maxHp = getEffectiveCreatureMaxHp(this.state, owner, card);
-      const statuses = card.statuses.length > 0 ? `\n${card.statuses.map((s) => `${s.type}:${s.turnsRemaining ?? "∞"}`).join(" ")}` : "";
-      const exhausted = card.hasAttackedThisTurn ? "\nEXHAUSTED" : card.summonedTurn === this.state.turnNumber ? "\nSUMMONING" : "";
-      return `${def.name}\n${attack} ATK   ${card.currentHp ?? 0}/${maxHp} HP${statuses}${exhausted}`;
-    }
-    if (def.archetype === "building") return `${def.name}\n${card.currentHp ?? 0}/${def.hp} HP`;
-    return def.name;
+    hitArea.on("pointerdown", () => this.onBoardCardClick(owner, card, row));
+    hitArea.on("pointerover", () => this.showCardTooltip(card, x + (owner === "player" ? 130 : -130), y));
+    hitArea.on("pointerout", () => this.hideTooltip());
+    face.setData("boardCardInstanceId", card.instanceId);
   }
 
   private createSlot(x: number, y: number, kind: SlotKind, number: number, width = SLOT_WIDTH, height = SLOT_HEIGHT) {
@@ -512,22 +520,16 @@ export class EngineBattleScene extends Phaser.Scene {
       if (!card) continue;
       const def = CARD_DEFINITIONS[card.defId] as EquipmentDefinition;
       const selected = owner === "player" && this.selectedEquipmentSlot === i;
-      const item = this.add
-        .rectangle(EQUIPMENT_X, y, 62, 78, 0x262129, 0.98)
-        .setStrokeStyle(selected ? 4 : 2, selected ? 0xf0d270 : 0xb38bc7, 1)
+      const bearer = card.equipmentBearer?.kind === "hero" ? "Hero" : card.equipmentBearer?.kind === "creature" ? "Armiger" : "Unassigned";
+      const item = createPhaserCardFace(this, def, {
+        width: 52,
+        height: 78,
+        selected,
+        badge: bearer,
+      })
+        .setPosition(EQUIPMENT_X, y)
         .setInteractive({ useHandCursor: true })
         .setDepth(650);
-      const bearer = card.equipmentBearer?.kind === "hero" ? "Hero" : card.equipmentBearer?.kind === "creature" ? "Armiger" : "Unassigned";
-      this.add
-        .text(EQUIPMENT_X, y, `${def.name}\n${def.category}\n${bearer}`, {
-          align: "center",
-          fontFamily: "Arial",
-          fontSize: "9px",
-          color: "#e6ddea",
-          wordWrap: { width: 58 },
-        })
-        .setOrigin(0.5)
-        .setDepth(651);
       item.on("pointerdown", () => this.onEquipmentClick(owner, i));
       item.on("pointerover", () => this.showCardTooltip(card, EQUIPMENT_X + 160, y));
       item.on("pointerout", () => this.hideTooltip());
@@ -574,22 +576,15 @@ export class EngineBattleScene extends Phaser.Scene {
       const card = zone[i];
       if (!card) continue;
       const def = CARD_DEFINITIONS[card.defId];
-      const item = this.add
-        .rectangle(SPELL_X, y, 62, 86, 0x20282d, 0.98)
-        .setStrokeStyle(3, 0x6fa6c7, 1)
+      const charges = card.chargesRemaining === undefined ? "∞" : String(card.chargesRemaining);
+      const item = createPhaserCardFace(this, def, {
+        width: 57,
+        height: 86,
+        badge: `${charges} charges`,
+      })
+        .setPosition(SPELL_X, y)
         .setInteractive({ useHandCursor: true })
         .setDepth(650);
-      const charges = card.chargesRemaining === undefined ? "∞" : String(card.chargesRemaining);
-      this.add
-        .text(SPELL_X, y, `${def.name}\n${charges} charges`, {
-          align: "center",
-          fontFamily: "Arial",
-          fontSize: "9px",
-          color: "#d8edf8",
-          wordWrap: { width: 58 },
-        })
-        .setOrigin(0.5)
-        .setDepth(651);
       item.on("pointerdown", () => this.onSpellSlotClick(owner, i));
       item.on("pointerover", () => this.showCardTooltip(card, SPELL_X - 180, y));
       item.on("pointerout", () => this.hideTooltip());
@@ -639,17 +634,14 @@ export class EngineBattleScene extends Phaser.Scene {
       const def = CARD_DEFINITIONS[card.defId];
       const container = this.add.container(FIELD_CENTER_X, HAND_BASE_Y).setDepth(1000);
       const selected = this.selectedHandId === card.instanceId;
-      const frame = this.add.rectangle(0, 0, CARD_WIDTH, CARD_HEIGHT, 0x292929).setStrokeStyle(selected ? 5 : 3, selected ? 0xf0d270 : this.handColor(def.archetype), 1);
-      const label = this.add
-        .text(0, 0, this.handCardText(def), {
-          align: "center",
-          fontFamily: "Georgia, serif",
-          fontSize: "10px",
-          color: "#f4ead6",
-          wordWrap: { width: CARD_WIDTH - 8 },
-        })
-        .setOrigin(0.5);
-      container.add([frame, label]);
+      const playability = getHandCardPlayability(this.state, "player", card.instanceId);
+      const face = createPhaserCardFace(this, def, {
+        width: (CARD_HEIGHT * 2) / 3,
+        height: CARD_HEIGHT,
+        playable: playability.playable,
+        selected,
+      });
+      container.add(face);
       container.setSize(CARD_WIDTH, CARD_HEIGHT);
       container.setInteractive({ useHandCursor: true });
       container.setData("handInstanceId", card.instanceId);
@@ -659,7 +651,7 @@ export class EngineBattleScene extends Phaser.Scene {
         if (container.getData("wasDragged")) return;
         this.hoveredHandId = card.instanceId;
         this.layoutHand(true);
-        this.showCardTooltip(card, container.x + 150, 850);
+        this.showCardTooltip(card, container.x + 150, 850, playability.reason);
       });
       container.on("pointerout", () => {
         if (this.hoveredHandId === card.instanceId) this.hoveredHandId = null;
@@ -702,23 +694,6 @@ export class EngineBattleScene extends Phaser.Scene {
     });
   }
 
-  private handColor(archetype: CardArchetype) {
-    if (archetype === "equipment") return 0xb38bc7;
-    if (archetype === "spell" || archetype === "ability") return 0x6fa6c7;
-    if (archetype === "building") return 0x9a8569;
-    return 0xc8a66a;
-  }
-
-  private handCardText(def: CardDefinition) {
-    const pool = def.archetype === "spell" ? "MANA" : def.archetype === "creature" || def.archetype === "ability" ? "ENERGY" : "RES";
-    if (def.archetype === "creature") return `${def.name}\n\n${def.cost} ${pool}\n${def.attack} / ${def.hp}\n\n${def.keywords.join(" • ")}`;
-    if (def.archetype === "building") return `${def.name}\n\n${def.cost} ${pool}\n${def.hp} HP`;
-    if (def.archetype === "equipment") return `${def.name}\n\n${def.cost} ${pool}\n${def.category}\n+${def.attackBonus} ATK / -${def.damageReduction} DMG`;
-    if (def.archetype === "spell") return `${def.name}\n\n${def.cost} ${pool}\n${def.spellForm}`;
-    if (def.archetype === "ability") return `${def.name}\n\n${def.cost} ${pool}\n${def.abilityForm}`;
-    return def.name;
-  }
-
   private renderTurnButton() {
     const active = this.state.activePlayer === "player" && !this.state.winner;
     const button = this.add
@@ -755,6 +730,11 @@ export class EngineBattleScene extends Phaser.Scene {
     const card = this.state.players.player.hand.find((candidate) => candidate.instanceId === instanceId);
     if (!card) return;
     const def = CARD_DEFINITIONS[card.defId];
+    const playability = getHandCardPlayability(this.state, "player", instanceId);
+    if (!playability.playable) {
+      this.setStatus(playability.reason ?? `${def.name} cannot be played right now.`);
+      return;
+    }
 
     const instant =
       (def.archetype === "spell" && def.spellForm === "instant") ||
@@ -853,6 +833,11 @@ export class EngineBattleScene extends Phaser.Scene {
     const card = this.state.players.player.hand.find((candidate) => candidate.instanceId === instanceId);
     if (!card) return false;
     const def = CARD_DEFINITIONS[card.defId];
+    const playability = getHandCardPlayability(this.state, "player", instanceId);
+    if (!playability.playable) {
+      this.setStatus(playability.reason ?? `${def.name} cannot be played right now.`);
+      return true;
+    }
 
     const matching = this.playerSlots.find((slot) => {
       if (this.slotIsOccupied(slot) || !Phaser.Geom.Rectangle.Contains(slot.rect.getBounds(), x, y)) return false;
@@ -1129,19 +1114,12 @@ export class EngineBattleScene extends Phaser.Scene {
     const ghost = this.pendingTarget?.kind === "play" ? this.pendingTarget.ghost : undefined;
     if (!ghost) return;
     const def = CARD_DEFINITIONS[ghost.defId];
-    this.add
-      .rectangle(ghost.x, ghost.y, ghost.width, ghost.height, 0x333333, 0.72)
-      .setStrokeStyle(5, 0xf0d270, 0.95)
-      .setDepth(1600);
-    this.add
-      .text(ghost.x, ghost.y, `${def.name}\n\nCHOOSE TARGET`, {
-        align: "center",
-        fontFamily: "Georgia",
-        fontSize: "11px",
-        color: "#f4ead6",
-      })
-      .setOrigin(0.5)
-      .setDepth(1601);
+    createPhaserCardFace(this, def, {
+      width: (ghost.height * 2) / 3,
+      height: ghost.height,
+      selected: true,
+      badge: "CHOOSE TARGET",
+    }).setPosition(ghost.x, ghost.y).setAlpha(0.82).setDepth(1600);
   }
 
   private drawTargetingArrow() {
@@ -1294,10 +1272,11 @@ export class EngineBattleScene extends Phaser.Scene {
     ].find((card) => card?.instanceId === instanceId) ?? null;
   }
 
-  private showCardTooltip(card: CardInstance, x: number, y: number) {
+  private showCardTooltip(card: CardInstance, x: number, y: number, restriction?: string) {
     const def = CARD_DEFINITIONS[card.defId];
     const text = def.text ?? this.effectTextFromDefinition(def);
-    this.showTooltip(x, y, def.name, text || "No rules text.");
+    const body = [text || "No rules text.", restriction ? `Cannot play: ${restriction}` : ""].filter(Boolean).join("\n\n");
+    this.showTooltip(x, y, def.name, body);
   }
 
   private showHeroTooltip(owner: PlayerId, x: number, y: number) {

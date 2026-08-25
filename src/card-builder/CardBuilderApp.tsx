@@ -1,13 +1,12 @@
 import { useMemo, useState, type CSSProperties } from "react";
+import { CARD_BASE_ASSETS, type ResourceKind } from "../card-rendering/presentation";
 import { CARD_DEFINITIONS } from "../data/cards";
 import type { CardArchetype, CardDefinition, Rarity } from "../engine/types";
 
 const ARCHETYPES: CardArchetype[] = ["creature", "building", "spell", "ability", "equipment", "hero"];
 const RARITIES: Rarity[] = ["common", "uncommon", "rare", "epic", "legendary"];
-const RESOURCE_POOLS = ["energy", "mana", "resource"] as const;
 const MAX_CATEGORIES = 5;
 
-type ResourceKind = (typeof RESOURCE_POOLS)[number];
 type BaseKey = "" | "CreatureBase" | "BuildingBase" | "SpellBase" | "AbilityBase" | "BaseAbility";
 
 type LayoutOffsets = {
@@ -56,11 +55,6 @@ type BuilderDraft = {
   layout: LayoutOffsets;
 };
 
-type BaseSpec = {
-  label: string;
-  url: string;
-};
-
 const PROJECT_DEFAULT_LAYOUT: LayoutOffsets = {
   nameX: 7,
   nameY: 18,
@@ -97,33 +91,6 @@ const FONT_PRESETS = [
   "Cinzel, Georgia, serif",
   "Trajan Pro, Cinzel, Georgia, serif",
 ];
-
-function drivePreviewUrl(fileId: string) {
-  return `https://drive.google.com/thumbnail?id=${fileId}&sz=w2000`;
-}
-
-const BASES: Record<Exclude<BaseKey, "">, BaseSpec> = {
-  CreatureBase: {
-    label: "Creature Base",
-    url: drivePreviewUrl("1VZidSY9g2urE6LzIW2szt4zVCoMB-Yhh"),
-  },
-  BuildingBase: {
-    label: "Building Base",
-    url: drivePreviewUrl("1AyqAd-q1GakrrEyuB4gTykWMEZOAgrkV"),
-  },
-  SpellBase: {
-    label: "Spell Base",
-    url: drivePreviewUrl("1dj16J2n5GUcQAgRXK0Tj8ZyznAvAde91"),
-  },
-  AbilityBase: {
-    label: "Ability Base",
-    url: drivePreviewUrl("1iPfx9VvZo9LgHnNuselSuwtt6cIbO0St"),
-  },
-  BaseAbility: {
-    label: "BaseAbility (alternate / equipment candidate)",
-    url: drivePreviewUrl("1mkUEIyk1XV4C6_XJFeHWENj1P1g5aZ7x"),
-  },
-};
 
 function defaultBase(archetype: CardArchetype): BaseKey {
   if (archetype === "creature") return "CreatureBase";
@@ -281,7 +248,7 @@ function LayoutControl({
 }
 
 function LayeredCardPreview({ draft, sourceDef }: { draft: BuilderDraft; sourceDef?: CardDefinition }) {
-  const base = draft.baseKey ? BASES[draft.baseKey] : null;
+  const base = draft.baseKey ? CARD_BASE_ASSETS[draft.baseKey] : null;
   const damage = effectDamage(sourceDef);
   const categories = draft.categories.filter((category) => category.trim()).join(" • ");
 
@@ -620,7 +587,7 @@ export function CardBuilderApp() {
           <label>Template
             <select value={draft.baseKey} onChange={(event) => patch("baseKey", event.target.value as BaseKey)}>
               <option value="">None / not uploaded</option>
-              {Object.entries(BASES).map(([key, spec]) => <option key={key} value={key}>{spec.label}</option>)}
+              {Object.entries(CARD_BASE_ASSETS).map(([key, spec]) => <option key={key} value={key}>{spec.label}</option>)}
             </select>
           </label>
           {draft.archetype === "equipment" && draft.baseKey === "BaseAbility" && (

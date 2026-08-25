@@ -151,6 +151,13 @@ export interface PlayCardOptions {
   row?: "vanguard" | "support";
 }
 
+export interface HandCardPlayability {
+  playable: boolean;
+  reason?: string;
+  cost: number;
+  poolLabel: string;
+}
+
 /**
  * Which pool pays to play a card of this archetype, and its display name for
  * error messages. Each archetype's pool covers both playing it from hand and
@@ -160,6 +167,65 @@ export function costPoolFor(player: PlayerState, archetype: CardArchetype): { po
   if (archetype === "creature" || archetype === "ability") return { pool: player.energy, label: "Energy" };
   if (archetype === "spell") return { pool: player.mana, label: "Mana" };
   return { pool: player.resources, label: "Resources" };
+}
+
+/**
+ * Read-only preflight used by hand UIs. Targeted On Play effects deliberately
+ * do not make a card unplayable: when no legal target exists the effect
+ * fizzles, while placement and cost legality remain independent.
+ */
+export function getHandCardPlayability(
+  state: GameState,
+  owner: PlayerId,
+  handInstanceId: string,
+): HandCardPlayability {
+  const player = state.players[owner];
+  const card = player.hand.find((candidate) => candidate.instanceId === handInstanceId);
+  if (!card) return { playable: false, reason: "Card not in hand.", cost: 0, poolLabel: "" };
+
+  const def = CARD_DEFINITIONS[card.defId];
+  const { pool, label } = costPoolFor(player, def.archetype);
+  const instantSpell = def.archetype === "spell" && def.spellForm === "instant";
+  const cost = instantSpell ? peekSpellDiscount(state, owner, def.cost) : def.cost;
+
+  if (state.winner) return { playable: false, reason: "The match is over.", cost, poolLabel: label };
+  if (state.activePlayer !== owner) return { playable: false, reason: "It is not your turn.", cost, poolLabel: label };
+  if (pool.current < cost) {
+    return {
+      playable: false,
+      reason: `Not enough ${label} — need ${cost}, have ${pool.current}.`,
+      cost,
+      poolLabel: label,
+    };
+  }
+
+  if (def.archetype === "creature") {
+    const spaceCost = def.spaceCost ?? 1;
+    const vanguardFit = findOpenContiguousSlots(player.board.vanguard, spaceCost);
+    const supportFit = findOpenContiguousSlots(player.board.support, spaceCost);
+    if (!vanguardFit && !supportFit) {
+      return {
+        playable: false,
+        reason: spaceCost > 1
+          ? `No row has ${spaceCost} contiguous open slots.`
+          : "No open Vanguard or Support slot.",
+        cost,
+        poolLabel: label,
+      };
+    }
+  } else if (def.archetype === "building" && findOpenSlot(player.board.buildings) === -1) {
+    return { playable: false, reason: "No open Building slot.", cost, poolLabel: label };
+  } else if (
+    (def.archetype === "spell" || def.archetype === "ability") &&
+    !((def.archetype === "spell" && def.spellForm === "instant") || (def.archetype === "ability" && def.abilityForm === "instant")) &&
+    findOpenSlot(player.board.spellAbilitySlots) === -1
+  ) {
+    return { playable: false, reason: "No open Spell/Ability slot.", cost, poolLabel: label };
+  } else if (def.archetype === "equipment" && findOpenSlot(player.board.equipment) === -1) {
+    return { playable: false, reason: "No open Equipment slot.", cost, poolLabel: label };
+  }
+
+  return { playable: true, cost, poolLabel: label };
 }
 
 /** Plays a card from hand: pays its cost from the pool its archetype uses, and places it on the board. */

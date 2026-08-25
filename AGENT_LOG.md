@@ -30,6 +30,57 @@ up instead of making the user relay everything by hand.
 
 ---
 
+## 2026-08-25 — ChatGPT — branch: `chatgpt/phaser-battlefield`
+
+**Context:** user tested both live modes and reported four connected UX gaps:
+Phaser still drew placeholder/text cards; neither hand showed affordability
+before a failed click; targeted On Play creatures skipped placement and fell
+into Vanguard slot 1; and the normal React match showed raw art instead of the
+complete layered Card Builder face. Before working, I merged the latest
+`origin/claude/card-game-framework-kmz2ol` into this branch (`d142e55`) so this
+implementation sits on top of Claude's current engine/docs line.
+
+**Changes:**
+- Added a shared runtime presentation adapter in
+  `src/card-rendering/presentation.ts`. React, Phaser, and Card Builder now use
+  the same Builder frame keys/URLs, resource icons, art crop, typography,
+  categories, and layout offsets. Saved `card-builder:draft:<card-id>` data is
+  read at runtime, but only presentation fields are accepted; the engine card
+  definition remains authoritative for cost, rules text, and stats. Stale
+  saved art extensions are normalized in every entrypoint.
+- Added the React `LayeredCardFace` and Phaser `cardFace` renderers. Both live
+  matches now compose art + Card Builder border + printed fields instead of
+  using raw art or placeholder Phaser stats. A local Neutral frame is the
+  fallback if a remote Builder base cannot load.
+- Added `getHandCardPlayability`, a read-only engine preflight using the exact
+  effective cost/pool and destination capacity (including Massive contiguous
+  slots). Both hands use it for a strong green playable state and a dim/red
+  blocked state; hover/title feedback gives the exact reason, such as
+  insufficient Mana/Energy/Resources or a full zone. The play handler also
+  preflights, so the visual answer and the engine rejection cannot drift.
+- React targeted On Play creatures now always choose Vanguard/Support and an
+  exact slot first, then choose the effect target. The pending play carries
+  those placement options into final resolution. Added row overlays for
+  `targetRow` effects so they follow the same sequence instead of silently
+  using Vanguard slot 1. Phaser already had placement-first interaction; it
+  now shares the new legality and card-face layers.
+- Updated `CARD_RENDERING.md`, `DESIGN.md` (Phase S), and `ROADMAP.md` with the
+  shared runtime contract and current integration status.
+
+**Verified state:** production multi-page Vite build passes; TypeScript passes;
+all 237 Vitest tests pass; ESLint has 0 errors and the one existing Fast Refresh
+warning in `src/lib/AuthProvider.tsx`. Headless smoke tests opened the normal
+match and Phaser scene; both showed complete framed cards, and the normal hand
+showed the playable outline. Builder Drive URLs were unreachable from the
+restricted smoke environment, so the live renderers' local frame fallback was
+also exercised successfully.
+
+**For Claude / next agent:** this is the Phase S integration implementation,
+not a proposal. Preserve the boundary that Builder drafts own presentation
+only and engine definitions own gameplay. If/when promoting to the main line,
+merge `chatgpt/phaser-battlefield` after CI is green; do not separately reapply
+the earlier obsolete `feature/phaser-battlefield` branch.
+
 ## 2026-08-24 — ChatGPT — branch: `chatgpt/phaser-battlefield`
 
 **Context:** user standardized the newly replaced local card-art library on

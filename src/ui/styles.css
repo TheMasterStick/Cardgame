@@ -216,7 +216,25 @@ body {
   display: flex;
   justify-content: center;
   gap: 5px;
+  position: relative;
 }
+
+.row-target-overlay {
+  position: absolute;
+  inset: -2px;
+  z-index: 20;
+  border: 2px solid #63d88a;
+  border-radius: 8px;
+  background: rgba(24, 74, 45, 0.72);
+  color: #ecfff2;
+  font: 700 0.78rem Georgia, serif;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  box-shadow: 0 0 12px rgba(99, 216, 138, 0.55);
+}
+
+.row-target-overlay:hover { background: rgba(33, 102, 61, 0.82); }
 
 .row--hero {
   align-items: stretch;
@@ -401,24 +419,34 @@ body {
   position: relative;
   overflow: hidden;
   width: 88px;
-  min-height: 100px;
+  min-height: 0;
+  aspect-ratio: 2 / 3;
   background: var(--panel-light);
   border: 1px solid var(--border);
   border-radius: 8px;
-  padding: 4px;
+  padding: 0;
   font-size: 0.64rem;
   display: flex;
   flex-direction: column;
   gap: 2px;
   cursor: default;
+  container-type: inline-size;
 }
+
+.card--hero { padding: 4px; }
 
 .card--clickable {
   cursor: pointer;
 }
 
 .card--highlight {
-  box-shadow: 0 0 0 2px var(--accent);
+  box-shadow: 0 0 0 2px #63d88a, 0 0 11px rgba(99, 216, 138, 0.62);
+}
+
+.card--unplayable {
+  cursor: not-allowed;
+  filter: grayscale(0.72) brightness(0.52);
+  opacity: 0.76;
 }
 
 /* AI turn replay (App.tsx `runAiIfNeeded`): flashes the card the AI is
@@ -450,17 +478,19 @@ body {
 .card--full {
   width: 128px;
   min-height: 0;
-  padding: 8px;
+  padding: 0;
   font-size: 0.68rem;
   gap: 4px;
 }
+
+.card--full.card--hero { padding: 8px; }
 
 /* Hover zoom: a larger copy of the same card, positioned near the cursor's target
    in viewport coordinates so it always renders above scrollable board/grid panels. */
 .card--zoom {
   aspect-ratio: 512 / 776;
   min-height: 0;
-  padding: 10px;
+  padding: 0;
   font-size: 0.85rem;
   gap: 5px;
   border-radius: 14px;
@@ -469,6 +499,8 @@ body {
   z-index: 1000;
   pointer-events: none;
 }
+
+.card--zoom.card--hero { padding: 10px; }
 
 .card--zoom .card__name {
   font-size: 1rem;
@@ -554,6 +586,161 @@ body {
   background-size: cover;
   background-position: top center;
   z-index: 0;
+}
+
+/* Shared runtime equivalent of the Card Builder's 1152x1728 layered face.
+   The outer CardView is a container-query context, so typography scales at
+   exactly the same proportions in the hand, board and hover zoom. */
+.layered-card {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+  isolation: isolate;
+  color: #1d1711;
+  pointer-events: none;
+}
+
+.layered-card__art-window {
+  position: absolute;
+  z-index: 1;
+  left: 6.4%;
+  top: 12.8%;
+  width: 87.2%;
+  height: 58.5%;
+  overflow: hidden;
+  background: #242423;
+}
+
+.layered-card__art {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  inset: 0;
+  object-fit: cover;
+  transform-origin: center;
+}
+
+.layered-card__art-placeholder {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: #6c675f;
+  font: 700 5cqw Georgia, serif;
+  letter-spacing: 0.18em;
+  background: radial-gradient(circle at 50% 40%, #353432, #1b1b1a 70%);
+}
+
+.layered-card__base {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+}
+
+/* The checked-in Neutral fallback is a complete opaque template rather
+   than a transparent overlay. Keep it behind the cropped art if a remote
+   Builder frame cannot load, so the artwork opening does not disappear. */
+.layered-card__base--opaque-fallback { z-index: 0; }
+
+.layered-card__name {
+  position: absolute;
+  z-index: 20;
+  left: 8%;
+  top: 4.15%;
+  width: 64%;
+  height: 6.5%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #e6d4b4;
+  text-shadow: 0 0.5cqw 0.8cqw #000, 0 0 1.3cqw #000;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.05;
+  overflow: hidden;
+}
+
+.layered-card__cost,
+.layered-card__resource {
+  position: absolute;
+  z-index: 20;
+  top: 4.05%;
+  display: grid;
+  place-items: center;
+  color: #f0dfbd;
+  text-shadow: 0 0.5cqw 0.8cqw #000;
+  font-weight: 700;
+}
+
+.layered-card__cost { left: 74.1%; width: 15.5%; height: 10.4%; }
+.layered-card__resource { left: 88.1%; width: 10.2%; height: 9.2%; }
+.layered-card__resource img { width: 72%; height: 72%; object-fit: contain; filter: drop-shadow(0 0.3cqw 0.5cqw #000); }
+
+.layered-card__categories {
+  position: absolute;
+  z-index: 20;
+  top: 70.65%;
+  left: 8.5%;
+  width: 83%;
+  min-height: 3.5%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #d8c7aa;
+  text-shadow: 0 0.3cqw 0.8cqw #000;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-align: center;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.layered-card__rules {
+  position: absolute;
+  z-index: 20;
+  left: 10%;
+  top: 76.3%;
+  width: 80%;
+  height: 15.5%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  color: #2d2118;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+  overflow: hidden;
+}
+
+.layered-card__stat {
+  position: absolute;
+  z-index: 20;
+  bottom: 2.1%;
+  width: 14%;
+  height: 9.4%;
+  display: grid;
+  place-items: center;
+  color: #eee4cf;
+  text-shadow: 0 0.5cqw 1cqw #000;
+  font-weight: 700;
+}
+
+.layered-card__stat--attack { left: 1.6%; }
+.layered-card__stat--health,
+.layered-card__stat--spell-damage { right: 1.7%; }
+
+.card--unplayable .layered-card__cost {
+  color: #ff4f4f;
+  text-shadow: 0 0 1.2cqw #4a0000, 0 0.5cqw 0.8cqw #000;
+}
+
+.card--unplayable .layered-card__resource img {
+  filter: sepia(1) saturate(8) hue-rotate(320deg) brightness(1.35) drop-shadow(0 0 0.8cqw #4a0000);
 }
 
 .card--has-art {

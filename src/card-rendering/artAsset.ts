@@ -77,3 +77,29 @@ export async function resolveCardDefinitionArtPaths<T extends Record<string, Has
     }),
   );
 }
+
+/** Keeps saved Card Builder drafts on the same resolved local asset path as every runtime renderer. */
+export async function migrateStoredCardBuilderArtPaths(
+  storage: Pick<Storage, "getItem" | "setItem" | "key" | "length"> = localStorage,
+): Promise<void> {
+  const keys = Array.from({ length: storage.length }, (_, index) => storage.key(index)).filter(
+    (key): key is string => Boolean(key?.startsWith("card-builder:draft:")),
+  );
+
+  await Promise.all(
+    keys.map(async (key) => {
+      const raw = storage.getItem(key);
+      if (!raw) return;
+      try {
+        const draft = JSON.parse(raw) as { art?: unknown };
+        if (typeof draft.art !== "string" || !draft.art) return;
+        const resolved = await resolveCardArtPath(draft.art);
+        if (resolved === draft.art) return;
+        draft.art = resolved;
+        storage.setItem(key, JSON.stringify(draft));
+      } catch {
+        // Leave malformed/legacy drafts alone; the Builder already handles invalid JSON on selection.
+      }
+    }),
+  );
+}

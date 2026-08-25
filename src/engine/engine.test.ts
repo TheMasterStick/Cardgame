@@ -17,7 +17,7 @@ import { drawCard } from "./deck";
 import { damageCard, damagePlayer, gainCap, healCard, resolveEffect } from "./effects";
 import { assignEquipment } from "./equipment";
 import { createCardInstance, createInitialGameState } from "./factory";
-import { activateSlotCard, endTurn, playCardFromHand, startTurn } from "./game";
+import { activateSlotCard, endTurn, getHandCardPlayability, playCardFromHand, startTurn } from "./game";
 import { activateHeroPower, activateHeroSignature, peekSpellDiscount } from "./hero";
 import { applyStatus } from "./status";
 import {
@@ -85,6 +85,37 @@ describe("resources are spent from the pool matching the card's archetype", () =
     // Started at 5, Gold Mine costs 4 (-> 1), then its own When Built grants +1 max/current Resources (-> 2).
     // The other When Built trigger (+2 income) only shows up on the next startTurn, not here.
     expect(player.resources.current).toBe(2);
+  });
+});
+
+describe("hand card playability preflight", () => {
+  it("reports the exact missing resource before a play is attempted", () => {
+    const state = makeState();
+    const footman = createCardInstance("footman", "player");
+    state.players.player.hand.push(footman);
+    state.players.player.energy.current = 1;
+
+    expect(getHandCardPlayability(state, "player", footman.instanceId)).toEqual({
+      playable: false,
+      reason: "Not enough Energy — need 2, have 1.",
+      cost: 2,
+      poolLabel: "Energy",
+    });
+  });
+
+  it("accepts either creature row and reports full rows only when neither fits", () => {
+    const state = makeState();
+    const cleric = createCardInstance("cleric", "player");
+    state.players.player.hand.push(cleric);
+    state.players.player.board.vanguard.fill(createCardInstance("footman", "player"));
+
+    expect(getHandCardPlayability(state, "player", cleric.instanceId).playable).toBe(true);
+
+    state.players.player.board.support.fill(createCardInstance("footman", "player"));
+    expect(getHandCardPlayability(state, "player", cleric.instanceId)).toMatchObject({
+      playable: false,
+      reason: "No open Vanguard or Support slot.",
+    });
   });
 });
 

@@ -92,3 +92,21 @@ A separate square-art preparation/upload path now exists for the Card Builder an
 ## Rendering principle
 
 The Card Builder and battlefield should ultimately use one shared card-presentation model and one shared geometry definition. Phaser should render gameplay state from the real engine; card presentation should not encode or decide game legality.
+
+## Runtime integration status
+
+As of 2026-08-25 on `chatgpt/phaser-battlefield`, the Card Builder, normal
+React match UI, and Phaser battlefield consume the same saved per-card
+presentation data (`card-builder:draft:<card-id>`): artwork path and crop,
+frame selection, typography, printed categories, resource icon, and layer
+offsets. Engine `CardDefinition` values remain authoritative for name, cost,
+rules text, and base stats; runtime Attack/Health/status/charge changes are
+rendered over that presentation rather than written back into Builder data.
+
+Cards in hand are preflighted by the engine before interaction. Playable
+cards remain bright and highlighted; unplayable cards are dimmed, show their
+cost/resource in red, and expose the precise resource or zone-capacity reason.
+Targeted On Play creatures use two distinct UI stages: choose the exact
+Vanguard/Support slot first, then choose the effect target. The selected slot
+is carried into the final engine action and never falls back to Vanguard slot
+1. Row-targeted On Play effects use the same placement-first sequence.

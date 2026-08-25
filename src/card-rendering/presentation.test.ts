@@ -8,6 +8,7 @@ import {
   defaultBaseForArchetype,
   defaultPrintedCategories,
   defaultResourceKindForArchetype,
+  getRuntimeCardPresentation,
   hydrateCardPresentation,
 } from "./presentation";
 
@@ -57,5 +58,28 @@ describe("card presentation defaults", () => {
     expect(hydrated.layout.nameY).toBe(30);
     expect(hydrated.layout.costX).toBe(PROJECT_DEFAULT_LAYOUT.costX);
     expect(hydrated.statSize).toBe(PROJECT_DEFAULT_TYPOGRAPHY.statSize);
+  });
+
+  it("loads saved Builder presentation without replacing authoritative gameplay values", () => {
+    const storage = {
+      getItem: () => JSON.stringify({
+        art: "/cards/custom-footman.png",
+        playPool: "mana",
+        baseKey: "SpellBase",
+        artScale: 1.3,
+        categories: ["Rare", "Lorthaine", "Human", "Fighter"],
+        cost: 99,
+        attack: 99,
+      }),
+    };
+
+    const runtime = getRuntimeCardPresentation(CARD_DEFINITIONS.footman, storage);
+    expect(runtime.art).toBe("/cards/custom-footman.png");
+    expect(runtime.playPool).toBe("mana");
+    expect(runtime.presentation.baseKey).toBe("SpellBase");
+    expect(runtime.presentation.artScale).toBe(1.3);
+    expect(runtime.presentation.categories).toEqual(["Rare", "Lorthaine", "Human", "Fighter"]);
+    expect("cost" in runtime.presentation).toBe(false);
+    expect("attack" in runtime.presentation).toBe(false);
   });
 });

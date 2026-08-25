@@ -15,7 +15,7 @@ import { deckSize, deckToIds, loadCustomDeck, saveCustomDeck, type DeckDraft } f
 import type { EffectTargetRef } from "./engine/effects";
 import { createInitialGameState } from "./engine/factory";
 import { runAiTurnSteps } from "./engine/ai";
-import { activateSlotCard, endTurn, playCardFromHand, startGame } from "./engine/game";
+import { activateSlotCard, endTurn, getHandCardPlayability, playCardFromHand, startGame } from "./engine/game";
 import { activateBuildingAbility } from "./engine/building";
 import { assignEquipment } from "./engine/equipment";
 import { activateHeroPower, activateHeroSignature, peekSpellDiscount } from "./engine/hero";
@@ -38,6 +38,8 @@ import { SpecializationSelect, type PendingMatch } from "./ui/components/Special
 import {
   effectHasLegalTarget,
   effectNeedsExplicitTarget,
+  effectTargetCategory,
+  getPendingEffect,
   highlightForStep,
   NO_AI_HIGHLIGHT,
   type AiHighlight,
@@ -49,6 +51,10 @@ type Screen = "menu" | "heroSelect" | "collection" | "packs" | "deckBuilder" | "
 const AI_STEP_DELAY_MS = 700;
 
 const appStyle = { "--app-bg-image": cssImage(BOARD_THEME.appBackground) } as CSSProperties;
+
+function effectNeedsUiTarget(effect: Parameters<typeof effectNeedsExplicitTarget>[0]): boolean {
+  return effectNeedsExplicitTarget(effect) || effectTargetCategory(effect) === "targetRow";
+}
 
 export default function App() {
   const gameRef = useRef<GameState | null>(null);
@@ -247,9 +253,14 @@ export default function App() {
     const card = state.players.player.hand.find((c) => c.instanceId === instanceId);
     if (!card) return;
     const def = CARD_DEFINITIONS[card.defId];
+    const playability = getHandCardPlayability(state, "player", instanceId);
+    if (!playability.playable) {
+      fail(playability.reason);
+      return;
+    }
 
     if (def.archetype === "spell" && def.spellForm === "instant") {
-      if (effectNeedsExplicitTarget(def.effect) && effectHasLegalTarget(state, def.effect, "spell")) {
+      if (effectNeedsUiTarget(def.effect) && effectHasLegalTarget(state, def.effect, "spell")) {
         setPending({ kind: "playCard", instanceId });
         return;
       }
@@ -261,22 +272,21 @@ export default function App() {
       return;
     }
 
-    if (def.archetype === "creature" || def.archetype === "building") {
+    if (def.archetype === "creature") {
+      // Placement is always chosen before a targeted On Play effect. This
+      // keeps the creature out of the implicit Vanguard slot-1 fallback.
+      setPending({ kind: "placeCreature", instanceId });
+      return;
+    }
+    if (def.archetype === "building") {
       const trigger = def.triggers.find((t) => t.on === "onPlay");
-      if (trigger && effectNeedsExplicitTarget(trigger.effect) && effectHasLegalTarget(state, trigger.effect)) {
-        // A creature that also needs an onPlay target skips row choice and
-        // always lands in Vanguard — combining the two pending steps is
-        // deferred (Phase B1 scope; DESIGN.md §17 Phase B).
+      if (trigger && effectNeedsUiTarget(trigger.effect) && effectHasLegalTarget(state, trigger.effect)) {
         setPending({ kind: "playCard", instanceId });
         return;
       }
       // No legal target for a Creature/Building-restricted effect (e.g. no
       // enemy creature to hit): the card is still playable, its Warcry just
       // fizzles (DESIGN.md §7) rather than the card becoming stuck in hand.
-    }
-    if (def.archetype === "creature") {
-      setPending({ kind: "placeCreature", instanceId });
-      return;
     }
     const result = playCardFromHand(state, "player", instanceId);
     if (!result.ok) fail(result.reason);
@@ -286,7 +296,19 @@ export default function App() {
   function handlePlaceCreature(owner: PlayerId, row: "vanguard" | "support", slotIndex: number) {
     const state = gameRef.current;
     if (!state || !pending || pending.kind !== "placeCreature" || owner !== "player") return;
-    const result = playCardFromHand(state, "player", pending.instanceId, { row, slotIndex });
+    const card = state.players.player.hand.find((candidate) => candidate.instanceId === pending.instanceId);
+    const def = card && CARD_DEFINITIONS[card.defId];
+    const trigger = def && (def.archetype === "creature" || def.archetype === "building")
+      ? def.triggers.find((candidate) => candidate.on === "onPlay")
+      : undefined;
+    const options = { row, slotIndex } as const;
+
+    if (trigger && effectNeedsUiTarget(trigger.effect) && effectHasLegalTarget(state, trigger.effect)) {
+      setPending({ kind: "playCard", instanceId: pending.instanceId, options });
+      return;
+    }
+
+    const result = playCardFromHand(state, "player", pending.instanceId, options);
     if (!result.ok) fail(result.reason);
     setPending(null);
     commit();
@@ -314,6 +336,21 @@ export default function App() {
     // creature out): still activate it, the effect just fizzles.
     const result = activateSlotCard(state, "player", slotIndex, null);
     if (!result.ok) fail(result.reason);
+    commit();
+  }
+
+  function handleRowTarget(owner: PlayerId, row: "vanguard" | "support") {
+    const state = gameRef.current;
+    if (!state || !pending || pending.kind !== "playCard") return;
+    const effect = getPendingEffect(state, pending);
+    if (!effect || effectTargetCategory(effect) !== "targetRow") return;
+
+    const result = playCardFromHand(state, "player", pending.instanceId, {
+      ...pending.options,
+      target: { kind: "row", owner, row },
+    });
+    if (!result.ok) fail(result.reason);
+    setPending(null);
     commit();
   }
 
@@ -447,7 +484,7 @@ export default function App() {
     const targetRef: EffectTargetRef = { kind: "card", owner, instanceId };
     const result =
       pending.kind === "playCard"
-        ? playCardFromHand(state, "player", pending.instanceId, { target: targetRef })
+        ? playCardFromHand(state, "player", pending.instanceId, { ...pending.options, target: targetRef })
         : pending.kind === "activate"
           ? activateSlotCard(state, "player", pending.slotIndex, targetRef)
           : pending.kind === "heroPower"
@@ -493,7 +530,7 @@ export default function App() {
     const targetRef: EffectTargetRef = { kind: "player", owner };
     const result =
       pending.kind === "playCard"
-        ? playCardFromHand(state, "player", pending.instanceId, { target: targetRef })
+        ? playCardFromHand(state, "player", pending.instanceId, { ...pending.options, target: targetRef })
         : pending.kind === "activate"
           ? activateSlotCard(state, "player", pending.slotIndex, targetRef)
           : pending.kind === "heroPower"
@@ -652,6 +689,7 @@ export default function App() {
               onSlotClick={handleSlotClick}
               onPortraitClick={handlePortraitClick}
               onPlaceCreature={handlePlaceCreature}
+              onRowTarget={handleRowTarget}
             />
             <ResourceBar playerState={state.players.opponent} label="Opponent" layout="vertical" />
           </div>
@@ -668,6 +706,7 @@ export default function App() {
               onSlotClick={handleSlotClick}
               onPortraitClick={handlePortraitClick}
               onPlaceCreature={handlePlaceCreature}
+              onRowTarget={handleRowTarget}
               onHeroPowerClick={handleHeroPowerClick}
               onSignatureClick={handleSignatureClick}
               onBuildingAbilityClick={handleBuildingAbilityClick}
@@ -678,7 +717,7 @@ export default function App() {
 
           <div className="app__controls">
             <HandView
-              playerState={state.players.player}
+              state={state}
               interactive={state.activePlayer === "player" && !pending && !state.winner}
               onCardClick={handleHandCardClick}
             />

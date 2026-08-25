@@ -1,6 +1,7 @@
 import { CARD_DEFINITIONS } from "../data/cards";
 import type { AiTurnStep } from "../engine/ai";
 import { hasKeyword } from "../engine/effects";
+import type { PlayCardOptions } from "../engine/game";
 import type { BuildingDefinition, CardArchetype, CardEffect, CardInstance, EffectTarget, GameState, HeroCardDefinition, PlayerId } from "../engine/types";
 
 const EXPLICIT_TARGET_CATEGORIES: EffectTarget[] = [
@@ -73,7 +74,7 @@ export function effectHasLegalTarget(state: GameState, effect: CardEffect, sourc
 }
 
 export type PendingAction =
-  | { kind: "playCard"; instanceId: string }
+  | { kind: "playCard"; instanceId: string; options?: PlayCardOptions }
   | { kind: "placeCreature"; instanceId: string }
   | { kind: "activate"; slotIndex: number }
   | { kind: "attack"; attackerId: string | "hero" }

@@ -1180,6 +1180,7 @@ Suggested build order, each phase individually shippable/testable:
 | **P — Hero Specializations (§19)** ✅ *(live)* | The single `passive` field is replaced by 3 named Specializations per Hero, chosen once per match (defaulting to index 0 = the old `passive`, so the whole pre-Phase-P test suite needed no behavioral changes). `auraBuff` gained an `hpDelta` alongside `attackDelta`, folded into `getEffectiveCreatureMaxHp` for both Hero and Building auras. A new `chooseSpecialization` screen sits between Hero+deck selection and match start, showing the opponent's Hero (not their deck/hand/pick); the AI's pick (`pickAiSpecialization`, ai.ts) is computed independently of the player's. Hero Power/Signature are unaffected. Fixed two pre-existing gaps found along the way: AdminPanel.tsx had no Hero Passive/Power/Signature authoring UI at all, and `loadCustomCards.ts` never had a `"hero"` case (`VALID_ARCHETYPES` didn't even list it) — both fixed. See the implementation-status note above. |
 | **Q — AI lethal-priority (player-reported gameflow fix)** ✅ *(live)* | Not a pre-planned phase — direct feedback from an actual match: the AI cleared a Building then a Vanguard creature before finishing an undefended, low-HP Hero, when it already had enough attack on board to just end the game. `isLethalAvailable(state)` (ai.ts) sums each of the AI's currently-able-to-attack creatures' damage (Double Strike counted twice, reduced by the enemy's equipment damage reduction, excluding any attacker a reachable Taunt creature would force elsewhere) plus the Hero's own attack if it can swing, against the enemy's `guard.current + hero.currentHp`; it's a same-turn snapshot, not a sequential-kill simulation. When true, `chooseAttackTarget`'s new `preferLethal` parameter sends every attacker with a legal path straight at the enemy Hero instead of the usual creature/Building-trade logic — a reachable Taunt creature is still the one thing that can force a given attacker elsewhere (Infiltrate still bypasses it, same as always). See the implementation-status note above. |
 | **R — Three settled-rules corrections (from the `chatgpt/phaser-battlefield` integration branch)** ✅ *(live)* | Not built on this line — authored on a parallel integration branch while wiring an engine-backed Phaser battlefield prototype (see §20), then cherry-picked here after independent review confirmed each is a genuine correction, not a stylistic change: (1) Hero status damage (Poison/Bleed/Burn ticks) now routes through `damagePlayer` — Guard soaks it first, same as every other source of Hero damage — instead of hitting `hero.currentHp` directly, correcting a violation of §6's "all damage aimed at the player hits Guard first" rule that predated this fix. (2) Double Strike's per-turn attack counter (`CardInstance.attacksUsedThisTurn`) is now reset in `startTurn` alongside `hasAttackedThisTurn`; previously it was never reset, so a Double Strike creature lost its second swing every turn after the first one it ever used Double Strike in. (3) A card burned by drawing into a full hand now leaves the match permanently instead of being pushed to discard, so it can no longer be reshuffled back in via discard-pile recycling — `player.discard`/`graveyard` are untouched by the burn. `src/engine/settledRules.test.ts` covers all three. |
+| **S — Shared Builder card faces + hand legality + placement-first targeting** ✅ *(live on `chatgpt/phaser-battlefield`)* | The normal React match and Phaser battlefield now read the same saved Card Builder presentation data for artwork/crop, frame, typography, categories, resource icon, and offsets while keeping engine definitions authoritative for gameplay text/cost/stats. Both hands visibly distinguish playable cards from cards blocked by Mana/Energy/Resources or full destination zones before the player clicks. Targeted On Play creatures choose their exact Vanguard/Support slot first and their effect target second; `targetRow` On Play cards use the same sequence, eliminating the old implicit Vanguard slot-1 fallback. See §20 and `CARD_RENDERING.md`. |
 
 Each phase gets the same verification pass as prior work: `tsc
 --noEmit`, `eslint`, `vitest`, `vite build`, plus a Playwright smoke
@@ -1293,20 +1294,18 @@ aimed at, not a claim that it's all merged and live here yet.
   this implies, and `CARD_RENDERING.md` (integration branch) for the
   layered geometry/typography spec itself. PNG export from the Builder
   is planned, not yet built as of this writeup.
-- **Long-term target: one shared card-presentation model.** The Card
+- **Shared card-presentation model is live on the integration branch.** The Card
   Builder's layered composite (art + base + name + cost + resource
-  icon + categories + rules text + stats) and whatever the Phaser
-  battlefield renders for a card on the board should eventually be the
-  same rendering code reading the same per-card layer data, not two
-  independently-maintained implementations that can drift. Nothing
-  currently enforces that — it's a stated goal for whenever the Phaser
-  branch actually merges, not a built guarantee.
-- **Status as of this writeup:** the Phaser battlefield and Card
-  Builder live only on `chatgpt/phaser-battlefield` (verified clean —
-  `tsc`/`eslint`/`vitest`/`vite build` all pass, CI green). Three
-  engine-rules corrections discovered while building the engine bridge
+  icon + categories + rules text + stats), React `CardView`, and the Phaser
+  battlefield now read the same per-card layer data. Phase S implements that shared data contract
+  for the Card Builder, React `CardView`, and Phaser card-face renderer;
+  the React/Phaser drawing primitives remain platform-specific while their
+  source presentation and engine values are shared.
+- **Status as of 2026-08-25:** the Phaser battlefield, Card Builder, and
+  Phase S shared runtime rendering live only on `chatgpt/phaser-battlefield`.
+  Three engine-rules corrections discovered while building the engine bridge
   were cherry-picked onto this line (Phase R, above) since they're
   genuine rules fixes independent of any UI; the Phaser scenes,
-  `EngineBattleScene.ts`, and the Card Builder app itself have not
-  been merged here and this document doesn't assume they're active in
-  the app you get from this branch.
+  `EngineBattleScene.ts`, Card Builder app, and shared runtime faces have not
+  yet been merged onto Claude's main line; that remains the separate
+  ROADMAP.md sequence-item #12 decision.

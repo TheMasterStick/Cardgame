@@ -14,7 +14,7 @@ import type {
   PlayerId,
 } from "../../engine/types";
 import { BOARD_THEME, cssImage } from "../../data/theme";
-import { getPendingEffect, isEffectTargetable, pendingEffectSourceArchetype, type AiHighlight, type PendingAction } from "../targeting";
+import { effectTargetCategory, getPendingEffect, isEffectTargetable, pendingEffectSourceArchetype, type AiHighlight, type PendingAction } from "../targeting";
 import { CardView } from "./CardView";
 
 /** The first slot index a creature occupies in this row — a Massive creature (DESIGN.md §5) spans more than one. */
@@ -43,6 +43,7 @@ interface PlayerBoardProps {
   onSlotClick: (owner: PlayerId, slotIndex: number) => void;
   onPortraitClick: (owner: PlayerId) => void;
   onPlaceCreature: (owner: PlayerId, row: "vanguard" | "support", slotIndex: number) => void;
+  onRowTarget: (owner: PlayerId, row: "vanguard" | "support") => void;
   /** Only meaningful for the human "player" board — the AI opponent's Hero Power/Signature/Building abilities are decided in ai.ts, not clicked. */
   onHeroPowerClick?: () => void;
   onSignatureClick?: () => void;
@@ -62,6 +63,14 @@ function PlaceableSlot({ onClick }: { onClick: () => void }) {
   );
 }
 
+function RowTargetOverlay({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button className="row-target-overlay" onClick={onClick}>
+      Target {label}
+    </button>
+  );
+}
+
 export function PlayerBoard({
   state,
   owner,
@@ -73,6 +82,7 @@ export function PlayerBoard({
   onSlotClick,
   onPortraitClick,
   onPlaceCreature,
+  onRowTarget,
   onHeroPowerClick,
   onSignatureClick,
   onBuildingAbilityClick,
@@ -94,6 +104,7 @@ export function PlayerBoard({
 
   const canInitiate = !pending && owner === "player" && state.activePlayer === "player" && !state.winner;
   const canPlaceHere = pending?.kind === "placeCreature" && owner === "player";
+  const canTargetRow = owner === "opponent" && !!pendingEffect && effectTargetCategory(pendingEffect) === "targetRow";
 
   const heroPowerClickable =
     canInitiate &&
@@ -282,6 +293,7 @@ export function PlayerBoard({
       </div>
 
       <div className="row row--support" title="Support: backline. Only Ranged creatures can attack from here — a creature with Advance can move into Vanguard instead.">
+        {canTargetRow && <RowTargetOverlay label="Support" onClick={() => onRowTarget(owner, "support")} />}
         {playerState.board.support.map((card, i) => {
           if (!card) {
             return <Slot key={i}>{canPlaceHere && <PlaceableSlot onClick={() => onPlaceCreature(owner, "support", i)} />}</Slot>;
@@ -319,6 +331,7 @@ export function PlayerBoard({
       </div>
 
       <div className="row row--vanguard">
+        {canTargetRow && <RowTargetOverlay label="Vanguard" onClick={() => onRowTarget(owner, "vanguard")} />}
         {playerState.board.vanguard.map((card, i) => {
           if (!card) {
             return <Slot key={i}>{canPlaceHere && <PlaceableSlot onClick={() => onPlaceCreature(owner, "vanguard", i)} />}</Slot>;

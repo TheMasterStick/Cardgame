@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { CARD_DEFINITIONS } from "../../data/cards";
 import { ELEMENT_LABELS, HERO_CLASS_LABELS, RACE_LABELS, STATUS_ICONS } from "../../data/taxonomy";
 import type { CardDefinition, CardInstance, CreatureDefinition, HeroCardDefinition } from "../../engine/types";
+import { LayeredCardFace } from "./LayeredCardFace";
 
 interface CardViewProps {
   instance: CardInstance;
@@ -14,6 +15,7 @@ interface CardViewProps {
   attackOverride?: number;
   /** Set while the AI's turn is replaying and this card is the one acting, or the one being acted on — drives a highlight/flash effect. */
   acting?: "actor" | "target";
+  playability?: { playable: boolean; reason?: string };
   /**
    * "compact" (default): art plus attack/health only, Hearthstone-minion
    * style — used on the board, collection, deck builder, and packs, where a
@@ -57,6 +59,7 @@ export function CardView({
   defOverride,
   attackOverride,
   acting,
+  playability,
   variant = "compact",
 }: CardViewProps) {
   const def = defOverride ?? CARD_DEFINITIONS[instance.defId];
@@ -107,12 +110,14 @@ export function CardView({
   // that isn't and can't be baked into a static image: current Attack/HP,
   // status effects, and (for Spell/Ability) charges remaining.
   const isHero = def.archetype === "hero";
+  const isPlayable = playability?.playable ?? true;
 
   const baseClasses = ["card", `card--${def.archetype}`, `card--rarity-${def.rarity}`];
   if (highlighted) baseClasses.push("card--highlight");
   if (onClick) baseClasses.push("card--clickable");
   if (def.art) baseClasses.push("card--has-art");
   if (acting) baseClasses.push(`card--ai-${acting}`);
+  if (!isPlayable) baseClasses.push("card--unplayable");
 
   if (variant === "full") baseClasses.push("card--full");
   const zoomClasses = [...baseClasses.filter((c) => c !== "card--full"), "card--zoom"];
@@ -183,9 +188,26 @@ export function CardView({
       </>
     );
   } else {
-    // Same live-state-only content as the compact face, just rendered
-    // bigger by the card--full/card--zoom CSS sizing — see compactContent.
     detailedContent = (
+      <>
+        <LayeredCardFace
+          def={def}
+          attack={compactAttack}
+          health={compactRightKind === "hp" ? compactRightStat as number : null}
+          unplayable={!isPlayable}
+        />
+        {compactRightKind === "charges" && compactRightStat !== null && (
+          <span className="card__corner-stat card__corner-stat--right card__corner-stat--charges">
+            {compactRightStat}
+          </span>
+        )}
+        {statuses && <div className="card__statuses card__statuses--compact">{statuses}</div>}
+      </>
+    );
+  }
+
+  const compactContent = (
+    isHero ? (
       <>
         {art}
         {rarityDot}
@@ -197,21 +219,7 @@ export function CardView({
         )}
         {statuses && <div className="card__statuses card__statuses--compact">{statuses}</div>}
       </>
-    );
-  }
-
-  const compactContent = (
-    <>
-      {art}
-      {rarityDot}
-      {compactAttack !== null && <span className="card__corner-stat card__corner-stat--left">{compactAttack}</span>}
-      {compactRightStat !== null && (
-        <span className={`card__corner-stat card__corner-stat--right card__corner-stat--${compactRightKind}`}>
-          {compactRightStat}
-        </span>
-      )}
-      {statuses && <div className="card__statuses card__statuses--compact">{statuses}</div>}
-    </>
+    ) : detailedContent
   );
 
   return (
@@ -223,6 +231,8 @@ export function CardView({
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         aria-label={def.name}
+        aria-disabled={!isPlayable || undefined}
+        title={playability?.reason}
       >
         {variant === "full" ? detailedContent : compactContent}
       </div>
