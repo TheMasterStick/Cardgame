@@ -37,8 +37,9 @@ Phaser still drew placeholder/text cards; neither hand showed affordability
 before a failed click; targeted On Play creatures skipped placement and fell
 into Vanguard slot 1; and the normal React match showed raw art instead of the
 complete layered Card Builder face. Before working, I merged the latest
-`origin/claude/card-game-framework-kmz2ol` into this branch (`d142e55`) so this
-implementation sits on top of Claude's current engine/docs line.
+`origin/claude/card-game-framework-kmz2ol` into this branch (published merge
+`d201c10`; local equivalent `d142e55`) so this implementation sits on top of
+Claude's current engine/docs line.
 
 **Changes:**
 - Added a shared runtime presentation adapter in
