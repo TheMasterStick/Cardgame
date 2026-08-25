@@ -785,6 +785,112 @@ kept for its remaining unconverted cards and as a naming/tone reference.
 
 ---
 
+## Established Neutral-world cultures, realms and organizations
+
+These identities are currently being established through Neutral cards and worldbuilding. They are **setting cultures, realms, houses, cities or organizations**, not automatically separate playable deck factions. Keep them Neutral unless a later design decision explicitly promotes one into a playable faction identity.
+
+### Lorthaine
+
+Lorthaine is a refined martial culture whose defining tradition is **swordsmanship**. The Lorthaine remain the setting's principal **swordmaster culture**: disciplined, aristocratic and technically accomplished rather than brutish.
+
+The redesigned **Lorthaine Elite Veteran** pushes their visual language further toward a Renaissance duelist/warrior direction — elegant battlefield dress, refined armor and a stronger fencing/dueling influence. This is a visual evolution, not a change to their core identity as swordsmasters.
+
+**Anchor card:** Lorthaine Elite Veteran.
+
+**Important separation:** Captain of the Citadel is **not** Lorthaine.
+
+### Shenkai
+
+Shenkai is the current name for the eastern culture previously being developed under the working name **Demenese**. Its visual and cultural direction blends **Mongolian and Chinese influences** rather than western medieval styling.
+
+The culture should support mobile eastern warfare: skirmishers, scouts, horse archers, lancers, spear troops and disciplined banner-bearing warriors. Exact political structure and deeper history remain open for later worldbuilding.
+
+**Card rename:** Demenese Skirmisher → **Shenkai Skirmisher** (`Shenkai-Skirmisher` as the asset/card ID style).
+
+### Averaine and Whitebough
+
+Averaine is a southern human realm/culture associated with broad **grasslands, forests, river valleys and fertile settled country**. Its visual identity is more prosperous and temperate than Gestmane's demonic frontier or the harsher northern cultures.
+
+Its heraldry is strongly established by **blue-and-white checkering with a silver tree emblem**.
+
+**Whitebough** is the major stronghold/seat associated with this identity. Its formal lore name is:
+
+**The Silver Citadel of Whitebough**
+
+The **Captain of the Citadel** is associated with the Silver Citadel of Whitebough and therefore with the Averaine sphere. She should not be folded into either Lorthaine or Gestmane.
+
+Working relationship:
+- **Averaine** — southern realm/culture.
+- **Whitebough** — important seat/region within that realm.
+- **The Silver Citadel of Whitebough** — major fortress and military/political stronghold.
+- **Captain of the Citadel** — officer/commander associated with that stronghold.
+
+### Cult of Embers
+
+The **Cult of Embers** is an established fire-zealot organization centered on reverence for **flame, sacred fire and fire gods**. It should feel religious and fanatical rather than merely like a school of pyromancers: flame can be treated as revelation, purification, destruction and renewal.
+
+**Anchor card:** Salazar of the Ember.
+
+Salazar belongs to the Cult of Embers and is one of its first major named figures.
+
+### Gestmane — working frontier identity
+
+Gestmane is not yet fully locked, but the strongest current direction is:
+
+- **House of Gestmane** — the ruling or central noble house.
+- **Gestmane Fortress City** — a great fortified border city.
+- The city stands on the frontier between the **demonic wastelands** and the **civilized world**.
+
+This makes Gestmane a natural culture of fortress warfare, vigilance, garrisons, watchtowers, signal fires, siege defense and generations of soldiers shaped by the demonic frontier.
+
+**Anchor card:** Warhorn of Gestmane.
+
+The exact constitutional structure, history and final relationship between House Gestmane and the city remain open. Do not treat the above working direction as more specific than currently established.
+
+**Important separation:** Captain of the Citadel is **not** Gestmane.
+
+### Skaldjborn
+
+A northern Norse/Viking-inspired people with a strong shieldwall and warrior tradition. Their identity includes axes, shields, war paint, braids, runic details and disciplined formation fighting alongside raiding/frontier imagery.
+
+**Anchor cards:** Skaldjborn Shield-Sister, Skaldjborn Shieldwall Veteran, Skaldjborn Shieldbreaker.
+
+### Cimbar
+
+A barbarian culture inspired more by **Conan/Cimmeria** than by the Norse. Their visual language favors leather, black iron or bronze, scars, axes and hard individualistic warbands rather than Skaldjborn-style shieldwall identity.
+
+**Anchor card:** Cimbar Berserker.
+
+### Klamet
+
+A desert/Arabian-inspired town or city known especially for **pit fighting and public arena combat**. Sandstone, bronze, linen, curved weapons, dust and spectacle are natural visual anchors.
+
+**Anchor card:** Pit Fighter of Klamet.
+
+### Golden Company
+
+An independent mercenary organization rather than a nation. Its identity is professional, elite and expensive: disciplined sellswords, blackened steel, gold/brass details and a battle-worn but prestigious military look.
+
+**Anchor card:** Golden Company Captain.
+
+### Arcane Industries Consortium
+
+The **Arcane Industries Consortium** is not a nation. It is a Gnome-founded and predominantly Gnome-run commercial and research establishment devoted to combining **arcane magic with engineering, manufacturing and invention**. In gameplay it may use the live `arcane-industries` Faction tag, but in lore that tag represents organizational affiliation rather than a sovereign realm.
+
+Its core identity is **applied magic**. Gnomish engineers and arcanists build contraptions, arcane-powered machinery, crystal-driven devices, automated defenses, constructs, tools and experimental prototypes. Workshops and research facilities should feel like fantasy industrial laboratories: brass, copper, dark iron, gauges, lenses, rune-work, glowing conduits, violet/blue arcane crystals and magically suspended mechanisms.
+
+Arcane Industries should be capable, wealthy and technologically formidable rather than a purely comedic Gnome faction. Eccentric inventors and dangerous prototypes can exist, but the organization itself takes its work and commerce seriously and can operate workshops, research enclaves and commercial facilities throughout the civilized world.
+
+**Important boundary:** Arcane magic or arcane machinery does **not** automatically mean Arcane Industries. The Consortium is one major organization working in this field, not the inventor or owner of all arcane magic and technology.
+
+**Current anchors:** Archivist and Arcane Turret are direct organizational fits. Other existing arcane cards should only be associated with the Consortium when explicitly decided.
+
+### Currently unaffiliated
+
+**Flankguard Outrider** remains culturally unaffiliated for now. The armored unicorn cavalry concept may eventually seed its own chivalric or regional tradition, but no culture should be assigned yet.
+
+---
+
 ## Conversion checklist before an archetype becomes a real card set
 
 The creative identities in this file remain valid, but each mini-set should be converted against the Phase-K engine and the authoritative Neutral Core balance. Priority checks:

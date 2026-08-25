@@ -265,6 +265,23 @@ a text layout. `src/data/cardFrames.ts` and its `card--framed`/
 `arrow-archer` (id kept stable for existing deck references) is now
 just displayed as "Archer".
 
+> **Superseded going forward, kept as a supported legacy path (see §20).**
+> The Phase K assumption above — that every non-Hero card's art is a
+> single fully-baked static image with only live stats overlaid — was
+> the deliberate design at the time, but the user has since moved to
+> the layered Card Builder as the actual card-creation workflow, for
+> exactly the reason Phase K's overlay already existed: card stats need
+> to change (balance passes, Specialization/Building auras, live combat
+> state) without repainting art. The Builder composites card border +
+> **default/printed** stats onto the user's raw artwork as separate
+> layers instead of baking them in; the live in-game overlay's job
+> (current HP, buffs, charges) doesn't go away — it still renders on
+> top of whichever face a card uses, baked or layered. Every card
+> shipped through Phase K's baked-art pipeline remains fully valid and
+> is not being retired or rebuilt on any deadline — the two rendering
+> paths coexist by design (§20) while the collection converts
+> gradually.
+
 New mechanics landed to match the spec's keyword glossary, each
 following the project's existing "live-recompute vs. permanently-
 stored vs. attack-instance-scoped" bonus taxonomy (§5/§7) rather than
@@ -1155,13 +1172,14 @@ Suggested build order, each phase individually shippable/testable:
 | **H — Closing flagged gaps** ✅ *(live)* | Not a pre-planned phase — a cleanup pass over three items earlier phases had explicitly left open, none needing new design decisions: Bloodied's trigger mechanism decided (continuous live check, `wounded-berserker`), a shipped Rule-Breaks Hero (`grand-marshal`), and a documentation correction (Siege/Sabotage's column-protection bypass was already live since Phase B1, the Phase E note was just stale). See the implementation-status note above. |
 | **I — Garrison (§16)** ✅ *(live)* | A `garrison` CardEffect (single-target, resolved the same way as Consume/Transform) moves a friendly creature into `CardInstance.garrisonedCreature` on a Building, off the battlefield and untargetable, ejected back out (or destroyed) when that Building dies. `garrison-post` demonstrates it in the Fighter starter deck. With this, every §16 Board-as-resource pattern that's actually part of the game is live — Mount was decided against, not deferred; see the implementation-status note above. |
 | **J — Allegiance made live (§10)** ✅ *(live)* | Not a pre-planned phase — Allegiance (§10) was built and unit-tested back in Phase C but never actually restricted a real deck, since no starter Hero carried a Faction. `archivist` (`faction: "arcane-industries"`) ships with a real 30-card starter deck, so the restriction now genuinely bites. See the implementation-status note above. |
-| **K — Neutral Core Set adoption + card-art-is-the-card UI** ✅ *(live)* | Adopted an external 59-card spec as ground truth for the Neutral Core Set; every existing Phase A-J mechanic was explicitly kept, not reconciled against the new spec. Vanish replaces Stealth; new keywords Enrage, Frenzy (reassigned to a new card), Resistant, Deadeye, Double Strike, Duel, Crowd Pleaser, Bleed, Burn(-on-hit), Frost Armor, Massive; new `creatureType` field drives type-conditional Formation; new `gainIncome`/`drawCreature`/`devour`/`multi` CardEffect kinds; new `targetRow`/`targetCreatureOrPlayer` targeting; Building ability charges; Equipment keywords/charges; Ability gained the Instant/Activated split Spells already had. The card frame/text overlay was removed for every non-Hero archetype — the art itself now carries that information. Two genuine pre-existing bugs surfaced and fixed along the way: the onAttack trigger was built but never wired into combat, and `applyStatus` never supported AOE targets. See the implementation-status note above for the full list, the Open defaults, and the known gaps (no Duel UI button yet, Bulletin Board's scrying simplified, decks not reworked to include the 11 new cards). |
+| **K — Neutral Core Set adoption + card-art-is-the-card UI** ✅ *(live; art model superseded going forward, see below)* | Adopted an external 59-card spec as ground truth for the Neutral Core Set; every existing Phase A-J mechanic was explicitly kept, not reconciled against the new spec. Vanish replaces Stealth; new keywords Enrage, Frenzy (reassigned to a new card), Resistant, Deadeye, Double Strike, Duel, Crowd Pleaser, Bleed, Burn(-on-hit), Frost Armor, Massive; new `creatureType` field drives type-conditional Formation; new `gainIncome`/`drawCreature`/`devour`/`multi` CardEffect kinds; new `targetRow`/`targetCreatureOrPlayer` targeting; Building ability charges; Equipment keywords/charges; Ability gained the Instant/Activated split Spells already had. The card frame/text overlay was removed for every non-Hero archetype — the art itself now carries that information. Two genuine pre-existing bugs surfaced and fixed along the way: the onAttack trigger was built but never wired into combat, and `applyStatus` never supported AOE targets. See the implementation-status note above for the full list, the Open defaults, and the known gaps (no Duel UI button yet, Bulletin Board's scrying simplified, decks not reworked to include the 11 new cards). **The fully-baked-art assumption is superseded as of 2026-08-24** — the layered Card Builder is now the primary card-creation workflow; existing baked cards stay valid as a legacy/fallback path rather than being retired. See the reconciliation note in the implementation-status narrative above and §20. |
 | **L — Taxonomy migrations (ROADMAP.md #5/#6)** ✅ *(live)* | `race?: Race` became `races?: Race[]` everywhere (types.ts, the 8 cards that had one, the `auraBuff`/`neutralRaces` array-membership matching, CardView's Hero meta line, the Admin Panel's checkbox multi-select, the Supabase schema — `race` moved from a dedicated column into `data` jsonb like every other array field, migration `0004_multi_race.sql`). New required `class: HeroClass` field on every Hero (`"fighter" \| "mage" \| "rogue"`), purely descriptive today; new `rogue` CreatureType, retagged onto `assassin`/`shadow-infiltrator` in place of the generic `fighter` tag. Fixed a genuine pre-existing bug along the way: `validateCard` never actually included `element`/`faction`/`race` in its returned object, so an Admin-Panel-set Element/Faction/Race silently vanished on the next `fetchRemoteCards()` — fixed for both the Supabase and `customCards.json` paths. See the implementation-status note above for the full writeup. |
 | **M — Temporary-modifier primitive (ROADMAP.md #7)** ✅ *(live)* | `buff` gained an optional `duration?: number` — omit for the original permanent buff, give it a number and it becomes temporary instead: pushed onto a new `CardInstance.temporaryModifiers` array, summed live into Attack/effective-max-HP, never touching the permanent `attackDelta`/`hpDelta`. Ticks down at the end of *every* turn — both players', not just the bearer's own controller's — deliberately different timing from Poison/Bleed/Burn/Freeze's per-owner-turn-end tick, so `duration: 1` ("this turn") is symmetric for a self-buff and a hostile debuff alike. New Neutral bonus Spell `battle-fury` demonstrates it. Fixed an unrelated pre-existing bug found along the way: `loadCustomCards.ts`'s `VALID_RARITIES` never included `"uncommon"` despite it being a live `Rarity` value since Phase 0. See the implementation-status note above for the full writeup. |
 | **N — First archetype mini-sets (ROADMAP.md #10)** ✅ *(live)* | Roseguard Kingdom (FACTIONS.md §1, Human) and Wildheart Tribes (FACTIONS.md §7, Orc) converted into real cards under the previously-empty `roseguard-kingdom`/`wildheart-tribes` Factions — 10 cards each (a Legendary Hero + 9 supporting cards) plus a 30-card starter deck each, pure content with no engine changes. See the implementation-status note above for the conversion notes and the `onDeath`-trigger-target constraint it surfaced. |
 | **O — Allegiance reversed to pure synergy (§10)** ✅ *(live)* | Faction no longer restricts deckbuilding at all — any card is legal in any deck regardless of Hero. `HeroCardDefinition.allegiance` and `customDeck.ts`'s Allegiance-gate functions were deleted, along with the Deck Builder's Faction-mismatch warnings. A Faction's own Hero still grants a bonus for fielding that Faction (unchanged `auraBuff` Passives on Archivist/Queen Maerwyn/Matron Shara Earthsong), just never a requirement. See the implementation-status note above and the rewritten §10. |
 | **P — Hero Specializations (§19)** ✅ *(live)* | The single `passive` field is replaced by 3 named Specializations per Hero, chosen once per match (defaulting to index 0 = the old `passive`, so the whole pre-Phase-P test suite needed no behavioral changes). `auraBuff` gained an `hpDelta` alongside `attackDelta`, folded into `getEffectiveCreatureMaxHp` for both Hero and Building auras. A new `chooseSpecialization` screen sits between Hero+deck selection and match start, showing the opponent's Hero (not their deck/hand/pick); the AI's pick (`pickAiSpecialization`, ai.ts) is computed independently of the player's. Hero Power/Signature are unaffected. Fixed two pre-existing gaps found along the way: AdminPanel.tsx had no Hero Passive/Power/Signature authoring UI at all, and `loadCustomCards.ts` never had a `"hero"` case (`VALID_ARCHETYPES` didn't even list it) — both fixed. See the implementation-status note above. |
 | **Q — AI lethal-priority (player-reported gameflow fix)** ✅ *(live)* | Not a pre-planned phase — direct feedback from an actual match: the AI cleared a Building then a Vanguard creature before finishing an undefended, low-HP Hero, when it already had enough attack on board to just end the game. `isLethalAvailable(state)` (ai.ts) sums each of the AI's currently-able-to-attack creatures' damage (Double Strike counted twice, reduced by the enemy's equipment damage reduction, excluding any attacker a reachable Taunt creature would force elsewhere) plus the Hero's own attack if it can swing, against the enemy's `guard.current + hero.currentHp`; it's a same-turn snapshot, not a sequential-kill simulation. When true, `chooseAttackTarget`'s new `preferLethal` parameter sends every attacker with a legal path straight at the enemy Hero instead of the usual creature/Building-trade logic — a reachable Taunt creature is still the one thing that can force a given attacker elsewhere (Infiltrate still bypasses it, same as always). See the implementation-status note above. |
+| **R — Three settled-rules corrections (from the `chatgpt/phaser-battlefield` integration branch)** ✅ *(live)* | Not built on this line — authored on a parallel integration branch while wiring an engine-backed Phaser battlefield prototype (see §20), then cherry-picked here after independent review confirmed each is a genuine correction, not a stylistic change: (1) Hero status damage (Poison/Bleed/Burn ticks) now routes through `damagePlayer` — Guard soaks it first, same as every other source of Hero damage — instead of hitting `hero.currentHp` directly, correcting a violation of §6's "all damage aimed at the player hits Guard first" rule that predated this fix. (2) Double Strike's per-turn attack counter (`CardInstance.attacksUsedThisTurn`) is now reset in `startTurn` alongside `hasAttackedThisTurn`; previously it was never reset, so a Double Strike creature lost its second swing every turn after the first one it ever used Double Strike in. (3) A card burned by drawing into a full hand now leaves the match permanently instead of being pushed to discard, so it can no longer be reshuffled back in via discard-pile recycling — `player.discard`/`graveyard` are untouched by the burn. `src/engine/settledRules.test.ts` covers all three. |
 
 Each phase gets the same verification pass as prior work: `tsc
 --noEmit`, `eslint`, `vitest`, `vite build`, plus a Playwright smoke
@@ -1230,3 +1248,65 @@ admin panel are all otherwise unaffected and stay as documented in
 2. **Deck inspection / choose / reorder** — enough interaction for top-N look, choose one, reorder/bottom the rest. This would replace Bulletin Board's current approximation and unlock many faction drafts.
 3. ~~Taxonomy migration — explicit Hero `class`; `rogue` CreatureType; multi-race representation.~~ **Done (Phase L).**
 4. **Selective faction mechanics** — Mark/Grudge/Trap/Counter-style systems only when an authored mini-set actually needs them. Prefer bespoke logic for truly one-off cards over a bloated universal scripting layer.
+
+---
+
+## 20. Application architecture: engine, React app, Phaser battlefield, Card Builder
+
+Not new engine rules — a statement of how the pieces of the application
+fit together, written once a second front-end (Phaser) and a card-
+authoring tool (the layered Card Builder) existed alongside the
+original React app and needed a shared frame of reference. Both were
+built on a parallel integration branch (`chatgpt/phaser-battlefield`)
+rather than this line; this section documents the target shape they're
+aimed at, not a claim that it's all merged and live here yet.
+
+- **The TypeScript engine (`src/engine/*`) is the sole source of truth
+  for game rules and state**, unchanged by any of this. Every
+  presentation layer — React's `PlayerBoard`/`CardView`, the Phaser
+  battlefield, the Card Builder's preview — reads engine state and
+  calls engine actions; none of them re-derive or duplicate rules
+  logic. `EngineBattleScene.ts` (the Phaser prototype) already follows
+  this: it imports `createInitialGameState`/`playCardFromHand`/
+  `declareCreatureAttack`/`runAiTurn`/etc. straight from `src/engine`,
+  the same functions the React UI calls.
+- **React remains the surrounding application shell** — main menu,
+  Collection, Pack Opening, Deck Builder, Admin Panel, auth — and
+  today also the live match itself (`PlayerBoard.tsx`/`CardView.tsx`).
+  Nothing here plans to route those screens through Phaser; canvas
+  rendering only ever made sense for the battlefield's card-and-board
+  presentation, not menus and forms.
+- **Phaser is the intended eventual battlefield renderer**, reachable
+  today from the Main Menu as a standalone "Phaser Test" page
+  (`phaser.html`) once that branch merges — a separate app entry, not
+  yet swapped in for `PlayerBoard.tsx`'s live match view. It's real,
+  engine-backed, and not a toy: dragging/attacking/casting on that
+  page mutates actual `GameState` through the same engine calls React
+  uses. Promoting it from "parallel prototype" to "the match screen"
+  is a distinct, not-yet-scheduled decision from building it.
+- **The Card Builder (`card-builder.html`) is the card-authoring and
+  card-presentation tool**, and per explicit user direction (2026-08-24)
+  is now the primary way new cards get made, superseding hand-baking
+  stats into art in an external image editor. See the Phase K
+  reconciliation note earlier in this document (in the implementation-
+  status narrative, §17's Phase K row) for the rendering-model split
+  this implies, and `CARD_RENDERING.md` (integration branch) for the
+  layered geometry/typography spec itself. PNG export from the Builder
+  is planned, not yet built as of this writeup.
+- **Long-term target: one shared card-presentation model.** The Card
+  Builder's layered composite (art + base + name + cost + resource
+  icon + categories + rules text + stats) and whatever the Phaser
+  battlefield renders for a card on the board should eventually be the
+  same rendering code reading the same per-card layer data, not two
+  independently-maintained implementations that can drift. Nothing
+  currently enforces that — it's a stated goal for whenever the Phaser
+  branch actually merges, not a built guarantee.
+- **Status as of this writeup:** the Phaser battlefield and Card
+  Builder live only on `chatgpt/phaser-battlefield` (verified clean —
+  `tsc`/`eslint`/`vitest`/`vite build` all pass, CI green). Three
+  engine-rules corrections discovered while building the engine bridge
+  were cherry-picked onto this line (Phase R, above) since they're
+  genuine rules fixes independent of any UI; the Phaser scenes,
+  `EngineBattleScene.ts`, and the Card Builder app itself have not
+  been merged here and this document doesn't assume they're active in
+  the app you get from this branch.
